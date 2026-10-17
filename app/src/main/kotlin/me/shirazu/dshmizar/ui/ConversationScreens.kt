@@ -67,6 +67,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
@@ -150,8 +151,11 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
     val atBottom by remember { derivedStateOf { !listState.canScrollForward } }
     var counted by remember { mutableIntStateOf(0) }
     var waitingNew by remember { mutableIntStateOf(0) }
+    // Nothing is drawn until the first load is parked at the end: the operator opens a
+    // conversation and it is already there, rather than watching it slide up from the top.
+    var positioned by remember { mutableStateOf(false) }
 
-        /**
+    /**
      * The end of the list, whatever is in it.
      *
      * The transcript is `[load earlier]? + items`, so the last index is not simply the
@@ -172,14 +176,29 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
     LaunchedEffect(state.selectedSessionId) {
         counted = 0
         waitingNew = 0
+        positioned = false
     }
 
     LaunchedEffect(state.conversation.size, itemCount) {
         val size = state.conversation.size
-        if (size == 0 || itemCount == 0) return@LaunchedEffect
+        if (size == 0) {
+            counted = 0
+            waitingNew = 0
+            positioned = true
+            return@LaunchedEffect
+        }
+        if (itemCount == 0) return@LaunchedEffect
         val firstLoad = counted == 0
         val added = (size - counted).coerceAtLeast(0)
-        if (firstLoad || atBottom) {
+        if (firstLoad) {
+            counted = size
+            waitingNew = 0
+            // Instant, not animated: opening a conversation shows its newest message at
+            // once. Following live output stays animated, because that one is a motion
+            // the operator should be able to track.
+            listState.scrollToItem(itemCount - 1)
+            positioned = true
+        } else if (atBottom) {
             counted = size
             waitingNew = 0
             listState.animateScrollToItem(itemCount - 1)
@@ -288,7 +307,7 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
             }
         },
     ) { padding ->
-        Box(modifier = Modifier.padding(padding)) {
+        Box(modifier = Modifier.padding(padding).alpha(if (positioned) 1f else 0f)) {
             when {
                 state.loadingConversation && state.conversation.isEmpty() ->
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
