@@ -594,43 +594,41 @@ private fun MessageContent(text: String, color: Color, onCopy: (String) -> Unit)
     // A copy button on every bubble was clutter, and copying a whole answer is rarely
     // what an operator wants. A code block is the one place it earns its space, so the
     // message is drawn in slices: prose as markdown, code as a box with its own button.
-    val document = remember(text) { Markdown.parse(text) }
-    val styled = markdown(text)
-    val blocks = document.spans.filter { it.style == MarkdownStyle.CODE_BLOCK }
+    //
+    // The split runs on the source text, not on the parser's span offsets. Those offsets
+    // belong to the parsed document, whose length need not equal the source's, and
+    // slicing one by the other crashed the screen on a long answer:
+    // StringIndexOutOfBoundsException: begin 1042, end 1296, length 1226.
+    val fences = remember(text) { FENCED_CODE.findAll(text).toList() }
 
-    if (blocks.isEmpty()) {
-        SelectionContainer { Text(styled, style = MaterialTheme.typography.bodyMedium, color = color) }
+    if (fences.isEmpty()) {
+        SelectionContainer { Text(markdown(text), style = MaterialTheme.typography.bodyMedium, color = color) }
         return
     }
 
     Column {
         var cursor = 0
-        for (block in blocks) {
-            val from = block.start.coerceIn(0, text.length)
-            val to = block.end.coerceIn(from, text.length)
-            if (from > cursor) {
+        for (fence in fences) {
+            if (fence.range.first > cursor) {
+                val prose = text.substring(cursor, fence.range.first)
                 SelectionContainer {
-                    Text(
-                        text = styled.subSequence(cursor, from),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = color,
-                    )
+                    Text(markdown(prose), style = MaterialTheme.typography.bodyMedium, color = color)
                 }
             }
-            CodeBlock(text.substring(from, to), onCopy)
-            cursor = to
+            CodeBlock(fence.groupValues[1], onCopy)
+            cursor = fence.range.last + 1
         }
         if (cursor < text.length) {
+            val tail = text.substring(cursor)
             SelectionContainer {
-                Text(
-                    text = styled.subSequence(cursor, text.length),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = color,
-                )
+                Text(markdown(tail), style = MaterialTheme.typography.bodyMedium, color = color)
             }
         }
     }
 }
+
+/** A fenced code block in markdown source; its body is group 1. */
+private val FENCED_CODE = Regex("```[^\\n]*\\n([\\s\\S]*?)```")
 
 /**
  * A fenced block, with the one copy button this screen keeps.
