@@ -151,23 +151,43 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
     var counted by remember { mutableIntStateOf(0) }
     var waitingNew by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(state.conversation.size) {
+        /**
+     * The end of the list, whatever is in it.
+     *
+     * The transcript is `[load earlier]? + items`, so the last index is not simply the
+     * item count; `totalItemsCount - 1` is the one form that is correct in both shapes
+     * and does nothing while the list is still empty.
+     */
+    suspend fun scrollToEnd() {
+        val last = listState.layoutInfo.totalItemsCount - 1
+        if (last >= 0) listState.animateScrollToItem(last)
+    }
+
+    // A different conversation opens at its own end, and the first load has to land
+    // there too. `itemCount` is an effect key on purpose: the first pass runs before the
+    // list has measured anything, and scrolling then scrolled to the top -- which is
+    // exactly the "always opens at the top" the operator reported.
+    val itemCount = listState.layoutInfo.totalItemsCount
+
+    LaunchedEffect(state.selectedSessionId) {
+        counted = 0
+        waitingNew = 0
+    }
+
+    LaunchedEffect(state.conversation.size, itemCount) {
         val size = state.conversation.size
-        if (size == 0) {
-            counted = 0
-            waitingNew = 0
-            return@LaunchedEffect
-        }
+        if (size == 0 || itemCount == 0) return@LaunchedEffect
+        val firstLoad = counted == 0
         val added = (size - counted).coerceAtLeast(0)
-        counted = size
-        if (atBottom) {
-            listState.animateScrollToItem(size)
+        if (firstLoad || atBottom) {
+            counted = size
             waitingNew = 0
+            listState.animateScrollToItem(itemCount - 1)
         } else if (added > 0) {
+            counted = size
             waitingNew += added
         }
     }
-
     val running = state.sessions.firstOrNull { it.sessionId == state.selectedSessionId }?.running == true
     val hasPending = state.pending?.isEmpty == false
     val lastTurnFailed = state.turns.lastOrNull()?.steps?.any { it is ConversationItem.Failure } == true
@@ -214,7 +234,7 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
                         SmallFloatingActionButton(
                             onClick = {
                                 scope.launch {
-                                    listState.animateScrollToItem(state.conversation.size)
+                                    scrollToEnd()
                                     waitingNew = 0
                                 }
                             },
