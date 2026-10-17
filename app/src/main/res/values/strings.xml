@@ -128,4 +128,6 @@
     <string name="refreshed">Refreshed</string>
 
     <string name="copy_code">Copy code</string>
+
+    <string name="retry_turn">Retry</string>
 </resources>

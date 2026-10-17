@@ -25,6 +25,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -374,6 +377,7 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
                         now = now,
                         onLoadOlder = { scope.launch { model.loadOlder() } },
                         onCopy = onCopy,
+                        onRetry = { model.sendPrompt(it) },
                     )
                 }
             }
@@ -435,6 +439,7 @@ private fun ConversationList(
     now: Long,
     onLoadOlder: () -> Unit,
     onCopy: (String) -> Unit,
+    onRetry: (String) -> Unit,
 ) {
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
         if (!state.exhausted && state.oldestSeq != null) {
@@ -452,7 +457,7 @@ private fun ConversationList(
         if (state.turns.isEmpty()) {
             items(state.conversation, key = { it.id }) { item -> ConversationRow(item, onCopy = onCopy) }
         } else {
-            items(state.turns, key = { it.id }) { turn -> TurnSection(turn, now, state, onCopy) }
+            items(state.turns, key = { it.id }) { turn -> TurnSection(turn, now, state, onCopy, onRetry) }
         }
     }
 }
@@ -465,7 +470,13 @@ private fun ConversationList(
  * the bar and no answer, because an answer that has not been written does not exist.
  */
 @Composable
-private fun TurnSection(turn: ConversationTurn, now: Long, state: UiState, onCopy: (String) -> Unit) {
+private fun TurnSection(
+    turn: ConversationTurn,
+    now: Long,
+    state: UiState,
+    onCopy: (String) -> Unit,
+    onRetry: (String) -> Unit,
+) {
     var open by remember(turn.id, turn.endedAtMillis) { mutableStateOf(false) }
     val answer = if (turn.isRunning) null else turn.steps.lastOrNull { it is ConversationItem.Message && it.role == ConversationItem.Role.ASSISTANT }
     val steps = if (answer == null) turn.steps else turn.steps - answer
@@ -494,6 +505,19 @@ private fun TurnSection(turn: ConversationTurn, now: Long, state: UiState, onCop
                     Spacer(Modifier.width(8.dp))
                 }
                 Text(summary(turn, now), style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                if (turn.failed) {
+                    // The prompt is already here, so the retry is one tap rather than
+                    // retyping the sentence the agent failed to answer.
+                    val prompt = (turn.prompts.firstOrNull() as? ConversationItem.Message)?.text
+                    if (prompt != null) {
+                        TextButton(
+                            onClick = { onRetry(prompt) },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        ) {
+                            Text(stringResource(R.string.retry_turn), style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
                 Text(
                     stringResource(R.string.step_count, turn.steps.size),
                     style = MaterialTheme.typography.labelSmall,
@@ -836,6 +860,11 @@ private fun Composer(
             onValueChange = onDraft,
             placeholder = { Text(stringResource(R.string.composer_hint)) },
             maxLines = 8,
+            // Enter sends, as it does on the desktop. A multi-line draft is still
+            // possible -- the field grows -- but the key that people expect to submit is
+            // the one that submits.
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardActions = KeyboardActions(onSend = { if (draft.isNotBlank()) onSend() }),
             shape = RoundedCornerShape(19.dp),
             modifier = Modifier.weight(1f),
             // Explicit surfaces, not the theme defaults: the default container is a
