@@ -116,3 +116,15 @@ iOS 与 Android 在同一间房里各走各的通道：`push.register` 的 `plat
 
 - 覆盖安装必须用 **release 签名包**（`./gradlew :app:assembleRelease` 或 `scripts/release.sh`）。debug 包与 release 包签名不同，`adb install -r` 会静默失败，看到的界面还是旧的。
 - 构建用独立的 `GRADLE_USER_HOME`（如 `E:\gradle-home2`），见 [build-windows.md](build-windows.md)。
+
+## 验证记录（0.8.4 / 0.8.5，2026-10-17）
+
+| 项 | 结论 |
+|---|---|
+| 计划审批卡 | 有界（≤42% 屏高）、正文折叠 6 行 + 「N 字 · 展开全文」、**批准按钮可见** ✅ |
+| 手机端完成审批 | 在手机上点选项后，卡片消失、状态回到「正在思考…」，会话继续 ✅ |
+| 进入对话位置 | 冷启动直接停在最新消息，无滚动过程（`scrollToItem` + 定位前不绘制）✅ |
+| 待办卡消失后的锚定 | 修复：卡片出现/消失会改变视口高度，若原本跟随底部则重新锚定（`following` + `pendingCardCount` effect）✅ |
+| 状态行 / 刷新 / 复制 / 回到最新 | 见上节，均已在真机确认 ✅ |
+
+一条经验：`Scaffold` 的 `bottomBar` 会随待办卡增减改变高度，任何「锚定在底部」的实现都必须把这件事当成视口变化来处理，否则审批完成的瞬间最新消息会被切掉一半。

@@ -154,6 +154,10 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
     // Nothing is drawn until the first load is parked at the end: the operator opens a
     // conversation and it is already there, rather than watching it slide up from the top.
     var positioned by remember { mutableStateOf(false) }
+    // Whether the view should track the end. Kept explicitly because it has to survive
+    // changes the operator did not make -- approving a plan removes the card under the
+    // transcript, and the newest message was left half cut off without this.
+    var following by remember { mutableStateOf(true) }
 
     /**
      * The end of the list, whatever is in it.
@@ -177,6 +181,7 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
         counted = 0
         waitingNew = 0
         positioned = false
+        following = true
     }
 
     LaunchedEffect(state.conversation.size, itemCount) {
@@ -185,6 +190,7 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
             counted = 0
             waitingNew = 0
             positioned = true
+            following = true
             return@LaunchedEffect
         }
         if (itemCount == 0) return@LaunchedEffect
@@ -193,6 +199,7 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
         if (firstLoad) {
             counted = size
             waitingNew = 0
+            following = true
             // Instant, not animated: opening a conversation shows its newest message at
             // once. Following live output stays animated, because that one is a motion
             // the operator should be able to track.
@@ -201,11 +208,23 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
         } else if (atBottom) {
             counted = size
             waitingNew = 0
+            following = true
             listState.animateScrollToItem(itemCount - 1)
         } else if (added > 0) {
             counted = size
+            following = false
             waitingNew += added
         }
+    }
+
+    // The pending cards live under the transcript, so when one is answered the list's
+    // viewport grows. Anchored at the end before the change must mean anchored at the
+    // end after it: without this, approving a plan left the newest message clipped and
+    // the "latest" button showing as if the operator had scrolled away.
+    val pendingCardCount = (state.pending?.approvals?.size ?: 0) + (state.pending?.questions?.size ?: 0)
+    LaunchedEffect(pendingCardCount, itemCount) {
+        if (!following || itemCount == 0) return@LaunchedEffect
+        listState.scrollToItem(itemCount - 1)
     }
     val running = state.sessions.firstOrNull { it.sessionId == state.selectedSessionId }?.running == true
     val hasPending = state.pending?.isEmpty == false
@@ -249,7 +268,7 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
                 // has arrived: "get me back to the newest output" is useful on its own,
                 // and it makes the button's absence meaningful.
                 if (!atBottom && state.conversation.isNotEmpty()) {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Box(Modifier.fillMaxWidth().padding(end = 12.dp), contentAlignment = Alignment.CenterEnd) {
                         SmallFloatingActionButton(
                             onClick = {
                                 scope.launch {
