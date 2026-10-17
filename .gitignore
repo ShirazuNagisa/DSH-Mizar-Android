@@ -1,0 +1,27 @@
+# Gradle: caches stay in the checkout when GRADLE_USER_HOME points here
+.gradle-home/
+.gradle/
+.kotlin/
+
+# Build output
+build/
+
+# Local, machine-specific SDK location
+local.properties
+
+# A Firebase project's config is per-operator and carries project identifiers;
+# without it the app still builds and runs, just with push inactive.
+app/google-services.json
+
+# Android packages and signing material
+*.apk
+*.aab
+*.jks
+*.keystore
+
+# IDE
+.idea/
+*.iml
+
+# macOS
+.DS_Store
