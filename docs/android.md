@@ -23,8 +23,10 @@ protocol/   与主机插件共用的黄金帧（fixtures），测试直接读这
 | Android SDK | platform 35 + build-tools 35.0.0 |
 | Gradle | 8.11.1（wrapper 已提交，`./gradlew` 即可） |
 
-`local.properties` 里的 `sdk.dir` 是本机路径，不提交；`GRADLE_USER_HOME` 可以指向
-`<checkout>/.gradle-home`（已 gitignore），让 Gradle 缓存留在项目里。
+`local.properties` 里的 `sdk.dir` 是本机路径，不提交。
+
+> **Windows 上必须用独立的 `GRADLE_USER_HOME`**（例如 `E:\gradle-home2`）。与插件仓库共用缓存时，
+> `:app:processDebugResources` 会稳定失败在 `stableIds.txt: failed to open`。完整原因、`GRADLE_USER_HOME`+`GRADLE_USER_HOME` 的写法与排错步骤见 [build-windows.md](build-windows.md)。
 
 ```sh
 # 测试（纯 JVM，秒级）
