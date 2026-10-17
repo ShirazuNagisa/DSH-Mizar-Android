@@ -118,6 +118,9 @@
     <string name="theme_dark">深色</string>
 
     <string name="turn_completed_title">本轮已完成</string>
-    <string name="turn_completed_body">%1$s 的结果可以查看了。</string>
+    <string name="turn_completed_body">%1$s · %2$s</string>
+    <string name="turn_completed_body_plain">%1$s 已完成，可以查看。</string>
+    <string name="turn_failed_notice_title">本轮失败</string>
+    <string name="quiet_hours">夜间静音（23:00–08:00 不推完成通知）</string>
 </resources>
 

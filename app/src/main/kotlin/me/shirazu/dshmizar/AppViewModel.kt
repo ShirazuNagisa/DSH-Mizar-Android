@@ -33,6 +33,7 @@ import me.shirazu.mizar.kit.ConversationTurn
 import me.shirazu.mizar.kit.CreateSessionResult
 import me.shirazu.mizar.kit.CredentialStore
 import me.shirazu.mizar.kit.Diagnoses
+import me.shirazu.dshmizar.ui.Format
 import me.shirazu.mizar.kit.MizarConnection
 import me.shirazu.mizar.kit.ModelCatalog
 import me.shirazu.mizar.kit.ModelSelection
@@ -375,7 +376,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * whether it *just* became idle. And only in the background -- a notification for a
      * screen you are looking at is noise.
      */
-    private fun announceFinishedTurns(rows: List<SessionRow>) {
+    private suspend fun announceFinishedTurns(rows: List<SessionRow>) {
         val context = getApplication<Application>()
         for (row in rows) {
             val runningNow = row.running
@@ -390,14 +391,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (row.sessionId in notifiedFinished) continue
             notifiedFinished += row.sessionId
             if (foreground) continue
+            // A finished turn can wait; a blocked one cannot. Quiet hours silence only the
+            // former.
+            if (activity.quietHours() && isQuietNow()) continue
+
+            val detail = describeFinished(row.sessionId)
+            val title = context.getString(
+                if (detail.failed) R.string.turn_failed_notice_title else R.string.turn_completed_title,
+            )
+            val name = _state.value.titles[row.sessionId] ?: row.sessionId.takeLast(8)
+            val body = detail.summary
+                ?.let { context.getString(R.string.turn_completed_body, name, it) }
+                ?: context.getString(R.string.turn_completed_body_plain, name)
             runCatching {
                 Notifications.show(
                     context,
-                    context.getString(R.string.turn_completed_title),
-                    context.getString(
-                        R.string.turn_completed_body,
-                        _state.value.titles[row.sessionId] ?: row.sessionId.takeLast(8),
-                    ),
+                    title,
+                    body,
                     row.sessionId,
                     // Its own range: a completion must not replace a waiting card.
                     baseId = me.shirazu.dshmizar.push.Notifications.FINISHED_NOTIFICATION_BASE,
@@ -407,6 +417,50 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // Forget the memory once a session is seen running again, so the next completion
         // is announced too.
         for (row in rows) if (row.running) notifiedFinished -= row.sessionId
+    }
+
+    /** What a finished turn was: failed or not, how long it took, and its first line. */
+    private data class FinishedDetail(val failed: Boolean, val summary: String?)
+
+    /**
+     * Read the tail of a session that just finished.
+     *
+     * The session list knows only that a turn stopped running. Whether it failed, how long
+     * it took and what it produced are in the transcript, and one small page is cheaper
+     * than a notification that says nothing an operator can act on.
+     */
+    private suspend fun describeFinished(sessionId: String): FinishedDetail {
+        val socket = connection ?: return FinishedDetail(false, null)
+        val page = runCatching {
+            socket.call<SessionMessagesResult>(
+                "session.messages",
+                payload(
+                    "sessionId" to jsonString(sessionId),
+                    "maxMessages" to me.shirazu.mizar.kit.jsonInt(12),
+                ),
+            )
+        }.getOrNull() ?: return FinishedDetail(false, null)
+
+        val last = Conversation.turns(page).lastOrNull() ?: return FinishedDetail(false, null)
+        val answer = last.steps.lastOrNull {
+            it is ConversationItem.Message && it.role == ConversationItem.Role.ASSISTANT
+        } as? ConversationItem.Message
+        val elapsed = last.elapsedMillis(System.currentTimeMillis()) ?: 0L
+        val duration = if (elapsed > 0) Format.duration(elapsed) else null
+        val firstLine = answer?.text
+            ?.lineSequence()
+            ?.map { it.trim() }
+            ?.firstOrNull { line -> line.isNotEmpty() && !line.startsWith("```") }
+            ?.take(80)
+        // The completion notice is the whole story in one line: how long, and what it said.
+        val summary = listOfNotNull(duration, firstLine).joinToString(" · ").ifBlank { null }
+        return FinishedDetail(last.failed, summary)
+    }
+
+    /** Whether the clock is inside the quiet window (23:00 to 08:00). */
+    private fun isQuietNow(): Boolean {
+        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        return hour >= 23 || hour < 8
     }
 
     private fun cancelReconnect() {

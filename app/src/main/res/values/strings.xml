@@ -137,5 +137,8 @@
     <string name="theme_dark">Dark</string>
 
     <string name="turn_completed_title">Turn finished</string>
-    <string name="turn_completed_body">%1$s is ready to read.</string>
+    <string name="turn_completed_body">%1$s · %2$s</string>
+    <string name="turn_completed_body_plain">%1$s is ready to read.</string>
+    <string name="turn_failed_notice_title">Turn failed</string>
+    <string name="quiet_hours">Silence finished-turn notices at night (23:00–08:00)</string>
 </resources>

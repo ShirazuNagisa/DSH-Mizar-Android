@@ -50,10 +50,16 @@ class ActivityStore(context: Context) {
         prefs.edit().putString(THEME, mode).apply()
     }
 
+    /** Whether finished-turn notices are silenced between 23:00 and 08:00. */
+    fun quietHours(): Boolean = prefs.getBoolean(QUIET, false)
+    fun setQuietHours(on: Boolean) { prefs.edit().putBoolean(QUIET, on).apply() }
+
     private fun key(hostId: String, suffix: String) = "$hostId/$suffix"
+
 
     private companion object {
         const val FILE = "mizar-activity"
         const val THEME = "theme"
+        const val QUIET = "quiet"
     }
 }
