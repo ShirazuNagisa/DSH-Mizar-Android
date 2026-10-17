@@ -107,5 +107,7 @@
     <string name="collapse_detail">收起</string>
 
     <string name="refreshed">已刷新</string>
+
+    <string name="copy_code">复制代码</string>
 </resources>
 

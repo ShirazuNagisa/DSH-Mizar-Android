@@ -582,28 +582,99 @@ private fun MessageBubble(item: ConversationItem.Message, indent: Boolean, onCop
                 if (item.role == ConversationItem.Role.SYSTEM) {
                     Text(stringResource(R.string.system_label), style = MaterialTheme.typography.labelSmall, color = textColor)
                 }
-                if (item.role != ConversationItem.Role.SYSTEM) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        IconButton(onClick = { onCopy(item.text) }, modifier = Modifier.size(26.dp)) {
-                            Icon(
-                                Icons.Default.ContentCopy,
-                                contentDescription = stringResource(R.string.copy_message),
-                                tint = textColor,
-                                modifier = Modifier.size(14.dp),
-                            )
-                        }
-                    }
-                }
-                SelectionContainer {
-                    Text(
-                        text = markdown(item.text),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = textColor,
-                    )
-                }
+                MessageContent(item.text, textColor, onCopy)
             }
         }
     }
+}
+
+/** Prose and code, with the copy affordance only where it is useful. */
+@Composable
+private fun MessageContent(text: String, color: Color, onCopy: (String) -> Unit) {
+    // A copy button on every bubble was clutter, and copying a whole answer is rarely
+    // what an operator wants. A code block is the one place it earns its space, so the
+    // message is drawn in slices: prose as markdown, code as a box with its own button.
+    val document = remember(text) { Markdown.parse(text) }
+    val styled = markdown(text)
+    val blocks = document.spans.filter { it.style == MarkdownStyle.CODE_BLOCK }
+
+    if (blocks.isEmpty()) {
+        SelectionContainer { Text(styled, style = MaterialTheme.typography.bodyMedium, color = color) }
+        return
+    }
+
+    Column {
+        var cursor = 0
+        for (block in blocks) {
+            val from = block.start.coerceIn(0, text.length)
+            val to = block.end.coerceIn(from, text.length)
+            if (from > cursor) {
+                SelectionContainer {
+                    Text(
+                        text = styled.subSequence(cursor, from),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = color,
+                    )
+                }
+            }
+            CodeBlock(text.substring(from, to), onCopy)
+            cursor = to
+        }
+        if (cursor < text.length) {
+            SelectionContainer {
+                Text(
+                    text = styled.subSequence(cursor, text.length),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = color,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * A fenced block, with the one copy button this screen keeps.
+ *
+ * The fence markers are stripped: they are syntax, not content, and an operator who
+ * pastes them into a shell gets an error unrelated to what they copied.
+ */
+@Composable
+private fun CodeBlock(block: String, onCopy: (String) -> Unit) {
+    val code = remember(block) { stripFence(block) }
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+    ) {
+        Column(Modifier.padding(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = { onCopy(code) }, modifier = Modifier.size(24.dp)) {
+                    Icon(
+                        Icons.Default.ContentCopy,
+                        contentDescription = stringResource(R.string.copy_code),
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            SelectionContainer {
+                Text(
+                    text = code,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+    }
+}
+
+/** The code inside a fence, without the fence or its language tag. */
+private fun stripFence(block: String): String {
+    val trimmed = block.trim()
+    val withoutOpen = if (trimmed.startsWith("```")) trimmed.substringAfter("\n", "") else trimmed
+    val withoutClose = withoutOpen.trimEnd().removeSuffix("```")
+    return withoutClose.trimEnd()
 }
 
 /**

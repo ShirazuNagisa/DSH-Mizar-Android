@@ -126,4 +126,6 @@
     <string name="collapse_detail">Collapse</string>
 
     <string name="refreshed">Refreshed</string>
+
+    <string name="copy_code">Copy code</string>
 </resources>
