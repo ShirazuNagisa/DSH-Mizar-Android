@@ -74,6 +74,13 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="mizar-alerts" />
+        <!-- Keeps the process alive so the socket survives being backgrounded; the
+             connection itself lives in the app's view model. -->
+        <service
+            android:name=".push.ConnectionService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
     </application>
 
 </manifest>

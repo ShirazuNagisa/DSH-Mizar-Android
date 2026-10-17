@@ -67,12 +67,21 @@ class MainActivity : ComponentActivity() {
     /** Foreground, so the host stops notifying this device about what it is looking at. */
     override fun onStart() {
         super.onStart()
-        model.setPresence(true)
+        model.setPresence(true); me.shirazu.dshmizar.push.ConnectionService.start(this)
     }
 
     override fun onStop() {
+        // The service deliberately survives this: going to the background is the
+        // case it exists for. It stops in onDestroy, when the task really ends.
         model.setPresence(false)
         super.onStop()
+    }
+
+    override fun onDestroy() {
+        // Only a finishing activity means the connection is going away; a rotation
+        // or a configuration change must not drop the keep-alive.
+        if (isFinishing) me.shirazu.dshmizar.push.ConnectionService.stop(this)
+        super.onDestroy()
     }
 
     private fun readIntent(intent: Intent?) {

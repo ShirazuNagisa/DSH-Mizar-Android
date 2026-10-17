@@ -100,6 +100,9 @@ object Notifications {
     }
 
     /** Show one notification, opening the session it names when tapped. */
+    /** Pending-interaction notices live above this id, clear of the service's id 1. */
+    private const val PENDING_NOTIFICATION_BASE = 1000
+
     fun show(context: Context, title: String, body: String, sessionId: String?) {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -123,7 +126,14 @@ object Notifications {
 
         // Permission may be refused; a refused notification is not an error worth
         // crashing over, and the in-app cards still show the same information.
-        runCatching { NotificationManagerCompat.from(context).notify(sessionId?.hashCode() ?: 1, notification) }
+        // Never id 1: that is the foreground service's ongoing notice, and the two
+        // would replace each other -- which is exactly what hid a pending approval
+        // behind "Connected to the computer" on a real phone.
+        // Positive and bounded: a negative id is silently dropped on some ROMs, and
+        // 1 is the foreground service's own notice.
+        val seed = kotlin.math.abs(sessionId?.hashCode() ?: 0)
+        val id = PENDING_NOTIFICATION_BASE + (seed % 900)
+        runCatching { NotificationManagerCompat.from(context).notify(id, notification) }
     }
 }
 

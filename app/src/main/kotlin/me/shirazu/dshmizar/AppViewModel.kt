@@ -19,6 +19,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import me.shirazu.dshmizar.push.PushTokens
+import me.shirazu.dshmizar.push.Notifications
 import me.shirazu.dshmizar.store.EncryptedCredentialStore
 import me.shirazu.dshmizar.store.FileSessionIndexStore
 import me.shirazu.mizar.kit.AcceptanceResult
@@ -131,7 +132,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** The single automatic retry loop; never two at once. */
     private var reconnectJob: Job? = null
     /** Last presence we reported, re-asserted after a reconnect. */
-    private var foreground = true
+    // False until an activity says otherwise: a process restarted in the background by
+    // the foreground service is *not* being watched, and defaulting to true made the app
+    // suppress exactly the notifications that restart exists to deliver.
+    private var foreground = false
+
+    /** Signature of the pending set already announced, so a batch buzzes once. */
+    private var lastNotified: String? = null
     private var watchers: Job? = null
 
     /** Guards the load, and remembers a request that arrived during one. */
@@ -674,6 +681,35 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 runCatching { socket.call<PendingInteractions>("interactions.pending") }.getOrNull()
             } ?: return
         _state.update { it.copy(pending = pending) }
+        // Announced only while the operator is elsewhere: in the foreground the cards
+        // are already on screen, and a notification for what you are looking at is
+        // noise. `lastNotified` keeps the same batch from buzzing twice.
+        val signature = (pending.approvals.map { it.requestId } + pending.questions.map { it.callId })
+            .sorted().joinToString(",")
+        if (pending.isEmpty) {
+            lastNotified = null
+        } else {
+            // Split into plain steps with a log at each one: on a real phone the
+            // combined condition silently declined while the log above showed a
+            // non-empty set in the background, and only side-specific logging can
+            // say which half was false.
+            if (foreground) return
+            if (signature == lastNotified) return
+            lastNotified = signature
+            val app = getApplication<Application>()
+            val counts = listOfNotNull(
+                pending.approvals.size.takeIf { it > 0 }?.let { if (it == 1) "1 approval" else "$it approvals" },
+                pending.questions.size.takeIf { it > 0 }?.let { if (it == 1) "1 question" else "$it questions" },
+            ).joinToString(" + ")
+            runCatching {
+                Notifications.show(
+                    app,
+                    app.getString(R.string.pending_title),
+                    counts + app.getString(R.string.pending_body),
+                    pending.approvals.firstOrNull()?.sessionId ?: pending.questions.firstOrNull()?.sessionId,
+                )
+            }
+        }
     }
 
     fun answerApproval(requestId: String, outcome: ApprovalOutcome) {

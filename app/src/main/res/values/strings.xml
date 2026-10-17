@@ -11,6 +11,10 @@
 -->
 <resources>
     <string name="app_name">DSH-Mizar</string>
+    <string name="connection_service_text">Connected to the computer — this notice keeps the connection alive in the background.</string>
+    <string name="connection_service_channel">Connection</string>
+    <string name="pending_title">The agent is waiting</string>
+    <string name="pending_body">— open DSH-Mizar to answer.</string>
 
     <!-- Launching, pairing, connecting -->
     <string name="connecting">Connecting…</string>
