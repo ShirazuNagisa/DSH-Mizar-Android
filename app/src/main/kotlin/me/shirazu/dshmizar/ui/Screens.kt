@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -456,7 +457,7 @@ private fun SessionList(
             val limit = limits[key] ?: PAGE_SIZE
             for (session in group.sessions.take(limit)) {
                 item(key = session.sessionId) {
-                    SessionRowItem(session, state.titles) { onOpen(session.sessionId) }
+                    SessionRowItem(session, state.titles, state.seenAt) { onOpen(session.sessionId) }
                 }
             }
             if (group.sessions.size > limit) {
@@ -477,7 +478,16 @@ private fun SessionList(
 }
 
 @Composable
-private fun SessionRowItem(session: SessionRow, titles: Map<String, String>, onClick: () -> Unit) {
+private fun SessionRowItem(
+    session: SessionRow,
+    titles: Map<String, String>,
+    seenAt: Map<String, Long>,
+    onClick: () -> Unit,
+) {
+    // A turn that finished while the operator was elsewhere. Running is already obvious
+    // from the spinner on the left, so the dot here means "there is something new to
+    // read", which is the one thing the list could not say before.
+    val unread = !session.running && session.updatedMillis > (seenAt[session.sessionId] ?: 0L)
     ListItem(
         headlineContent = { Text(SessionGrouping.sessionTitle(session, titles)) },
         supportingContent = { Text(Format.relativeTime(session.updatedMillis)) },
@@ -486,6 +496,15 @@ private fun SessionRowItem(session: SessionRow, titles: Map<String, String>, onC
                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
             } else {
                 Icon(Icons.Default.Computer, contentDescription = null)
+            }
+        },
+        trailingContent = {
+            if (unread) {
+                Box(
+                    Modifier
+                        .size(8.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape),
+                )
             }
         },
         modifier = Modifier.clickable { onClick() },

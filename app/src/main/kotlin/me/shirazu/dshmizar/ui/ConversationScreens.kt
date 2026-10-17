@@ -26,7 +26,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
@@ -39,6 +42,10 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -47,13 +54,17 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -93,6 +104,15 @@ import me.shirazu.mizar.kit.QuestionItem
 @Composable
 fun SessionScreen(model: AppViewModel, state: UiState) {
     val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
+    val clipboard = LocalClipboardManager.current
+    val copiedMessage = stringResource(R.string.copied)
+    // Whole-message copy. Selecting inside a bubble is for fragments and it is fiddly
+    // with a thumb; "take the answer" is the common action and deserves one tap.
+    val onCopy: (String) -> Unit = { text ->
+        clipboard.setText(AnnotatedString(text))
+        scope.launch { snackbar.showSnackbar(copiedMessage) }
+    }
     val listState = rememberLazyListState()
     var draft by remember { mutableStateOf("") }
     var showingModelPicker by remember { mutableStateOf(false) }
@@ -119,22 +139,60 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
         }
     }
 
+    // Follow new output only while the operator is at the bottom. Scrolling up to read
+    // something must not be undone by the agent writing its next sentence -- which is
+    // exactly what the old unconditional scroll did.
+    val atBottom by remember { derivedStateOf { !listState.canScrollForward } }
+    var counted by remember { mutableIntStateOf(0) }
+    var waitingNew by remember { mutableIntStateOf(0) }
+
     LaunchedEffect(state.conversation.size) {
-        if (state.conversation.isNotEmpty()) listState.animateScrollToItem(state.conversation.size)
+        val size = state.conversation.size
+        if (size == 0) {
+            counted = 0
+            waitingNew = 0
+            return@LaunchedEffect
+        }
+        val added = (size - counted).coerceAtLeast(0)
+        counted = size
+        if (atBottom) {
+            listState.animateScrollToItem(size)
+            waitingNew = 0
+        } else if (added > 0) {
+            waitingNew += added
+        }
     }
 
     val running = state.sessions.firstOrNull { it.sessionId == state.selectedSessionId }?.running == true
+    val hasPending = state.pending?.isEmpty == false
+    val lastTurnFailed = state.turns.lastOrNull()?.steps?.any { it is ConversationItem.Failure } == true
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text(state.stats?.title ?: stringResource(R.string.session)) },
+                title = {
+                    Column {
+                        Text(
+                            text = state.stats?.title ?: stringResource(R.string.session),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        StatusLine(running = running, pending = hasPending, failed = lastTurnFailed)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = { model.selectSession(null) }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 actions = {
+                    // The screen follows pushed events, but a phone whose process was
+                    // paused -- or a host that restarted -- can be stale for minutes.
+                    // One button beats explaining why the transcript is behind.
+                    IconButton(onClick = { model.refreshConversation() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
+                    }
                     IconButton(onClick = { showingPermissions = true }) {
                         Icon(Icons.Default.Lock, contentDescription = stringResource(R.string.permissions))
                     }
@@ -143,6 +201,38 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
         },
         bottomBar = {
             Column(modifier = Modifier.imePadding()) {
+                // Shown whenever the transcript is not at its end, not only when something
+                // has arrived: "get me back to the newest output" is useful on its own,
+                // and it makes the button's absence meaningful.
+                if (!atBottom && state.conversation.isNotEmpty()) {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        SmallFloatingActionButton(
+                            onClick = {
+                                scope.launch {
+                                    listState.animateScrollToItem(state.conversation.size)
+                                    waitingNew = 0
+                                }
+                            },
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.KeyboardArrowDown,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = if (waitingNew > 0) {
+                                        stringResource(R.string.new_messages, waitingNew)
+                                    } else {
+                                        stringResource(R.string.jump_to_latest)
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                    }
+                }
                 state.pending?.let { pending ->
                     if (!pending.isEmpty) {
                         InteractionsSection(
@@ -189,6 +279,7 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
                     listState = listState,
                     now = now,
                     onLoadOlder = { scope.launch { model.loadOlder() } },
+                    onCopy = onCopy,
                 )
             }
         }
@@ -248,6 +339,7 @@ private fun ConversationList(
     listState: androidx.compose.foundation.lazy.LazyListState,
     now: Long,
     onLoadOlder: () -> Unit,
+    onCopy: (String) -> Unit,
 ) {
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
         if (!state.exhausted && state.oldestSeq != null) {
@@ -263,9 +355,9 @@ private fun ConversationList(
         }
 
         if (state.turns.isEmpty()) {
-            items(state.conversation, key = { it.id }) { item -> ConversationRow(item) }
+            items(state.conversation, key = { it.id }) { item -> ConversationRow(item, onCopy = onCopy) }
         } else {
-            items(state.turns, key = { it.id }) { turn -> TurnSection(turn, now, state) }
+            items(state.turns, key = { it.id }) { turn -> TurnSection(turn, now, state, onCopy) }
         }
     }
 }
@@ -278,13 +370,13 @@ private fun ConversationList(
  * the bar and no answer, because an answer that has not been written does not exist.
  */
 @Composable
-private fun TurnSection(turn: ConversationTurn, now: Long, state: UiState) {
+private fun TurnSection(turn: ConversationTurn, now: Long, state: UiState, onCopy: (String) -> Unit) {
     var open by remember(turn.id, turn.endedAtMillis) { mutableStateOf(false) }
     val answer = if (turn.isRunning) null else turn.steps.lastOrNull { it is ConversationItem.Message && it.role == ConversationItem.Role.ASSISTANT }
     val steps = if (answer == null) turn.steps else turn.steps - answer
 
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        for (prompt in turn.prompts) ConversationRow(prompt)
+        for (prompt in turn.prompts) ConversationRow(prompt, onCopy = onCopy)
 
         if (turn.isCollapsible) {
             Row(
@@ -315,10 +407,10 @@ private fun TurnSection(turn: ConversationTurn, now: Long, state: UiState) {
         }
 
         if (!turn.isCollapsible || open) {
-            for (step in steps) ConversationRow(step, indent = true)
+            for (step in steps) ConversationRow(step, indent = true, onCopy = onCopy)
         }
 
-        answer?.let { ConversationRow(it) }
+        answer?.let { ConversationRow(it, onCopy = onCopy) }
     }
 }
 
@@ -337,9 +429,9 @@ private fun summary(turn: ConversationTurn, now: Long): String {
 
 /** One item: a message, an activity marker or a failure card. */
 @Composable
-private fun ConversationRow(item: ConversationItem, indent: Boolean = false) {
+private fun ConversationRow(item: ConversationItem, indent: Boolean = false, onCopy: (String) -> Unit) {
     when (item) {
-        is ConversationItem.Message -> MessageBubble(item, indent)
+        is ConversationItem.Message -> MessageBubble(item, indent, onCopy)
         is ConversationItem.Activity -> Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -373,7 +465,7 @@ private fun ConversationRow(item: ConversationItem, indent: Boolean = false) {
 
 /** A user turn on the right, everything else on the left. */
 @Composable
-private fun MessageBubble(item: ConversationItem.Message, indent: Boolean) {
+private fun MessageBubble(item: ConversationItem.Message, indent: Boolean, onCopy: (String) -> Unit) {
     val isUser = item.role == ConversationItem.Role.USER
     val bubble = if (isUser) {
         MaterialTheme.colorScheme.primary
@@ -394,6 +486,18 @@ private fun MessageBubble(item: ConversationItem.Message, indent: Boolean) {
             Column(Modifier.padding(10.dp)) {
                 if (item.role == ConversationItem.Role.SYSTEM) {
                     Text(stringResource(R.string.system_label), style = MaterialTheme.typography.labelSmall, color = textColor)
+                }
+                if (item.role != ConversationItem.Role.SYSTEM) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        IconButton(onClick = { onCopy(item.text) }, modifier = Modifier.size(26.dp)) {
+                            Icon(
+                                Icons.Default.ContentCopy,
+                                contentDescription = stringResource(R.string.copy_message),
+                                tint = textColor,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
                 }
                 SelectionContainer {
                     Text(
@@ -518,6 +622,37 @@ private fun Pill(
     }
 }
 
+/**
+ * What the agent is doing, in the one place the operator already looks.
+ *
+ * The transcript says what happened; this says what is happening. Four states, because
+ * they need four different reactions: waiting on you (act now), thinking (wait), a turn
+ * that failed (read the red card), idle (nothing to do).
+ */
+@Composable
+private fun StatusLine(running: Boolean, pending: Boolean, failed: Boolean) {
+    val label: String
+    val tint: Color
+    when {
+        pending -> { label = stringResource(R.string.status_waiting); tint = MizarColors.Warning }
+        running -> { label = stringResource(R.string.status_thinking); tint = MizarColors.Busy }
+        failed -> { label = stringResource(R.string.status_failed); tint = MizarColors.Failure }
+        else -> { label = stringResource(R.string.status_idle); tint = MaterialTheme.colorScheme.onSurfaceVariant }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+        if (running) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(10.dp),
+                strokeWidth = 1.5.dp,
+                color = tint,
+            )
+        } else {
+            Box(Modifier.size(6.dp).background(tint, CircleShape))
+        }
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = tint)
+    }
+}
 /** The field, and the one button that is send, stop, or neither. */
 @Composable
 private fun Composer(
@@ -539,6 +674,20 @@ private fun Composer(
             maxLines = 8,
             shape = RoundedCornerShape(19.dp),
             modifier = Modifier.weight(1f),
+            // Explicit surfaces, not the theme defaults: the default container is a
+            // tinted role that read as "a dark blue box", and a selection drawn in the
+            // accent over it left the selected words hard to see. The selection
+            // colours themselves come from MizarTheme.
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                cursorColor = MaterialTheme.colorScheme.primary,
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+            ),
         )
 
         val showsStop = running && draft.isBlank()

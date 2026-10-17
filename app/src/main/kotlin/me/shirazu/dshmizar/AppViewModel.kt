@@ -20,6 +20,7 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import me.shirazu.dshmizar.push.PushTokens
 import me.shirazu.dshmizar.push.Notifications
+import me.shirazu.dshmizar.store.ActivityStore
 import me.shirazu.dshmizar.store.EncryptedCredentialStore
 import me.shirazu.dshmizar.store.FileSessionIndexStore
 import me.shirazu.mizar.kit.AcceptanceResult
@@ -100,6 +101,8 @@ data class UiState(
     val conversationError: String? = null,
     val loadingConversation: Boolean = false,
     val busy: Boolean = false,
+    /** When each session was last on screen, so the list can mark what is new. */
+    val seenAt: Map<String, Long> = emptyMap(),
 )
 
 /**
@@ -121,6 +124,7 @@ data class UiState(
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val credentials: CredentialStore = EncryptedCredentialStore(application)
+    private val activity = ActivityStore(application)
     private val indexStore: SessionIndexStore = FileSessionIndexStore(application)
 
     private val _state = MutableStateFlow(UiState())
@@ -136,6 +140,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // the foreground service is *not* being watched, and defaulting to true made the app
     // suppress exactly the notifications that restart exists to deliver.
     private var foreground = false
+
+    /** Whether the last-opened conversation has already been restored this process. */
+    private var restoredOnce = false
 
     /** Signature of the pending set already announced, so a batch buzzes once. */
     private var lastNotified: String? = null
@@ -203,7 +210,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val welcome = candidate.connect()
                 connection = candidate
                 _state.update {
-                    it.copy(phase = Phase.READY, welcome = welcome, problem = null, needsPairing = false)
+                    it.copy(
+                        phase = Phase.READY,
+                        welcome = welcome,
+                        problem = null,
+                        needsPairing = false,
+                        seenAt = activity.seenAt(host.hostId),
+                    )
                 }
                 startWatchers(candidate)
                 watchConnection(candidate, host)
@@ -311,6 +324,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Stop any automatic retry; a caller that dials something else owns the socket now. */
+    /**
+     * Open the conversation that was open last time, once per process.
+     *
+     * Deliberately not on every list refresh: the operator returning to the list means
+     * they want the list, and yanking them back into the conversation would be the app
+     * arguing with them.
+     */
+    private fun maybeRestoreLastSession() {
+        if (restoredOnce) return
+        restoredOnce = true
+        val current = _state.value
+        if (current.selectedSessionId != null) return
+        val hostId = current.host?.hostId ?: return
+        val last = activity.lastSession(hostId) ?: return
+        if (current.sessions.none { it.sessionId == last }) return
+        selectSession(last)
+    }
+
     private fun cancelReconnect() {
         reconnectJob?.cancel()
         reconnectJob = null
@@ -431,6 +462,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         regroup()
         persistIndex()
+        // The screen opens on what was last read, once: after that the operator is in
+        // control of where they are.
+        maybeRestoreLastSession()
     }
 
     /** Load titles for rows about to be drawn, one request per session, once each. */
@@ -451,7 +485,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Open a session, and remember it.
+     *
+     * "Where was I" is the one piece of navigation state worth persisting: a phone is
+     * put down and picked up constantly, and re-walking list → workspace → row each
+     * time is the cost of not having it.
+     */
     fun selectSession(sessionId: String?) {
+        val hostId = _state.value.host?.hostId
+        if (hostId != null) {
+            activity.rememberLastSession(hostId, sessionId)
+            if (sessionId != null) {
+                val now = System.currentTimeMillis()
+                activity.markSeen(hostId, sessionId, now)
+                _state.update { it.copy(seenAt = it.seenAt + (sessionId to now)) }
+            }
+        }
         _state.update {
             it.copy(
                 selectedSessionId = sessionId,
@@ -665,6 +715,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── interactions ────────────────────────────────────────────────────────
 
+    /**
+     * Re-read the open conversation from the host, on demand.
+     *
+     * The screen already follows pushed events, but "I typed something on the computer
+     * and the phone has not caught up" is a real state -- a dropped socket, a frozen
+     * process, a host that restarted -- and the only cure the operator has is a button.
+     * It refreshes the transcript, the figures and the pending cards together, because
+     * those are the three things the screen draws.
+     */
+    fun refreshConversation() {
+        if (_state.value.selectedSessionId == null) return
+        viewModelScope.launch {
+            reload()
+            refreshInteractionsNow()
+        }
+    }
     fun refreshInteractions() {
         viewModelScope.launch { refreshInteractionsNow() }
     }

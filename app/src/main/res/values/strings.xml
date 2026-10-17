@@ -112,4 +112,13 @@
     <string name="messages">Messages</string>
     <string name="unavailable">Unavailable</string>
     <string name="cancel">Cancel</string>
+    <string name="status_thinking">Thinking…</string>
+    <string name="status_idle">Ready</string>
+    <string name="status_waiting">Waiting for you</string>
+    <string name="status_failed">Last turn failed</string>
+    <string name="new_messages">%1$d new</string>
+    <string name="copy_message">Copy the message</string>
+    <string name="copied">Copied</string>
+
+    <string name="jump_to_latest">Latest</string>
 </resources>
