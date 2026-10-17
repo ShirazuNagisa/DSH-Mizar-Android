@@ -50,6 +50,26 @@ class ActivityStore(context: Context) {
         prefs.edit().putString(THEME, mode).apply()
     }
 
+    /**
+     * Sessions this phone last saw running.
+     *
+     * Persisted because the confirmation of a finished turn must survive the process:
+     * a phone that was frozen mid-turn restored an empty in-memory baseline, and the
+     * completion that happened while it was away was then never announced.
+     */
+    fun runningSession(hostId: String, sessionId: String): Boolean =
+        prefs.getBoolean(key(hostId, "run.$sessionId"), false)
+
+    /** Whether any session on this host is still recorded as running. */
+    fun hasRunningSessions(hostId: String): Boolean = prefs.all.keys.any { it.startsWith("$hostId/run.") }
+
+    fun setRunningSession(hostId: String, sessionId: String, running: Boolean) {
+        prefs.edit().apply {
+            if (running) putBoolean(key(hostId, "run.$sessionId"), true)
+            else remove(key(hostId, "run.$sessionId"))
+        }.apply()
+    }
+
     /** Whether finished-turn notices are silenced between 23:00 and 08:00. */
     fun quietHours(): Boolean = prefs.getBoolean(QUIET, false)
     fun setQuietHours(on: Boolean) { prefs.edit().putBoolean(QUIET, on).apply() }

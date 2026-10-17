@@ -390,7 +390,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val context = getApplication<Application>()
         for (row in rows) {
             val runningNow = row.running
+            val hostId = _state.value.host?.hostId
+            // In memory first, then the store: a process that was frozen mid-turn came
+            // back with an empty map and lost the completion that happened while away.
             val was = wasRunning[row.sessionId]
+                ?: hostId?.let { activity.runningSession(it, row.sessionId) }
+            if (hostId != null) activity.setRunningSession(hostId, row.sessionId, runningNow)
             wasRunning[row.sessionId] = runningNow
             if (was != true || runningNow) {
                 if (was != true) { /* first sighting: nothing to announce */ }
@@ -1153,7 +1158,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 // No pushed signal says "the turn ended", so while the screen is elsewhere
                 // the list is the only place to see it -- and only worth asking when
                 // something was actually running.
-                if (!foreground && wasRunning.values.any { it }) {
+                val hostId = _state.value.host?.hostId
+                if (!foreground && (wasRunning.values.any { it } || hostId?.let { activity.hasRunningSessions(it) } == true)) {
                     runCatching { refreshSessionsNow() }
                 }
             }
