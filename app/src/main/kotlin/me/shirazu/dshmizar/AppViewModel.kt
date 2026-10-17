@@ -103,6 +103,8 @@ data class UiState(
     val busy: Boolean = false,
     /** A refresh is in flight, so the screen can say so and refuse a second one. */
     val refreshing: Boolean = false,
+    /** The log position this screen has read up to, so a refresh can ask for a delta. */
+    val newestSeq: Int? = null,
     /** When each session was last on screen, so the list can mark what is new. */
     val seenAt: Map<String, Long> = emptyMap(),
 )
@@ -531,6 +533,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 conversationError = null,
                 statsError = null,
                 pending = null,
+                newestSeq = null,
             )
         }
         if (sessionId == null) return
@@ -568,29 +571,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // ── the open conversation ───────────────────────────────────────────────
 
     /** Load the open session, with the latch and the retry described on this class. */
-    suspend fun reload(tail: Int = FULL_PAGE) {
+    suspend fun reload(tail: Int = FULL_PAGE, afterSeq: Int? = null) {
         if (loading) {
             reloadWanted = true
             return
         }
         loading = true
         try {
-            loadOnce(tail)
+            loadOnce(tail, afterSeq)
             val current = _state.value
             if (current.phase == Phase.READY && (current.stats == null || current.conversation.isEmpty())) {
                 delay(700)
-                loadOnce(tail)
+                loadOnce(tail, afterSeq)
             }
             while (reloadWanted) {
                 reloadWanted = false
-                loadOnce(tail)
+                loadOnce(tail, afterSeq)
             }
         } finally {
             loading = false
         }
     }
 
-    private suspend fun loadOnce(tail: Int = FULL_PAGE) {
+    private suspend fun loadOnce(tail: Int = FULL_PAGE, afterSeq: Int? = null) {
         val socket = connection ?: return
         val sessionId = _state.value.selectedSessionId ?: return
         _state.update { it.copy(loadingConversation = true) }
@@ -598,7 +601,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         try {
             val page = socket.call<SessionMessagesResult>(
                 "session.messages",
-                payload("sessionId" to jsonString(sessionId), "maxMessages" to me.shirazu.mizar.kit.jsonInt(tail)),
+                payload(
+                    *buildList {
+                        add("sessionId" to jsonString(sessionId))
+                        add("maxMessages" to me.shirazu.mizar.kit.jsonInt(tail))
+                        // Only what this screen has not read yet. The host plugin filters
+                        // the page by it, so a refresh with nothing new costs a few bytes
+                        // instead of the whole tail -- which on a tunnel was the visible
+                        // cost of refreshing.
+                        afterSeq?.let { add("afterSeq" to me.shirazu.mizar.kit.jsonInt(it)) }
+                    }.toTypedArray(),
+                ),
             )
             val fresh = Conversation.items(page)
             val freshTurns = Conversation.turns(page)
@@ -610,6 +623,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     oldestSeq = listOfNotNull(current.oldestSeq, oldest).minOrNull(),
                     hasMore = page.hasMore,
                     conversationError = null,
+                    // Where this page ended. Kept even when the delta was empty, so the
+                    // next refresh still asks from the right place.
+                    newestSeq = listOfNotNull(current.newestSeq, page.asOfSeq).maxOrNull(),
                 )
             }
         } catch (error: Throwable) {
@@ -752,7 +768,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 // A tail, not a page: the merge keeps the history, so a refresh only has
                 // to fetch what happened since. 200 messages over a tunnel is the reason
                 // refreshing felt slow.
-                reload(tail = REFRESH_PAGE)
+                reload(tail = REFRESH_PAGE, afterSeq = _state.value.newestSeq)
                 refreshInteractionsNow()
                 lastRefreshAt = System.currentTimeMillis()
             } finally {
