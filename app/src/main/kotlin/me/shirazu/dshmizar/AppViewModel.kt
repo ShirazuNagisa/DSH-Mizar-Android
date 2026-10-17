@@ -48,6 +48,7 @@ import me.shirazu.mizar.kit.SessionIndex
 import me.shirazu.mizar.kit.SessionIndexStore
 import me.shirazu.mizar.kit.SessionGrouping
 import me.shirazu.mizar.kit.SessionListResult
+import kotlinx.serialization.json.contentOrNull
 import me.shirazu.mizar.kit.SessionMessagesResult
 import me.shirazu.mizar.kit.SessionRecord
 import me.shirazu.mizar.kit.SessionRow
@@ -1147,8 +1148,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // screen that no longer exists.
             launch {
                 socket.events().collect { frame ->
-                    if (frame is me.shirazu.mizar.kit.ServerFrame.Event && frame.name in INTERACTION_EVENTS) {
-                        refreshInteractionsNow()
+                    if (frame is me.shirazu.mizar.kit.ServerFrame.Event) {
+                        if (frame.name in INTERACTION_EVENTS) refreshInteractionsNow()
+                        // The host knows when a turn ends; a connected client should be
+                        // told, not left to infer it from a list refresh.
+                        if (frame.name == "turn.settled") onTurnSettled(frame.data)
                     }
                 }
             }
@@ -1175,6 +1179,43 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { current ->
             current.copy(
                 groups = SessionGrouping.groups(current.sessions, current.workspacePaths, current.selectedSessionId),
+            )
+        }
+    }
+
+    /**
+     * A turn ended, pushed by the host.
+     *
+     * This is the signal the polling version was approximating. The host knows exactly
+     * when a turn ends, so a connected client is told instead of left to notice a
+     * transition on a list refresh -- which is how a completion that happened during a
+     * dropped socket was lost. The polling path stays as a fallback for a client that was
+     * away when the event fired; both share `notifiedFinished`, so a turn is announced
+     * once.
+     */
+    private suspend fun onTurnSettled(data: kotlinx.serialization.json.JsonElement) {
+        val sessionId = (data["sessionId"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull ?: return
+        if (foreground) return
+        if (sessionId in notifiedFinished) return
+        notifiedFinished += sessionId
+        if (activity.quietHours() && isQuietNow()) return
+
+        val context = getApplication<Application>()
+        val detail = describeFinished(sessionId)
+        val title = context.getString(
+            if (detail.failed) R.string.turn_failed_notice_title else R.string.turn_completed_title,
+        )
+        val name = _state.value.titles[sessionId] ?: sessionId.takeLast(8)
+        val body = detail.summary
+            ?.let { context.getString(R.string.turn_completed_body, name, it) }
+            ?: context.getString(R.string.turn_completed_body_plain, name)
+        runCatching {
+            Notifications.show(
+                context,
+                title,
+                body,
+                sessionId,
+                baseId = me.shirazu.dshmizar.push.Notifications.FINISHED_NOTIFICATION_BASE,
             )
         }
     }
