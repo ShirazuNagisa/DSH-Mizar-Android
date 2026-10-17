@@ -593,6 +593,57 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Fold one page of records into the transcript. */
+    private fun applyPage(page: SessionMessagesResult) {
+        val fresh = Conversation.items(page)
+        val freshTurns = Conversation.turns(page)
+        val oldest = page.records.firstNotNullOfOrNull { SessionRecord(it).payload["seq"].intValue() }
+        _state.update { current ->
+            current.copy(
+                conversation = mergeConversations(current.conversation, fresh),
+                turns = mergeTurns(current.turns, freshTurns),
+                oldestSeq = listOfNotNull(current.oldestSeq, oldest).minOrNull(),
+                hasMore = page.hasMore,
+                conversationError = null,
+                // Where this page ended. Kept even when the delta was empty, so the next
+                // refresh still asks from the right place.
+                newestSeq = listOfNotNull(current.newestSeq, page.asOfSeq).maxOrNull(),
+            )
+        }
+    }
+
+    /**
+     * A refresh in one round trip: transcript delta, figures and pending cards together.
+     *
+     * Three sequential calls on a tunnel is three times the latency for one screen
+     * refresh. The host answers them concurrently as `session.refresh`.
+     *
+     * @returns false when the host does not know the method, so the caller can fall
+     *   back to the three separate calls -- an older plugin must not lose the feature.
+     */
+    private suspend fun loadBundle(tail: Int, afterSeq: Int?): Boolean {
+        val socket = connection ?: return true
+        val sessionId = _state.value.selectedSessionId ?: return true
+        val bundle = try {
+            socket.call<RefreshBundle>(
+                "session.refresh",
+                payload(
+                    *buildList {
+                        add("sessionId" to jsonString(sessionId))
+                        add("maxMessages" to me.shirazu.mizar.kit.jsonInt(tail))
+                        afterSeq?.let { add("afterSeq" to me.shirazu.mizar.kit.jsonInt(it)) }
+                    }.toTypedArray(),
+                ),
+            )
+        } catch (error: Throwable) {
+            return false
+        }
+        applyPage(bundle.messages)
+        bundle.stats?.let { stats -> _state.update { it.copy(stats = stats.stats, statsError = null) } }
+        bundle.pending?.let { pending -> _state.update { it.copy(pending = pending) } }
+        return true
+    }
+
     private suspend fun loadOnce(tail: Int = FULL_PAGE, afterSeq: Int? = null) {
         val socket = connection ?: return
         val sessionId = _state.value.selectedSessionId ?: return
@@ -613,21 +664,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }.toTypedArray(),
                 ),
             )
-            val fresh = Conversation.items(page)
-            val freshTurns = Conversation.turns(page)
-            val oldest = page.records.firstNotNullOfOrNull { SessionRecord(it).payload["seq"].intValue() }
-            _state.update { current ->
-                current.copy(
-                    conversation = mergeConversations(current.conversation, fresh),
-                    turns = mergeTurns(current.turns, freshTurns),
-                    oldestSeq = listOfNotNull(current.oldestSeq, oldest).minOrNull(),
-                    hasMore = page.hasMore,
-                    conversationError = null,
-                    // Where this page ended. Kept even when the delta was empty, so the
-                    // next refresh still asks from the right place.
-                    newestSeq = listOfNotNull(current.newestSeq, page.asOfSeq).maxOrNull(),
-                )
-            }
+            applyPage(page)
         } catch (error: Throwable) {
             _state.update { it.copy(conversationError = messageOf(error, addressOf())) }
         }
@@ -768,8 +805,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 // A tail, not a page: the merge keeps the history, so a refresh only has
                 // to fetch what happened since. 200 messages over a tunnel is the reason
                 // refreshing felt slow.
-                reload(tail = REFRESH_PAGE, afterSeq = _state.value.newestSeq)
-                refreshInteractionsNow()
+                val bundle = loadBundle(REFRESH_PAGE, _state.value.newestSeq)
+                if (!bundle) {
+                    // An older host: three calls, as before.
+                    reload(tail = REFRESH_PAGE, afterSeq = _state.value.newestSeq)
+                    refreshInteractionsNow()
+                }
                 lastRefreshAt = System.currentTimeMillis()
             } finally {
                 _state.update { it.copy(refreshing = false) }
@@ -1082,3 +1123,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         const val STALE_MILLIS = 15_000L
     }
 }
+
+/** What session.refresh answers with: one round trip for the whole screen. */
+@kotlinx.serialization.Serializable
+private data class RefreshBundle(
+    val messages: SessionMessagesResult,
+    val stats: SessionStatsResult? = null,
+    val pending: PendingInteractions? = null,
+)
