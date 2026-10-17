@@ -301,7 +301,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (reconnectJob?.isActive == true) return
         reconnectJob = viewModelScope.launch {
             stopWatchers()
-            _state.update { it.copy(reconnecting = true, disconnectReason = reason) }
+            // The reason is recorded at once, but the banner waits. A one-second blip --
+            // a phone switching networks, a tunnel re-establishing -- used to flash
+            // "connecting" in front of the operator several times a minute, which reads
+            // as a broken app when the connection was never actually missed.
+            _state.update { it.copy(disconnectReason = reason) }
+            launch {
+                delay(BANNER_DELAY_MILLIS)
+                if (_state.value.phase != Phase.READY || connection == null) {
+                    _state.update { it.copy(reconnecting = true) }
+                }
+            }
             val backoff = Backoff.standard
             repeat(6) {
                 delay((backoff.nextDelay() * 1000).toLong())
@@ -1245,6 +1255,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         /** How stale the screen may get before returning to it triggers a refresh. */
         const val STALE_MILLIS = 15_000L
+
+        /** How long a drop must last before the banner appears: one second is a blip. */
+        const val BANNER_DELAY_MILLIS = 2_000L
     }
 }
 
