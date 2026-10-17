@@ -43,9 +43,16 @@ jobs:
           tag="${GITHUB_REF_NAME#v}"
           version=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
           [ "$tag" = "$version" ] || { echo "tag $tag != versionName $version" >&2; exit 1; }
-          ./gradlew :app:assembleRelease --no-daemon
+          ./gradlew :mizarkit:test :app:assembleRelease --no-daemon
           mkdir -p dist
           cp app/build/outputs/apk/release/app-release.apk "dist/dsh-mizar-${version}.apk"
+
+      - name: Verify the APK is signed
+        run: |
+          apk=$(ls dist/*.apk)
+          "${ANDROID_HOME}/build-tools/35.0.0/apksigner" verify --print-certs "$apk" > /dev/null \
+            || { echo "the release apk is not signed; check the MIZAR_* secrets" >&2; exit 1; }
+          echo "signed: $apk"
 
       - uses: softprops/action-gh-release@v2
         with:
