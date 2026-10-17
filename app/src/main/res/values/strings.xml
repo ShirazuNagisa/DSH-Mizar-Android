@@ -121,4 +121,7 @@
     <string name="copied">Copied</string>
 
     <string name="jump_to_latest">Latest</string>
+
+    <string name="expand_detail">%1$d chars · expand</string>
+    <string name="collapse_detail">Collapse</string>
 </resources>

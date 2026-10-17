@@ -6,6 +6,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,7 +21,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
@@ -64,6 +68,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -734,7 +739,19 @@ internal fun InteractionsSection(
     onApproval: (String, ApprovalOutcome) -> Unit,
     onQuestions: (String, List<QuestionAnswer>) -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+    // Bounded and scrollable. A pending plan review carries the whole plan as its
+    // detail: unbounded, it made the bottom bar taller than the screen, which squeezed
+    // the Scaffold's content to nothing and left the bar, the transcript and the app bar
+    // drawing over each other. The height is a fraction of the screen so landscape and
+    // split-screen behave too.
+    val maxHeight = (LocalConfiguration.current.screenHeightDp * 0.42f).dp
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+            .heightIn(max = maxHeight)
+            .verticalScroll(rememberScrollState()),
+    ) {
         for (approval in approvals) {
             Surface(
                 color = MizarColors.WarningFill,
@@ -855,9 +872,46 @@ private fun QuestionBody(
             Text(it, style = MaterialTheme.typography.labelSmall, color = MizarColors.Info)
         }
         Text(item.question, style = MaterialTheme.typography.titleSmall)
-        item.detail?.let {
+        item.detail?.takeIf { it.isNotBlank() }?.let { detail ->
             Spacer(Modifier.height(2.dp))
-            Text(it, style = MaterialTheme.typography.bodySmall)
+            if (detail.length <= LONG_DETAIL) {
+                Text(detail, style = MaterialTheme.typography.bodySmall)
+            } else {
+                // A plan is thousands of characters. Six lines and a toggle keep the
+                // card — and with it the buttons under it — on screen.
+                var expanded by remember(item.id, detail.length) { mutableStateOf(false) }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (expanded) {
+                                Modifier.heightIn(max = 180.dp).verticalScroll(rememberScrollState())
+                            } else {
+                                Modifier
+                            },
+                        ),
+                ) {
+                    Text(
+                        text = detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = if (expanded) Int.MAX_VALUE else 6,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                TextButton(
+                    onClick = { expanded = !expanded },
+                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        text = if (expanded) {
+                            stringResource(R.string.collapse_detail)
+                        } else {
+                            stringResource(R.string.expand_detail, detail.length)
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
         }
         Spacer(Modifier.height(4.dp))
         for (option in item.options) {
@@ -1067,3 +1121,6 @@ private fun CommandSheet(onDismiss: () -> Unit, onCommand: (String) -> Unit) {
         Spacer(Modifier.height(24.dp))
     }
 }
+
+/** Detail text beyond this many characters is offered collapsed. */
+private const val LONG_DETAIL = 400
