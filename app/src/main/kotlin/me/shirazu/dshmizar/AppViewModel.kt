@@ -151,6 +151,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** When the screen last read the host, so returning to it can decide whether to refresh. */
     private var lastRefreshAt = 0L
 
+    /**
+     * Which sessions were running the last time the list was read.
+     *
+     * A turn that ends is the other thing worth a notification: the operator asked for
+     * something, put the phone down, and the answer is ready. The host does not push a
+     * "turn finished" signal to this client, so the transition is observed where the list
+     * is refreshed rather than waited for.
+     */
+    private val wasRunning = mutableMapOf<String, Boolean>()
+
+    /** The notification this build posted for a session, so it can be replaced not stacked. */
+    private val notifiedFinished = mutableSetOf<String>()
+
     /** Whether the last-opened conversation has already been restored this process. */
     private var restoredOnce = false
 
@@ -355,6 +368,47 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         selectSession(last)
     }
 
+    /**
+     * Notify the sessions whose turn just ended, while the operator is elsewhere.
+     *
+     * Only a transition counts: a list read that finds a session idle says nothing about
+     * whether it *just* became idle. And only in the background -- a notification for a
+     * screen you are looking at is noise.
+     */
+    private fun announceFinishedTurns(rows: List<SessionRow>) {
+        val context = getApplication<Application>()
+        for (row in rows) {
+            val runningNow = row.running
+            val was = wasRunning[row.sessionId]
+            wasRunning[row.sessionId] = runningNow
+            if (was != true || runningNow) {
+                if (was != true) { /* first sighting: nothing to announce */ }
+                continue
+            }
+            // A turn ended. Announced once per turn: a second read of the same idle row
+            // must not buzz again.
+            if (row.sessionId in notifiedFinished) continue
+            notifiedFinished += row.sessionId
+            if (foreground) continue
+            runCatching {
+                Notifications.show(
+                    context,
+                    context.getString(R.string.turn_completed_title),
+                    context.getString(
+                        R.string.turn_completed_body,
+                        _state.value.titles[row.sessionId] ?: row.sessionId.takeLast(8),
+                    ),
+                    row.sessionId,
+                    // Its own range: a completion must not replace a waiting card.
+                    baseId = me.shirazu.dshmizar.push.Notifications.FINISHED_NOTIFICATION_BASE,
+                )
+            }
+        }
+        // Forget the memory once a session is seen running again, so the next completion
+        // is announced too.
+        for (row in rows) if (row.running) notifiedFinished -= row.sessionId
+    }
+
     private fun cancelReconnect() {
         reconnectJob?.cancel()
         reconnectJob = null
@@ -484,6 +538,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         regroup()
         persistIndex()
+        announceFinishedTurns(list.items)
         // The screen opens on what was last read, once: after that the operator is in
         // control of where they are.
         maybeRestoreLastSession()
@@ -1031,6 +1086,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             while (true) {
                 delay(INTERACTION_POLL_MILLIS)
                 refreshInteractionsNow()
+                // No pushed signal says "the turn ended", so while the screen is elsewhere
+                // the list is the only place to see it -- and only worth asking when
+                // something was actually running.
+                if (!foreground && wasRunning.values.any { it }) {
+                    runCatching { refreshSessionsNow() }
+                }
             }
         }
     }

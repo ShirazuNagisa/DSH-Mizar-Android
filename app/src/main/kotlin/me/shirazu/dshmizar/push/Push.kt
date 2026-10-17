@@ -103,7 +103,16 @@ object Notifications {
     /** Pending-interaction notices live above this id, clear of the service's id 1. */
     private const val PENDING_NOTIFICATION_BASE = 1000
 
-    fun show(context: Context, title: String, body: String, sessionId: String?) {
+    /** A finished turn gets its own range, so it cannot replace a waiting card. */
+    const val FINISHED_NOTIFICATION_BASE = 2000
+
+    fun show(
+        context: Context,
+        title: String,
+        body: String,
+        sessionId: String?,
+        baseId: Int = PENDING_NOTIFICATION_BASE,
+    ) {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             if (sessionId != null) putExtra(EXTRA_SESSION_ID, sessionId)
@@ -132,7 +141,7 @@ object Notifications {
         // Positive and bounded: a negative id is silently dropped on some ROMs, and
         // 1 is the foreground service's own notice.
         val seed = kotlin.math.abs(sessionId?.hashCode() ?: 0)
-        val id = PENDING_NOTIFICATION_BASE + (seed % 900)
+        val id = baseId + (seed % 900)
         runCatching { NotificationManagerCompat.from(context).notify(id, notification) }
     }
 }

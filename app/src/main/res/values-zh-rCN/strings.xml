@@ -116,5 +116,8 @@
     <string name="theme_system">跟随系统</string>
     <string name="theme_light">浅色</string>
     <string name="theme_dark">深色</string>
+
+    <string name="turn_completed_title">本轮已完成</string>
+    <string name="turn_completed_body">%1$s 的结果可以查看了。</string>
 </resources>
 
