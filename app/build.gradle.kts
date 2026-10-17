@@ -1,3 +1,18 @@
+import java.util.Properties
+
+// Release signing. Two sources, one shape: `keystore.properties` at the repo root for
+// a local build, or the same four values in the environment for CI. When neither is
+// present the release APK is simply unsigned rather than the build failing -- but any
+// APK that leaves this machine goes through the signed path.
+val signingValues = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
+fun signingValue(key: String, env: String): String? =
+    signingValues.getProperty(key) ?: System.getenv(env) ?: System.getenv(key)
+
+val hasReleaseKeystore: Boolean = signingValue("storeFile", "MIZAR_KEYSTORE") != null
 // The Android app: Compose UI, Firebase Messaging, notifications.
 //
 // The protocol itself lives in :mizarkit, which has no Android dependency at all.
@@ -37,9 +52,21 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    signingConfigs {
+        create("release") {
+            if (hasReleaseKeystore) {
+                storeFile = rootProject.file(signingValue("storeFile", "MIZAR_KEYSTORE")!!)
+                storePassword = signingValue("storePassword", "MIZAR_KEYSTORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "MIZAR_KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "MIZAR_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (hasReleaseKeystore) signingConfig = signingConfigs.getByName("release")
         }
     }
 

@@ -25,3 +25,6 @@ app/google-services.json
 
 # macOS
 .DS_Store
+keystore.properties
+keystore/
+dist/
