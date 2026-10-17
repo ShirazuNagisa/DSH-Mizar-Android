@@ -124,4 +124,6 @@
 
     <string name="expand_detail">%1$d chars · expand</string>
     <string name="collapse_detail">Collapse</string>
+
+    <string name="refreshed">Refreshed</string>
 </resources>

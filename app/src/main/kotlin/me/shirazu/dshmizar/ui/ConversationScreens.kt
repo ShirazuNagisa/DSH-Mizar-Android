@@ -52,6 +52,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -226,6 +227,17 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
         if (!following || itemCount == 0) return@LaunchedEffect
         listState.scrollToItem(itemCount - 1)
     }
+    // Say when a refresh finished. A spinner that merely stops is ambiguous: success and
+    // a silently failed request look the same.
+    var wasRefreshing by remember { mutableStateOf(false) }
+    val refreshedMessage = stringResource(R.string.refreshed)
+    LaunchedEffect(state.refreshing) {
+        if (wasRefreshing && !state.refreshing) {
+            snackbar.showSnackbar(state.conversationError ?: refreshedMessage)
+        }
+        wasRefreshing = state.refreshing
+    }
+
     val running = state.sessions.firstOrNull { it.sessionId == state.selectedSessionId }?.running == true
     val hasPending = state.pending?.isEmpty == false
     val lastTurnFailed = state.turns.lastOrNull()?.steps?.any { it is ConversationItem.Failure } == true
@@ -251,10 +263,24 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
                 },
                 actions = {
                     // The screen follows pushed events, but a phone whose process was
-                    // paused -- or a host that restarted -- can be stale for minutes.
-                    // One button beats explaining why the transcript is behind.
-                    IconButton(onClick = { model.refreshConversation() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
+                    // paused -- or a host that restarted -- can be stale. The button says
+                    // when it is working: a refresh whose progress is invisible reads as
+                    // a refresh that did nothing.
+                    IconButton(
+                        onClick = { model.refreshConversation() },
+                        enabled = !state.refreshing,
+                    ) {
+                        if (state.refreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = stringResource(R.string.refresh),
+                            )
+                        }
                     }
                     IconButton(onClick = { showingPermissions = true }) {
                         Icon(Icons.Default.Lock, contentDescription = stringResource(R.string.permissions))
@@ -337,13 +363,19 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
                 state.conversation.isEmpty() ->
                     Message(stringResource(R.string.nothing_yet), stringResource(R.string.nothing_yet_body))
 
-                else -> ConversationList(
-                    state = state,
-                    listState = listState,
-                    now = now,
-                    onLoadOlder = { scope.launch { model.loadOlder() } },
-                    onCopy = onCopy,
-                )
+                else -> PullToRefreshBox(
+                    isRefreshing = state.refreshing,
+                    onRefresh = { model.refreshConversation() },
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    ConversationList(
+                        state = state,
+                        listState = listState,
+                        now = now,
+                        onLoadOlder = { scope.launch { model.loadOlder() } },
+                        onCopy = onCopy,
+                    )
+                }
             }
         }
     }

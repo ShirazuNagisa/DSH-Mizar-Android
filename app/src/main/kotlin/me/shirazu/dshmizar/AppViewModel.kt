@@ -101,6 +101,8 @@ data class UiState(
     val conversationError: String? = null,
     val loadingConversation: Boolean = false,
     val busy: Boolean = false,
+    /** A refresh is in flight, so the screen can say so and refuse a second one. */
+    val refreshing: Boolean = false,
     /** When each session was last on screen, so the list can mark what is new. */
     val seenAt: Map<String, Long> = emptyMap(),
 )
@@ -140,6 +142,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // the foreground service is *not* being watched, and defaulting to true made the app
     // suppress exactly the notifications that restart exists to deliver.
     private var foreground = false
+
+    /** When the screen last read the host, so returning to it can decide whether to refresh. */
+    private var lastRefreshAt = 0L
 
     /** Whether the last-opened conversation has already been restored this process. */
     private var restoredOnce = false
@@ -308,6 +313,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 if (_state.value.phase == Phase.READY) {
                     backoff.reset()
                     _state.update { it.copy(reconnecting = false, disconnectReason = null) }
+                    // Whatever happened while the socket was down never arrived as an
+                    // event, so the screen has to be re-read once.
+                    refreshConversation()
                     // The host forgot we were on screen while we were away.
                     setPresence(foreground)
                     return@launch
@@ -434,7 +442,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // ── sessions ────────────────────────────────────────────────────────────
 
     fun refreshSessions() {
-        viewModelScope.launch { refreshSessionsNow() }
+        if (_state.value.refreshing) return
+        _state.update { it.copy(refreshing = true) }
+        viewModelScope.launch {
+            try {
+                refreshSessionsNow()
+                lastRefreshAt = System.currentTimeMillis()
+            } finally {
+                _state.update { it.copy(refreshing = false) }
+            }
+        }
     }
 
     private suspend fun refreshSessionsNow() {
@@ -551,29 +568,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // ── the open conversation ───────────────────────────────────────────────
 
     /** Load the open session, with the latch and the retry described on this class. */
-    suspend fun reload() {
+    suspend fun reload(tail: Int = FULL_PAGE) {
         if (loading) {
             reloadWanted = true
             return
         }
         loading = true
         try {
-            loadOnce()
+            loadOnce(tail)
             val current = _state.value
             if (current.phase == Phase.READY && (current.stats == null || current.conversation.isEmpty())) {
                 delay(700)
-                loadOnce()
+                loadOnce(tail)
             }
             while (reloadWanted) {
                 reloadWanted = false
-                loadOnce()
+                loadOnce(tail)
             }
         } finally {
             loading = false
         }
     }
 
-    private suspend fun loadOnce() {
+    private suspend fun loadOnce(tail: Int = FULL_PAGE) {
         val socket = connection ?: return
         val sessionId = _state.value.selectedSessionId ?: return
         _state.update { it.copy(loadingConversation = true) }
@@ -581,7 +598,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         try {
             val page = socket.call<SessionMessagesResult>(
                 "session.messages",
-                payload("sessionId" to jsonString(sessionId), "maxMessages" to me.shirazu.mizar.kit.jsonInt(200)),
+                payload("sessionId" to jsonString(sessionId), "maxMessages" to me.shirazu.mizar.kit.jsonInt(tail)),
             )
             val fresh = Conversation.items(page)
             val freshTurns = Conversation.turns(page)
@@ -726,9 +743,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun refreshConversation() {
         if (_state.value.selectedSessionId == null) return
+        // Claimed before the launch so two taps -- or a tap racing the automatic refresh
+        // after a reconnect -- cannot start two round trips.
+        if (_state.value.refreshing) return
+        _state.update { it.copy(refreshing = true) }
         viewModelScope.launch {
-            reload()
-            refreshInteractionsNow()
+            try {
+                // A tail, not a page: the merge keeps the history, so a refresh only has
+                // to fetch what happened since. 200 messages over a tunnel is the reason
+                // refreshing felt slow.
+                reload(tail = REFRESH_PAGE)
+                refreshInteractionsNow()
+                lastRefreshAt = System.currentTimeMillis()
+            } finally {
+                _state.update { it.copy(refreshing = false) }
+            }
         }
     }
     fun refreshInteractions() {
@@ -905,6 +934,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // client is on screen the moment the socket drops, and a phone that looks
         // backgrounded gets notifications instead of the inline cards.
         this.foreground = foreground
+        // Coming back to the screen is the most common reason the transcript is stale:
+        // the process may have been frozen, or the socket paused in the background. One
+        // quiet refresh, throttled so a quick app switch does not cost a round trip.
+        if (foreground && System.currentTimeMillis() - lastRefreshAt > STALE_MILLIS) {
+            refreshConversation()
+        }
         viewModelScope.launch {
             val socket = connection ?: return@launch
             runCatching {
@@ -1014,5 +1049,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
          * will wait through.
          */
         const val INTERACTION_POLL_MILLIS = 10_000L
+
+        /** The transcript page an open session starts with. */
+        const val FULL_PAGE = 200
+
+        /**
+         * What a refresh asks for.
+         *
+         * A refresh is a delta, not a reload: the merge keeps everything already held, so
+         * asking for the last few dozen messages is enough -- and over a tunnel it is the
+         * difference between a refresh that feels immediate and one that feels broken.
+         */
+        const val REFRESH_PAGE = 60
+
+        /** How stale the screen may get before returning to it triggers a refresh. */
+        const val STALE_MILLIS = 15_000L
     }
 }

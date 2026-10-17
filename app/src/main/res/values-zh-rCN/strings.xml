@@ -105,5 +105,7 @@
 
     <string name="expand_detail">%1$d 字 · 展开全文</string>
     <string name="collapse_detail">收起</string>
+
+    <string name="refreshed">已刷新</string>
 </resources>
 

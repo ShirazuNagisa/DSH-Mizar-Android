@@ -43,6 +43,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -210,14 +211,19 @@ private fun HomeScreen(model: AppViewModel, state: UiState) {
                     }
                 }
 
-                Phase.READY -> SessionList(
-                    state = state,
-                    onOpen = { model.selectSession(it) },
-                    onNewSession = { showingNewSession = true },
-                    onPickHost = { showingPicker = true },
-                    onDismissProblem = { model.dismissProblem() },
-                    onLoadTitles = { model.loadTitles(it) },
-                )
+                Phase.READY -> PullToRefreshBox(
+                    isRefreshing = state.refreshing,
+                    onRefresh = { model.refreshSessions() },
+                ) {
+                    SessionList(
+                        state = state,
+                        onOpen = { model.selectSession(it) },
+                        onNewSession = { showingNewSession = true },
+                        onPickHost = { showingPicker = true },
+                        onDismissProblem = { model.dismissProblem() },
+                        onLoadTitles = { model.loadTitles(it) },
+                    )
+                }
 
                 Phase.FAILED -> FailedScreen(state, onRetry = { model.retry() }, onPairAgain = { model.startPairing() })
             }
