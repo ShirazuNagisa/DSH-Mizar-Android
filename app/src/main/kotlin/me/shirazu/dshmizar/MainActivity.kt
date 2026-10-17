@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
@@ -48,7 +49,8 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            MizarTheme {
+            val state by model.state.collectAsState()
+            MizarTheme(mode = state.themeMode) {
                 RootScreen(
                     model = model,
                     incomingPairUri = incomingPairUri,

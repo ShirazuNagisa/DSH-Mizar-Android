@@ -21,6 +21,7 @@ import kotlinx.serialization.json.putJsonObject
 import me.shirazu.dshmizar.push.PushTokens
 import me.shirazu.dshmizar.push.Notifications
 import me.shirazu.dshmizar.store.ActivityStore
+import me.shirazu.dshmizar.ui.ThemeMode
 import me.shirazu.dshmizar.store.EncryptedCredentialStore
 import me.shirazu.dshmizar.store.FileSessionIndexStore
 import me.shirazu.mizar.kit.AcceptanceResult
@@ -105,6 +106,8 @@ data class UiState(
     val refreshing: Boolean = false,
     /** The log position this screen has read up to, so a refresh can ask for a delta. */
     val newestSeq: Int? = null,
+    /** How the screen is lit; the settings dialog can override the system. */
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /** When each session was last on screen, so the list can mark what is new. */
     val seenAt: Map<String, Long> = emptyMap(),
 )
@@ -131,7 +134,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val activity = ActivityStore(application)
     private val indexStore: SessionIndexStore = FileSessionIndexStore(application)
 
-    private val _state = MutableStateFlow(UiState())
+    private val _state = MutableStateFlow(UiState(themeMode = activity.themeMode().toThemeMode()))
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     private var connection: MizarConnection? = null
@@ -986,6 +989,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Report whether the app is on screen, which decides who gets notified. */
+    /** Remember the theme across launches. */
+    fun setTheme(mode: ThemeMode) {
+        activity.setThemeMode(mode.name.lowercase())
+        _state.update { it.copy(themeMode = mode) }
+    }
+
     fun setPresence(foreground: Boolean) {
         // Remembered, because a reconnect has to re-assert it: the host forgets which
         // client is on screen the moment the socket drops, and a phone that looks
@@ -1131,3 +1140,12 @@ private data class RefreshBundle(
     val stats: SessionStatsResult? = null,
     val pending: PendingInteractions? = null,
 )
+
+/** The stored spelling back into the enum; an unknown value follows the system. */
+private fun String.toThemeMode(): ThemeMode =
+    when (lowercase()) {
+        "light" -> ThemeMode.LIGHT
+        "dark" -> ThemeMode.DARK
+        else -> ThemeMode.SYSTEM
+    }
+

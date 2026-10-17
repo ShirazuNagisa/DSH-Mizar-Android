@@ -43,9 +43,17 @@ class ActivityStore(context: Context) {
         prefs.edit().putLong(key(hostId, "seen.$sessionId"), at).apply()
     }
 
+    /** How the operator wants the screen lit: "system" (the default), "light" or "dark". */
+    fun themeMode(): String = prefs.getString(THEME, "system") ?: "system"
+
+    fun setThemeMode(mode: String) {
+        prefs.edit().putString(THEME, mode).apply()
+    }
+
     private fun key(hostId: String, suffix: String) = "$hostId/$suffix"
 
     private companion object {
         const val FILE = "mizar-activity"
+        const val THEME = "theme"
     }
 }

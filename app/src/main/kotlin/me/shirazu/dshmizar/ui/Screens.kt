@@ -242,6 +242,7 @@ private fun HomeScreen(model: AppViewModel, state: UiState) {
                 showingSettings = false
                 model.startPairing()
             },
+            onTheme = { mode -> model.setTheme(mode) },
         )
     }
 
@@ -524,8 +525,22 @@ private fun SettingsDialog(
     onDismiss: () -> Unit,
     onForget: (String) -> Unit,
     onAddHost: () -> Unit,
+    onTheme: (ThemeMode) -> Unit,
 ) {
     DialogShell(title = stringResource(R.string.settings), onDismiss = onDismiss) {
+        // The palette is a preference, and the operator should not have to change the
+        // system to get a dark screen at night.
+        Text(
+            text = stringResource(R.string.theme),
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ThemeChoice(stringResource(R.string.theme_system), state.themeMode == ThemeMode.SYSTEM) { onTheme(ThemeMode.SYSTEM) }
+            ThemeChoice(stringResource(R.string.theme_light), state.themeMode == ThemeMode.LIGHT) { onTheme(ThemeMode.LIGHT) }
+            ThemeChoice(stringResource(R.string.theme_dark), state.themeMode == ThemeMode.DARK) { onTheme(ThemeMode.DARK) }
+        }
+
         for (host in state.hosts) {
             ListItem(
                 headlineContent = { Text(host.displayName) },
@@ -679,3 +694,14 @@ private fun ScannerScreen(onCode: (String) -> Unit, onCancel: () -> Unit) {
 
 /** How many rows a workspace shows before it asks. */
 private const val PAGE_SIZE = 10
+
+/** One theme option, with its current state visible. */
+@Composable
+private fun ThemeChoice(label: String, selected: Boolean, onClick: () -> Unit) {
+    if (selected) {
+        Button(onClick = onClick) { Text(label, style = MaterialTheme.typography.labelMedium) }
+    } else {
+        OutlinedButton(onClick = onClick) { Text(label, style = MaterialTheme.typography.labelMedium) }
+    }
+}
+

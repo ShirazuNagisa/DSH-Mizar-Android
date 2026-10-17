@@ -72,6 +72,9 @@ private val SelectionDark = TextSelectionColors(
     backgroundColor = Color(0xFF3A4A66),
 )
 
+/** How the screen is lit. The default follows the system. */
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
 /**
  * The theme.
  *
@@ -80,8 +83,12 @@ private val SelectionDark = TextSelectionColors(
  * wallpaper changes what "orange means waiting for you" looks like.
  */
 @Composable
-fun MizarTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+fun MizarTheme(mode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -> Unit) {
+    val dark = when (mode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.DARK -> true
+        ThemeMode.LIGHT -> false
+    }
     MaterialTheme(colorScheme = if (dark) Dark else Light) {
         CompositionLocalProvider(
             LocalTextSelectionColors provides if (dark) SelectionDark else SelectionLight,
