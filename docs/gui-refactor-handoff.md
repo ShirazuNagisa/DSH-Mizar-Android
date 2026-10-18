@@ -1,0 +1,183 @@
+# App GUI 重构对接文档
+
+**给谁**：重构 `app/` 界面层的同学。
+**给谁看**：重构完成后接手验证与修 bug 的人。
+
+一句话的分工：**协议层、连接层、通知层一行不动；界面层可以整个重写。**
+
+---
+
+## 一、硬约束（这几处改了会坏，且坏得不明显）
+
+| 层 | 位置 | 为什么不能动 |
+|---|---|---|
+| 协议核心 | `mizarkit/` | 纯 Kotlin/JVM，帧编解码、连接状态机、会话投影、Markdown。它自带测试，是唯一能在没有手机的情况下验证协议的地方。要加能力先加测试 |
+| 状态与动作 | `AppViewModel` 的公开函数 + `UiState` 字段 | 界面和它之间的唯一契约。**可以新增字段/函数，不要删改语义** |
+| 通知规则 | `AppViewModel.announceFinishedTurns` / `onTurnSettled` / `CompletionAnnouncer` | 判定顺序是踩出来的，见 [foreground-service.md](foreground-service.md) 的六个坑。界面层任何"顺手改一下"都会让通知静默消失 |
+| 生命周期接线 | `MainActivity`：`onStart → setPresence(true) + ConnectionService.start`；`onStop → setPresence(false)`；`onDestroy(isFinishing) → stop` | `foreground` 决定"要不要弹通知"，误判一次就等于把人正看着的通知发出去、或把该发的压掉 |
+| 通知 id 与频道 | `push/Push.kt` | 完成通知 base 2000、待办 base 1000、`abs(hash) % 900`；频道 `mizar-alerts`（会响）与 `mizar-connection`（静默常驻）。负 id 会被系统**静默丢弃** |
+| 插件镜像 | `plugin/`、`scripts/sync-plugin.mjs` | 宿主侧代码，与本仓库的界面无关。**不要在这里改任何东西** |
+| 宿主仓库 | `E:\Projects\DSH-Mizar` | iOS 与 Android 共用，保持上游原样 |
+
+重构允许的：布局、组件、导航、字体/配色、动画、无障碍、字符串组织、把大文件拆开。
+
+---
+
+## 二、现在的界面结构（可重写）
+
+```
+app/src/main/kotlin/me/shirazu/dshmizar/
+├── MainActivity.kt            4KB   Compose 宿主 + 生命周期接线（勿改）
+├── AppViewModel.kt           66KB   状态与动作（对外契约，勿改语义）
+├── ui/
+│   ├── Screens.kt            29KB   RootScreen / HomeScreen / UnpairedScreen / FailedScreen
+│   │                                SessionList、设置弹窗、主机选择、新建会话、扫码页
+│   ├── ConversationScreens.kt 57KB  SessionScreen：对话列表、轮次分区、消息、审批/提问卡、输入框
+│   ├── Theme.kt               4KB   主题（`ThemeMode`），中性配色
+│   ├── Format.kt              2KB   时间/耗时格式化
+│   └── Scanner.kt             4KB   二维码扫描
+├── push/                     12KB   前台服务、通知、FCM 占位（勿改）
+└── store/                     8KB   ActivityStore / SessionIndexStore（勿改）
+```
+
+**入口只有一个**：`RootScreen(model, incomingPairUri, onPairUriHandled)`。它按 `state.phase` 分派到首页 / 未配对 / 失败页；进会话是 `SessionScreen(model, state)`。
+
+拆文件时保留这两个入口的签名即可，内部组件随便重组。
+
+---
+
+## 三、状态与动作（对接表）
+
+界面**只做两件事**：读 `model.state`，调 `model.xxx()`。不要自己开协程去碰 socket。
+
+### 状态（`UiState`，节选常用）
+
+| 字段 | 含义 |
+|---|---|
+| `phase` | `LAUNCHING / UNPAIRED / CONNECTING / READY / FAILED`，决定显示哪个页 |
+| `host`、`hosts`、`welcome` | 当前/已配对主机、握手信息 |
+| `sessions`、`groups`、`titles`、`workspacePaths` | 会话列表、按工作区分组、标题、工作区集合 |
+| `selectedSessionId`、`conversation`、`turns` | 打开的会话、已合并的消息、按轮次的分组 |
+| `stats`、`statsError`、`conversationError`、`problem` | 各类错误/统计，用于状态行与错误提示 |
+| `pending` | 待审批 + 待回答（卡片的数据源） |
+| `modelCatalog`、`permissionCatalog`、`modelChoice` | 模型/权限选择器 |
+| `reconnecting`、`disconnectReason` | 断线横幅（延迟 2 秒出现，见下） |
+| `needsPairing`、`themeMode`、`seenAt` | 重新配对引导、主题、已读时间 |
+| `loadingConversation`、`busy`、`refreshing` | 加载态 |
+| `oldestSeq`、`hasMore`、`exhausted`、`newestSeq` | 翻页与增量位置 |
+
+### 动作（`AppViewModel` 公开函数）
+
+```kotlin
+start()                                  // 启动即调用（MainActivity 已接）
+pair(target, deviceName)                 // 配对
+retry() / dismissProblem()               // 失败重试、清错误
+openHost(hostId) / forget(hostId)        // 切换/删除主机
+startPairing()                           // 生成配对信息
+refreshSessions()                        // 下拉刷新会话列表
+loadTitles(sessionIds)                   // 列表可见时按需取标题
+selectSession(sessionId?)                // 进入/退出会话
+createSession(cwd)                       // 新建会话
+reload(tail, afterSeq?)                  // 重新加载会话（suspend，慎用在 UI 线程）
+loadOlder()                              // 向上翻页
+sendPrompt(text) / cancelTurn()          // 发送、中断
+refreshConversation()                    // 下拉刷新对话
+refreshInteractions()                    // 手动刷待办
+answerApproval(requestId, outcome)       // 审批
+answerQuestions(callId, answers)         // 提问作答
+loadCatalogs() / setModel(selection) / setPermission(preset)
+registerPush() / setTheme(mode) / setPresence(foreground)
+```
+
+---
+
+## 四、必须保留的交互行为（回归清单）
+
+这些都是有原因的，重构时容易"优化"掉：
+
+1. **冷启动直接停在最新消息**，不能看到滚动过程。做法是定位后再绘制。
+2. **待办卡片出现/消失会改变视口高度**：如果原本跟随底部，必须重新锚定，否则最新消息被切掉一半。
+3. **下拉刷新**（会话列表与对话页都有）+ 对话页的「回到最新」按钮。
+4. **审批/提问卡片**：可选、可提交；提交后卡片消失、状态回到「正在思考…」。
+5. **状态行**：运行中 / 空闲 / 耗时。
+6. **断线横幅延迟 2 秒**才出现。1 秒的抖动不该闪"正在连接"（实测过一次网络切换闪 9 次）。
+7. **六个页面各就各位**：未配对、失败、首页、会话、扫码、各种弹窗。
+8. **代码块复制**、消息长按菜单等已有交互不要丢。
+
+---
+
+## 五、构建 / 测试 / 发布
+
+```powershell
+$env:GRADLE_USER_HOME='E:\gradle-home2'                      # 必须；与插件仓库的缓存分开，否则 AAPT2 会互相踩
+$env:JAVA_HOME='C:\Program Files\Microsoft\jdk-17.0.12.7-hotspot'
+
+.\gradlew.bat :mizarkit:test            # 纯 JVM，秒级
+.\gradlew.bat :app:assembleRelease      # 签名 APK → app/build/outputs/apk/release/
+```
+
+- **必须用 release 包**：debug 包签名不同，装不上现有 release 签名（会提示覆盖冲突）。
+- 版本号在 `app/build.gradle.kts`：`versionCode` 递增、`versionName` 与 git tag 一致。
+- 发布：`git tag vX.Y.Z && git push origin main vX.Y.Z`，CI 自动构建签名 APK 并发 release（见 `.github/workflows/release.yml`）。**不要手工上传**。
+
+---
+
+## 六、真机环境与验证方法
+
+| 项 | 值 |
+|---|---|
+| 手机 | OnePlus 12（PJD110），adb 序列号 `8711ae53` |
+| adb | `E:\Projects\Environment\android-sdk\platform-tools\adb.exe` |
+| 宿主 | DSH 桌面端，插件监听 `127.0.0.1:19390`，手机通过 `adb reverse tcp:19390 tcp:19390` 或公网中继连入 |
+| App 日志 | `adb logcat -s mizar-notify`（连接、事件、通知判定都在这个 tag 下） |
+
+三条最常用的验证命令：
+
+```bash
+adb shell dumpsys notification --noredact | grep 'pkg=me.shirazu.dshmizar'   # 通知是否真的发出（id 1 = 前台服务，2000+ = 完成通知）
+adb logcat -d -s mizar-notify                                                # 连接/事件/判定过程
+adb shell dumpsys activity activities | grep topResumedActivity              # App 是否在前台（决定通不通知）
+```
+
+---
+
+## 七、已知限制（不要在 UI 层"修"）
+
+1. **手机作答后桌面卡片不关** —— 宿主 waterfall 的固有行为，agent 已正确继续。详见 [plugin.md](plugin.md)「已知限制」。UI 层不要试图用轮询或伪造事件去关它。
+2. **ColorOS 会冻结后台进程** —— 需要手机设置里允许后台活动 + 自启动。UI 层无法绕过。
+3. **断线期间结束的轮次**由插件补发（连接后 2 秒），UI 层不需要做任何事。
+4. **`session.refresh` 宿主不实现** —— 客户端首次被拒后自动退回三次普通读取，别在 UI 层重复实现。
+
+---
+
+## 八、重构完成的验收标准
+
+界面怎么变都行，但下面这些必须成立：
+
+```bash
+.\gradlew.bat :mizarkit:test :app:assembleRelease    # 全绿
+adb install -r app/build/outputs/apk/release/app-release.apk
+adb reverse tcp:19390 tcp:19390
+```
+
+手工走一遍（每步都要过）：
+
+1. 冷启动 → 会话列表按工作区分组显示，标题正确
+2. 进入会话 → 直接停在最新消息，无滚动动画
+3. 发一句话 → 运行中状态出现 → 回答流式出现
+4. **App 退到后台**，让这一轮结束 → **收到「会话完成」通知**；日志有 `settled … posted=true`
+5. 前台时结束一轮 → **不**弹通知；日志有 `on screen, nothing to announce`
+6. 断网 10 秒再恢复 → 横幅延迟 2 秒出现、自动重连；日志有 `reconnect attempt` / `reconnected`
+7. 触发一次审批/提问 → 手机卡片可作答 → 卡片消失、agent 继续
+8. 杀掉 DSH 再启动 → 手机自动重连，列表与对话不空白
+
+任何一条不过，先看日志再改代码。
+
+---
+
+## 九、协作约定
+
+- **一个提交一件事**，提交信息说清"为什么"，不只是"改了什么"。
+- 碰到协议层疑问（帧字段、事件时序）先问，不要在前端猜；`mizarkit` 的测试是唯一权威。
+- 不要改 `plugin/`、`scripts/`、`.github/`，也不要动 `E:\Projects\DSH-Mizar`。
+- 重构期间如果必须改 `UiState` 或 ViewModel 的函数签名，**先在这个文档里记一笔**，否则接手排查的人会照着旧契约去读。

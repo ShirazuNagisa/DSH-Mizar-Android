@@ -8,10 +8,12 @@ DSH-Mizar 的 Android 客户端：在手机上查看 DSH agent 的会话、读�
 - `app/` —— Compose 界面、扫码配对、通知、Keystore 支撑的加密存储。
 - `plugin/` —— 与这个客户端配套的**主机插件**（`dsh-mizar` 的一份镜像）。上游
   [DSH-Mizar](https://github.com/ShirazuNagisa/DSH-Mizar) 同时服务 iOS 和 Android，不能只为一边改；
-  Android 需要的增量（目前只有 `turn.settled` 广播）落在这一份里。同步方法见
+  Android 需要的增量（`turn.settled` 广播 + 断线补发）落在这一份里。同步方法见
   [docs/plugin.md](docs/plugin.md)。
 
 构建环境、对真实宿主跑通链路、与 iOS 客户端的差异，见 [docs/android.md](docs/android.md)。
+界面重构（换人重写 `app/` 的 Compose 层）的边界、契约与验收清单，见
+[docs/gui-refactor-handoff.md](docs/gui-refactor-handoff.md)。
 
 ## 构建
 
