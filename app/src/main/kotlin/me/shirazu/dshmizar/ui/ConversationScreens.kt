@@ -71,82 +71,10 @@ import me.shirazu.mizar.kit.QuestionAnswer
 import me.shirazu.mizar.kit.QuestionItem
 
 /**
- * What remains of the old conversation screen file: the composer, the pending
- * interaction cards, and the sheets. The transcript itself moved to
+ * What remains of the old conversation screen file: the pending interaction
+ * cards and the sheets. The transcript and the composer moved to
  * `conversation/` in the GUI rewrite; these follow in their own stages.
  */
-
-/** The two pills above the composer, and the command button. */
-@Composable
-internal fun ComposerBar(
-    state: UiState,
-    onModel: () -> Unit,
-    onContext: () -> Unit,
-    onCommands: () -> Unit,
-) {
-    val selection = state.selectedSessionId?.let { state.modelChoice[it] }
-    val model = selection?.model ?: state.stats?.model?.next?.model ?: state.stats?.model?.lastUsed?.model
-    val effort = selection?.reasoningEffort ?: state.stats?.model?.next?.reasoningEffort
-    val label = listOfNotNull(model, effort?.replaceFirstChar { it.uppercase() }).joinToString(" · ")
-
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Pill(onClick = onModel, modifier = Modifier.weight(1f, fill = false)) {
-            Text(label.ifEmpty { stringResource(R.string.model) }, maxLines = 1, style = MaterialTheme.typography.labelMedium)
-        }
-
-        val context = state.stats?.context
-        val percent = context?.percent
-        Pill(
-            onClick = onContext,
-            enabled = context != null,
-            modifier = Modifier.weight(1f, fill = false),
-        ) {
-            // An em dash when the host reported no context figure. Rendering a missing
-            // projection as `0%` is the one thing this protocol asks clients not to do
-            // -- "absent means the capability is not composed, not that its value is
-            // zero" -- and it is also just wrong: an empty context is not a full one.
-            Text(
-                text = if (context == null || percent == null) {
-                    stringResource(R.string.context_unknown)
-                } else {
-                    stringResource(R.string.context_percent, percent)
-                },
-                style = MaterialTheme.typography.labelMedium,
-            )
-        }
-
-        Pill(onClick = onCommands, modifier = Modifier.weight(1f, fill = false)) {
-            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
-            Spacer(Modifier.width(4.dp))
-            Text(stringResource(R.string.commands), maxLines = 1, style = MaterialTheme.typography.labelMedium)
-        }
-    }
-}
-
-@Composable
-private fun Pill(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    content: @Composable () -> Unit,
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(50),
-        modifier = modifier.then(
-            if (enabled) Modifier.clickable { onClick() } else Modifier,
-        ),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) { content() }
-    }
-}
 
 /**
  * What the agent is doing, in the one place the operator already looks.
@@ -177,78 +105,6 @@ internal fun StatusLine(running: Boolean, pending: Boolean, failed: Boolean) {
         }
         Spacer(Modifier.width(6.dp))
         Text(label, style = MaterialTheme.typography.labelSmall, color = tint)
-    }
-}
-
-/** The field, and the one button that is send, stop, or neither. */
-@Composable
-internal fun Composer(
-    draft: String,
-    onDraft: (String) -> Unit,
-    running: Boolean,
-    onSend: () -> Unit,
-    onStop: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(8.dp),
-        verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        OutlinedTextField(
-            value = draft,
-            onValueChange = onDraft,
-            placeholder = { Text(stringResource(R.string.composer_hint)) },
-            maxLines = 8,
-            // Enter sends, as it does on the desktop. A multi-line draft is still
-            // possible -- the field grows -- but the key that people expect to submit is
-            // the one that submits.
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-            keyboardActions = KeyboardActions(onSend = { if (draft.isNotBlank()) onSend() }),
-            shape = RoundedCornerShape(19.dp),
-            modifier = Modifier.weight(1f),
-            // Explicit surfaces, not the theme defaults: the default container is a
-            // tinted role that read as "a dark blue box", and a selection drawn in the
-            // accent over it left the selected words hard to see. The selection
-            // colours themselves come from MizarTheme.
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                cursorColor = MaterialTheme.colorScheme.primary,
-                focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-            ),
-        )
-
-        val showsStop = running && draft.isBlank()
-        val sendEnabled = !showsStop && draft.isNotBlank()
-        if (showsStop) {
-            IconButton(
-                onClick = onStop,
-                modifier = Modifier.size(48.dp).background(MizarColors.Failure, CircleShape),
-            ) {
-                Icon(Icons.Default.Stop, contentDescription = stringResource(R.string.stop), tint = Color.White)
-            }
-        } else {
-            IconButton(
-                onClick = onSend,
-                enabled = sendEnabled,
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(
-                        if (sendEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                        CircleShape,
-                    ),
-            ) {
-                Icon(
-                    Icons.Default.Send,
-                    contentDescription = stringResource(R.string.send),
-                    tint = if (sendEnabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.outline,
-                )
-            }
-        }
     }
 }
 

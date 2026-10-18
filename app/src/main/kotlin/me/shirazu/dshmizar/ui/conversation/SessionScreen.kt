@@ -56,8 +56,6 @@ import me.shirazu.dshmizar.AppViewModel
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.CommandSheet
-import me.shirazu.dshmizar.ui.Composer
-import me.shirazu.dshmizar.ui.ComposerBar
 import me.shirazu.dshmizar.ui.ContextSheet
 import me.shirazu.dshmizar.ui.InteractionsSection
 import me.shirazu.dshmizar.ui.ModelPickerSheet
@@ -313,16 +311,15 @@ fun SessionScreen(model: AppViewModel, state: UiState, onOpenSidebar: () -> Unit
                         )
                     }
                 }
-                ComposerBar(
-                    state = state,
-                    onModel = { showingModelPicker = true },
-                    onContext = { showingContext = true },
-                    onCommands = { showingCommands = true },
-                )
                 Composer(
+                    state = state,
                     draft = draft,
                     onDraft = { draft = it },
                     running = running,
+                    onModel = { showingModelPicker = true },
+                    onContext = { showingContext = true },
+                    onCommands = { showingCommands = true },
+                    commandsOpen = showingCommands,
                     onSend = {
                         val text = draft
                         draft = ""
