@@ -23,7 +23,13 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Named packages, never the action's default. That default is
+      # `tools platform-tools`, and Google removed the legacy `tools` package
+      # from the SDK repository -- so the bare action fails in sdkmanager with
+      # "Failed to find package 'tools'" before any of this workflow runs.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
       - name: Decode the keystore
         env:
