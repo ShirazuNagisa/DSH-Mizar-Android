@@ -40,12 +40,17 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.MIZAR_KEYSTORE_BASE64 }}
         run: |
           mkdir -p keystore
-          printf '%s' "$KEYSTORE_BASE64" | base64 -d > keystore/release.jks
-          # A secret that was never added decodes to an empty file, and the build
-          # then dies inside Gradle with a message about a tampered keystore --
-          # which reads like the key is wrong rather than missing.
-          [ -s keystore/release.jks ] \
+          # Whitespace only ever arrives by accident -- a wrapped paste, a trailing
+          # newline, a space from an editor -- and `base64 -d` rejects a space
+          # outright ("invalid input"), so it is stripped rather than trusted.
+          value=$(printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]')
+          [ -n "$value" ] \
             || { echo 'MIZAR_KEYSTORE_BASE64 is empty or not set; add the MIZAR_* secrets' >&2; exit 1; }
+          printf '%s' "$value" | base64 -d > keystore/release.jks 2>/dev/null \
+            || { echo "MIZAR_KEYSTORE_BASE64 is not base64 (${#value} characters after trimming)" >&2; exit 1; }
+          [ -s keystore/release.jks ] \
+            || { echo 'the decoded keystore is empty' >&2; exit 1; }
+          echo "keystore decodes to $(wc -c < keystore/release.jks) bytes"
 
       - name: Build
         env:
