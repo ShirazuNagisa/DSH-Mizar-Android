@@ -49,3 +49,14 @@ tasks.register<JavaExec>("hostCheck") {
     (project.findProperty("web") as String?)?.let { environment("MIZAR_WEB_BASE", it) }
     (project.findProperty("webToken") as String?)?.let { environment("MIZAR_WEB_TOKEN", it) }
 }
+
+/** Explicitly opt-in: the entry point accepts only the isolated loopback test port 19491. */
+tasks.register<JavaExec>("attachmentHostCheck") {
+    group = "verification"
+    description = "Verify Kotlin attachment uploads and prompt replay against the isolated plugin listener."
+    mainClass.set("me.shirazu.mizar.kit.tools.AttachmentHostCheckKt")
+    classpath = sourceSets["main"].runtimeClasspath
+    (project.findProperty("base") as String?)?.let { environment("MIZAR_ATTACHMENT_BASE", it) }
+    (project.findProperty("code") as String?)?.let { environment("MIZAR_ATTACHMENT_CODE", it) }
+    (project.findProperty("cwd") as String?)?.let { environment("MIZAR_ATTACHMENT_CWD", it) }
+}

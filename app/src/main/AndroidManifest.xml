@@ -43,15 +43,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- The QR payload doubles as a tappable link, as it does on iOS. -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:host="pair"
-                    android:scheme="mizar" />
-            </intent-filter>
+            <!-- Private side-by-side build: do not claim the official mizar:// scheme.
+                 In-app QR scanning and manual pairing still use the original parser. -->
         </activity>
 
         <!--

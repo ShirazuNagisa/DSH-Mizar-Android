@@ -10,7 +10,42 @@
   says "1 steps". Parity over grammar here, deliberately.
 -->
 <resources>
-    <string name="app_name">DSH-Mizar</string>
+    <string name="app_name">Mizar Attachments</string>
+    <string name="reasoning_effort">Reasoning effort</string>
+    <string name="access_permissions">Access permissions</string>
+    <string name="model_scope_note">Used for subsequent requests in this conversation. DSH may also remember this as the default for new sessions.</string>
+    <string name="settings_current">Current: %1$s</string>
+    <string name="settings_selected">Selected: %1$s</string>
+    <string name="settings_active">Current selection</string>
+    <string name="settings_choose_model">Choose model, then reasoning effort above</string>
+    <string name="effort_model_unavailable">The current model is not in the loaded catalog. Choose an available model or refresh the catalog.</string>
+    <string name="effort_not_supported">This model advertises no adjustable reasoning effort. No reasoning level will be sent.</string>
+    <string name="settings_no_models">No selectable models were returned by the host.</string>
+    <string name="settings_no_permissions">No selectable permission presets were returned by the host.</string>
+    <string name="settings_loading">Loading catalog…</string>
+    <string name="settings_reload_catalog">Reload catalog / retry</string>
+    <string name="settings_saving">Saving and checking…</string>
+    <string name="settings_confirmed">Confirmed by host</string>
+    <string name="settings_apply">Apply selection</string>
+    <string name="settings_retry_save">Retry selection</string>
+    <string name="settings_readback">Refresh current session settings</string>
+    <string name="settings_cancel">Cancel</string>
+    <string name="permission_session_scope">Changes apply to this session. A command acknowledgement is not enough: the app waits for the current preset to read back.</string>
+    <string name="permission_custom_current">The current preset is custom (read-only); it cannot be selected as a target.</string>
+    <string name="permission_danger_title">Allow full access for this session?</string>
+    <string name="permission_danger_body">danger-full-access removes filesystem confinement and allows operations without approval. The agent may access or change files outside the workspace and run dangerous commands. Only enable this for a trusted session.</string>
+    <string name="attach_photos">Photos</string>
+    <string name="attach_history_image">Image</string>
+    <string name="attach_history_file">File</string>
+    <string name="attach_history_placeholder">Attached to this message · preview/download not available here</string>
+    <string name="attach_files">Files</string>
+    <string name="attach_pause">Pause</string>
+    <string name="attach_remove">Remove</string>
+    <string name="attach_discard">Discard draft</string>
+    <string name="attach_keep">Keep</string>
+    <string name="attach_discard_body">Delete this draft and its private attachment copies? Up to 5 attachments, 20 MiB each.</string>
+    <string name="attach_discard_uncertain">This message may already have reached the host. Check its transcript before sending it again. Discard the draft and its private copies?</string>
+    <string name="attach_retry_notice">Delivery is unconfirmed. Send retries the same message and request ID; editing is locked to avoid duplicates.</string>
     <string name="connection_service_text">Connected to the computer — this notice keeps the connection alive in the background.</string>
     <string name="connection_service_channel">Connection</string>
     <string name="pending_title">The agent is waiting</string>

@@ -1,5 +1,8 @@
 package me.shirazu.dshmizar.push
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -112,7 +115,13 @@ object Notifications {
         body: String,
         sessionId: String?,
         baseId: Int = PENDING_NOTIFICATION_BASE,
-    ) {
+    ): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            return false
+        }
+        val manager = NotificationManagerCompat.from(context)
+        if (!manager.areNotificationsEnabled()) return false
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             if (sessionId != null) putExtra(EXTRA_SESSION_ID, sessionId)
@@ -140,9 +149,15 @@ object Notifications {
         // behind "Connected to the computer" on a real phone.
         // Positive and bounded: a negative id is silently dropped on some ROMs, and
         // 1 is the foreground service's own notice.
-        val seed = kotlin.math.abs(sessionId?.hashCode() ?: 0)
-        val id = baseId + (seed % 900)
-        runCatching { NotificationManagerCompat.from(context).notify(id, notification) }
+        val seed = (sessionId?.hashCode() ?: 0).toLong().let { kotlin.math.abs(it) }
+        val id = baseId + (seed % 900).toInt()
+        return try {
+            manager.notify(id, notification)
+            true
+        } catch (_: SecurityException) {
+            // Permission can be revoked between the check and notify.
+            false
+        }
     }
 }
 

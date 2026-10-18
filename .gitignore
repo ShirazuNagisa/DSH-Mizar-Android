@@ -13,11 +13,15 @@ local.properties
 # without it the app still builds and runs, just with push inactive.
 app/google-services.json
 
-# Android packages and signing material
+# Android packages, plugin archives and signing material
 *.apk
 *.aab
+*.tgz
 *.jks
 *.keystore
+*.p12
+*.pfx
+*.key
 
 # IDE
 .idea/
@@ -31,3 +35,30 @@ dist/
 
 # The vendored plugin's dependencies are installed locally, not committed.
 plugin/node_modules/
+
+# Local integration test profile, private credentials and temporary uploads
+.test-home/
+.private/
+.test-workspace/
+reports/
+plugin/attachment-tests.json
+.test-tools/
+
+# Machine-specific development helpers and local delivery notes (not published)
+/scripts/build-android.ps1
+/scripts/build-local-relay.mjs
+/scripts/check-kotlin-host.ps1
+/scripts/create-private-signing.mjs
+/scripts/integration-attachments.mjs
+/scripts/integration-session-controls.mjs
+/scripts/isolated-dsh.ps1
+/scripts/package-deliverables.py
+/scripts/prepare-toolchains.mjs
+/scripts/probe-public-relay.mjs
+/scripts/stage-package.mjs
+/scripts/test-model.mjs
+/scripts/verify-apk.ps1
+/scripts/verify-artifacts.mjs
+/scripts/verify-extraction.py
+/使用说明与测试报告.md
+/更新说明-attachments.2.md

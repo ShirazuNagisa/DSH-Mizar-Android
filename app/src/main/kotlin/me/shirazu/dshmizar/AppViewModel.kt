@@ -39,6 +39,12 @@ import me.shirazu.dshmizar.ui.Format
 import me.shirazu.mizar.kit.MizarConnection
 import me.shirazu.mizar.kit.ModelCatalog
 import me.shirazu.mizar.kit.ModelSelection
+import me.shirazu.mizar.kit.SelectModelResult
+import me.shirazu.mizar.kit.SetPermissionResult
+import me.shirazu.mizar.kit.SessionSettings
+import me.shirazu.mizar.kit.SettingsScope
+import kotlinx.coroutines.CancellationException
+import java.util.concurrent.atomic.AtomicLong
 import me.shirazu.mizar.kit.PairedHost
 import me.shirazu.mizar.kit.PairingTarget
 import me.shirazu.mizar.kit.PairingClient
@@ -66,7 +72,10 @@ import me.shirazu.mizar.kit.jsonString
 import me.shirazu.mizar.kit.mergeConversations
 import me.shirazu.mizar.kit.mergeTurns
 import java.io.IOException
-import java.util.UUID
+import android.net.Uri
+import me.shirazu.dshmizar.attachments.AttachmentComposer
+import me.shirazu.dshmizar.attachments.AttachmentComposerState
+import me.shirazu.mizar.kit.AttachmentScope
 
 /** Which screen the app is on, which is a property of the connection rather than of navigation. */
 enum class Phase { LAUNCHING, UNPAIRED, CONNECTING, READY, FAILED }
@@ -91,7 +100,17 @@ data class UiState(
     val pending: PendingInteractions? = null,
     val modelCatalog: ModelCatalog? = null,
     val permissionCatalog: PermissionCatalog? = null,
-    val modelChoice: Map<String, ModelSelection> = emptyMap(),
+    val modelCatalogLoading: Boolean = false,
+    val permissionCatalogLoading: Boolean = false,
+    val modelCatalogError: String? = null,
+    val permissionCatalogError: String? = null,
+    val modelSaving: Boolean = false,
+    val permissionSaving: Boolean = false,
+    val modelSaveError: String? = null,
+    val permissionSaveError: String? = null,
+    val modelSaved: Boolean = false,
+    val permissionSaved: Boolean = false,
+    val settingsGeneration: Long = 0,
     val problem: String? = null,
     /** A dropped socket is being retried; the screen stays as it was. */
     val reconnecting: Boolean = false,
@@ -114,6 +133,7 @@ data class UiState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /** When each session was last on screen, so the list can mark what is new. */
     val seenAt: Map<String, Long> = emptyMap(),
+    val composer: AttachmentComposerState = AttachmentComposerState(),
 )
 
 /**
@@ -142,6 +162,102 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     private var connection: MizarConnection? = null
+    private val settingsGeneration = AtomicLong()
+    private val settingsRevision = AtomicLong()
+    private var modelCatalogJob: Job? = null
+    private var permissionCatalogJob: Job? = null
+    private var settingsSaveJob: Job? = null
+
+    private data class SettingsRequest(val socket: MizarConnection, val scope: SettingsScope, val revision: Long)
+
+    private fun settingsScope(): SettingsScope? {
+        val current = _state.value
+        val host = current.host ?: return null
+        val session = current.selectedSessionId ?: return null
+        return SettingsScope(host.hostId, host.deviceId, session, settingsGeneration.get())
+    }
+
+    private fun settingsRequest(): SettingsRequest? {
+        val socket = connection ?: return null
+        val scope = settingsScope() ?: return null
+        if (socket.welcome?.hostId != scope.hostId || socket.welcome?.deviceId != scope.deviceId) return null
+        return SettingsRequest(socket, scope, settingsRevision.get())
+    }
+
+    private fun isCurrent(request: SettingsRequest, checkRevision: Boolean = false): Boolean =
+        connection === request.socket && SessionSettings.mayApply(
+            request.scope, settingsScope(), request.revision,
+            if (checkRevision) settingsRevision.get() else request.revision,
+        )
+
+    /** Cancel UI waiters, not server side effects; any late response remains scoped to its origin. */
+    private fun invalidateSettings(clearCatalogs: Boolean) {
+        val generation = settingsGeneration.incrementAndGet()
+        settingsRevision.incrementAndGet()
+        modelCatalogJob?.cancel()
+        permissionCatalogJob?.cancel()
+        settingsSaveJob?.cancel()
+        _state.update { it.copy(
+            settingsGeneration = generation,
+            modelCatalog = if (clearCatalogs) null else it.modelCatalog,
+            permissionCatalog = if (clearCatalogs) null else it.permissionCatalog,
+            modelCatalogLoading = false, permissionCatalogLoading = false,
+            modelCatalogError = null, permissionCatalogError = null,
+            modelSaving = false, permissionSaving = false,
+            modelSaveError = null, permissionSaveError = null,
+            modelSaved = false, permissionSaved = false,
+        ) }
+    }
+
+    private fun applySettingsStats(request: SettingsRequest, result: SessionStatsResult) {
+        if (!isCurrent(request, checkRevision = true) || result.sessionId != request.scope.sessionId) return
+        _state.update { current ->
+            if (!isCurrent(request, checkRevision = true)) current else current.copy(stats = SessionSettings.mergeStats(current.stats, result.stats), statsError = null)
+        }
+    }
+    private val attachments = AttachmentComposer(
+        application,
+        viewModelScope,
+        connectionFor = { owner ->
+            val host = _state.value.host
+            connection?.takeIf {
+                host != null && host.hostId == owner.hostId && host.deviceId == owner.deviceId &&
+                    it.welcome?.hostId == owner.hostId && it.welcome?.deviceId == owner.deviceId &&
+                    it.state.value is MizarConnection.State.Ready
+            }
+        },
+        onAccepted = { owner, text ->
+            if (attachmentScope() == owner) {
+                if (text.isNotBlank()) awaitPromptRecorded(text)
+                if (attachmentScope() == owner) reload()
+            }
+        },
+    )
+
+    init {
+        viewModelScope.launch {
+            attachments.state.collect { composer -> _state.update { it.copy(composer = composer) } }
+        }
+    }
+
+    private fun attachmentScope(): AttachmentScope? {
+        val current = _state.value
+        val host = current.host ?: return null
+        val session = current.selectedSessionId ?: return null
+        return AttachmentScope(host.hostId, host.deviceId, session)
+    }
+
+    fun setDraft(text: String) = attachments.setText(text)
+    fun addAttachments(owner: AttachmentScope?, uris: List<Uri>, photo: Boolean) = attachments.add(owner, uris, photo)
+    fun sendDraft() = attachments.send()
+    fun removeAttachment(id: String) = attachments.remove(id)
+    fun pauseAttachmentWork() = attachments.pause()
+    fun discardDraft() = attachments.discard()
+
+    override fun onCleared() {
+        attachments.close()
+        super.onCleared()
+    }
     /** Watches the live connection's state, so a dropped socket is noticed. */
     private var connectionObserver: Job? = null
     /** The single automatic retry loop; never two at once. */
@@ -206,6 +322,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Redeem a scanned or typed pairing code. */
     fun pair(target: PairingTarget, deviceName: String) {
+        invalidateSettings(clearCatalogs = true)
+        attachments.activate(null)
         viewModelScope.launch {
             _state.update { it.copy(phase = Phase.CONNECTING, problem = null) }
             val client = PairingClient(appVersion = appVersion)
@@ -219,7 +337,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 credentials.save(paired)
                 val hosts = credentials.loadAll().sortedBy { it.pairedAtMillis }
-                _state.update { it.copy(hosts = hosts, host = paired) }
+                _state.update { it.copy(hosts = hosts, host = paired, selectedSessionId = null) }
                 connect(paired)
             } catch (error: Throwable) {
                 _state.update { it.copy(phase = Phase.FAILED, problem = messageOf(error, target.authority ?: target.baseUrl)) }
@@ -228,6 +346,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun connect(host: PairedHost) {
+        invalidateSettings(clearCatalogs = true)
+        refreshBundleSupported = true
         stopWatchers()
         connection?.disconnect()
         connection = null
@@ -250,6 +370,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         seenAt = activity.seenAt(host.hostId),
                     )
                 }
+                loadCatalogs()
                 startWatchers(candidate)
                 watchConnection(candidate, host)
                 note("connected to $endpoint")
@@ -439,8 +560,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     baseId = me.shirazu.dshmizar.push.Notifications.FINISHED_NOTIFICATION_BASE,
                 )
             }
-            if (posted.isSuccess) announcer.record(row.sessionId, System.currentTimeMillis())
-            note("list: ${row.sessionId} posted=${posted.isSuccess} body=$body")
+            if (posted.getOrDefault(false)) announcer.record(row.sessionId, System.currentTimeMillis())
+            note("list: ${row.sessionId} posted=${posted.getOrDefault(false)} body=$body")
         }
         // Forget the memory once a session is seen running again, so the next completion
         // is announced too.
@@ -518,6 +639,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * one machine's conversations under another machine's name.
      */
     fun openHost(hostId: String) {
+        invalidateSettings(clearCatalogs = true)
+        attachments.activate(null)
         cancelReconnect()
         viewModelScope.launch {
             val host = credentials.loadAll().firstOrNull { it.hostId == hostId } ?: return@launch
@@ -546,6 +669,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * that is not yet a client of anything.
      */
     fun startPairing() {
+        invalidateSettings(clearCatalogs = true)
+        attachments.activate(null)
         cancelReconnect()
         viewModelScope.launch {
             stopWatchers()
@@ -559,6 +684,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Forget one Mac, here and at the relay. */
     fun forget(hostId: String) {
+        if (_state.value.host?.hostId == hostId) invalidateSettings(clearCatalogs = true)
+        attachments.forgetHost(hostId)
         viewModelScope.launch {
             val wasOpen = _state.value.host?.hostId == hostId
             if (wasOpen) {
@@ -652,6 +779,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * time is the cost of not having it.
      */
     fun selectSession(sessionId: String?) {
+        invalidateSettings(clearCatalogs = false)
         val hostId = _state.value.host?.hostId
         if (hostId != null) {
             activity.rememberLastSession(hostId, sessionId)
@@ -673,10 +801,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 conversationError = null,
                 statsError = null,
                 pending = null,
+                loadingConversation = false,
                 newestSeq = null,
             )
         }
+        attachments.activate(attachmentScope())
         if (sessionId == null) return
+        loadCatalogs()
         viewModelScope.launch {
             reload()
             refreshInteractions()
@@ -774,8 +905,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun loadBundle(tail: Int, afterSeq: Int?): Boolean {
         if (!refreshBundleSupported) return false
-        val socket = connection ?: return true
-        val sessionId = _state.value.selectedSessionId ?: return true
+        val request = settingsRequest() ?: return true
+        val socket = request.socket
+        val sessionId = request.scope.sessionId
         val bundle = try {
             socket.call<RefreshBundle>(
                 "session.refresh",
@@ -788,21 +920,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 ),
             )
         } catch (error: Throwable) {
+            if (!isCurrent(request)) return true
             if ((error as? me.shirazu.mizar.kit.MizarError)?.known == me.shirazu.mizar.kit.MizarErrorCode.NOT_IMPLEMENTED) {
                 note("host does not implement session.refresh; using the three reads")
                 refreshBundleSupported = false
             }
             return false
         }
+        if (!isCurrent(request)) return true
         applyPage(bundle.messages)
-        bundle.stats?.let { stats -> _state.update { it.copy(stats = stats.stats, statsError = null) } }
+        if (!_state.value.modelSaving && !_state.value.permissionSaving) bundle.stats?.let { applySettingsStats(request, it) }
         bundle.pending?.let { pending -> _state.update { it.copy(pending = pending) } }
         return true
     }
 
     private suspend fun loadOnce(tail: Int = FULL_PAGE, afterSeq: Int? = null) {
-        val socket = connection ?: return
-        val sessionId = _state.value.selectedSessionId ?: return
+        val request = settingsRequest() ?: return
+        val socket = request.socket
+        val sessionId = request.scope.sessionId
         _state.update { it.copy(loadingConversation = true) }
 
         try {
@@ -827,19 +962,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }.toTypedArray(),
                 ),
             )
+            if (!isCurrent(request)) return
             applyPage(page)
         } catch (error: Throwable) {
+            if (!isCurrent(request)) return
             _state.update { it.copy(conversationError = messageOf(error, addressOf())) }
         }
 
         try {
             val stats = socket.call<SessionStatsResult>("session.stats", payload("sessionId" to jsonString(sessionId)))
-            _state.update { it.copy(stats = stats.stats, statsError = null) }
+            if (!_state.value.modelSaving && !_state.value.permissionSaving) applySettingsStats(request, stats)
         } catch (error: Throwable) {
-            _state.update { it.copy(statsError = messageOf(error, addressOf())) }
+            if (isCurrent(request, true)) _state.update { it.copy(statsError = messageOf(error, addressOf())) }
         }
 
-        _state.update { it.copy(loadingConversation = false) }
+        if (isCurrent(request)) _state.update { it.copy(loadingConversation = false) }
     }
 
     /**
@@ -892,31 +1029,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendPrompt(text: String) {
         if (text.isBlank()) return
-        viewModelScope.launch {
-            val socket = connection ?: return@launch
-            val sessionId = _state.value.selectedSessionId ?: return@launch
-            // A fresh key per submission: reusing one would make a second identical
-            // message look like a retry of the first and be dropped by the host.
-            val requestId = UUID.randomUUID().toString()
-            try {
-                val result = socket.call<PromptResult>(
-                    "session.prompt",
-                    payload(
-                        "sessionId" to jsonString(sessionId),
-                        "text" to jsonString(text),
-                        "requestId" to jsonString(requestId),
-                    ),
-                )
-                if (!result.accepted) {
-                    _state.update { it.copy(problem = "the host did not accept the message") }
-                    return@launch
-                }
-                awaitPromptRecorded(text)
-                reload()
-            } catch (error: Throwable) {
-                _state.update { it.copy(problem = messageOf(error, addressOf())) }
-            }
+        val composer = attachments.state.value
+        // Retrying a transcript turn must never attach an unrelated draft or replace an uncertain send.
+        if (composer.busy || composer.locked || composer.items.isNotEmpty() || composer.text.isNotBlank()) {
+            _state.update { it.copy(problem = "Finish or discard the current draft before retrying a previous turn") }
+            return
         }
+        attachments.setText(text)
+        attachments.send()
     }
 
     /**
@@ -1025,13 +1145,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // say which half was false.
             if (foreground) return true
             if (signature == lastNotified) return true
-            lastNotified = signature
             val app = getApplication<Application>()
             val counts = listOfNotNull(
                 pending.approvals.size.takeIf { it > 0 }?.let { if (it == 1) "1 approval" else "$it approvals" },
                 pending.questions.size.takeIf { it > 0 }?.let { if (it == 1) "1 question" else "$it questions" },
             ).joinToString(" + ")
-            runCatching {
+            val posted = runCatching {
                 Notifications.show(
                     app,
                     app.getString(R.string.pending_title),
@@ -1039,6 +1158,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     pending.approvals.firstOrNull()?.sessionId ?: pending.questions.firstOrNull()?.sessionId,
                 )
             }
+            if (posted.getOrDefault(false)) lastNotified = signature
         }
         return true
     }
@@ -1084,52 +1204,122 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── catalogs, model, permissions ────────────────────────────────────────
 
-    fun loadCatalogs() {
-        viewModelScope.launch {
-            val socket = connection ?: return@launch
-            if (_state.value.modelCatalog == null) {
-                runCatching { socket.call<ModelCatalog>("model.catalog") }
-                    .onSuccess { catalog -> _state.update { it.copy(modelCatalog = catalog) } }
+    fun loadCatalogs(force: Boolean = false) {
+        val request = settingsRequest()
+        if (request == null) {
+            _state.update { it.copy(modelCatalogError = "Not connected; reconnect and retry", permissionCatalogError = "Not connected; reconnect and retry") }
+            return
+        }
+        if (!_state.value.modelCatalogLoading && (force || _state.value.modelCatalog == null)) {
+            _state.update { it.copy(modelCatalogLoading = true, modelCatalogError = null) }
+            modelCatalogJob = viewModelScope.launch {
+                try {
+                    val catalog = request.socket.call<ModelCatalog>("model.catalog")
+                    if (isCurrent(request)) _state.update { it.copy(modelCatalog = catalog) }
+                } catch (cancelled: CancellationException) { throw cancelled
+                } catch (error: Exception) {
+                    if (isCurrent(request)) _state.update { it.copy(modelCatalogError = error.message ?: "Could not load model catalog") }
+                } finally {
+                    if (isCurrent(request)) _state.update { it.copy(modelCatalogLoading = false) }
+                }
             }
-            if (_state.value.permissionCatalog == null) {
-                runCatching { socket.call<PermissionCatalog>("permissions.catalog") }
-                    .onSuccess { catalog -> _state.update { it.copy(permissionCatalog = catalog) } }
+        }
+        if (!_state.value.permissionCatalogLoading && (force || _state.value.permissionCatalog == null)) {
+            _state.update { it.copy(permissionCatalogLoading = true, permissionCatalogError = null) }
+            permissionCatalogJob = viewModelScope.launch {
+                try {
+                    val catalog = request.socket.call<PermissionCatalog>("permissions.catalog")
+                    if (isCurrent(request)) _state.update { it.copy(permissionCatalog = catalog) }
+                } catch (cancelled: CancellationException) { throw cancelled
+                } catch (error: Exception) {
+                    if (isCurrent(request)) _state.update { it.copy(permissionCatalogError = error.message ?: "Could not load permission catalog") }
+                } finally {
+                    if (isCurrent(request)) _state.update { it.copy(permissionCatalogLoading = false) }
+                }
             }
         }
     }
 
     fun setModel(selection: ModelSelection) {
-        val sessionId = _state.value.selectedSessionId ?: return
-        // Remembered before the call: there is no read-back, so a failure must still
-        // leave the picker showing what was asked for rather than snapping back.
-        _state.update { it.copy(modelChoice = it.modelChoice + (sessionId to selection)) }
-        viewModelScope.launch {
-            val socket = connection ?: return@launch
-            runCatching {
-                socket.call<JsonObject>(
-                    "session.model.set",
-                    buildJsonObject {
-                        put("sessionId", sessionId)
-                        put("provider", selection.provider)
-                        put("model", selection.model)
-                        selection.reasoningEffort?.let { put("reasoningEffort", it) }
-                    },
-                )
-            }.onFailure { error -> _state.update { it.copy(problem = messageOf(error, addressOf())) } }
+        val current = _state.value
+        if (current.modelSaving || current.permissionSaving) return
+        if (!SessionSettings.valid(current.modelCatalog, selection)) {
+            _state.update { it.copy(modelSaveError = "Choose a model and supported reasoning effort from the current catalog", modelSaved = false) }
+            return
+        }
+        val original = settingsRequest() ?: run {
+            _state.update { it.copy(modelSaveError = "Not connected; reconnect and retry", modelSaved = false) }
+            return
+        }
+        val request = original.copy(revision = settingsRevision.incrementAndGet())
+        _state.update { it.copy(modelSaving = true, modelSaved = false, modelSaveError = null, permissionSaved = false) }
+        settingsSaveJob = viewModelScope.launch {
+            try {
+                val result = request.socket.call<SelectModelResult>("session.model.set", SessionSettings.modelPayload(request.scope, selection))
+                if (!isCurrent(request, true)) return@launch
+                val confirmed = SessionSettings.confirmedModel(request.scope, result, _state.value.stats)
+                _state.update { it.copy(stats = confirmed, modelSaved = true, modelSaveError = null) }
+                // This is a new authoritative read, not an everlasting local override.
+                val stats = request.socket.call<SessionStatsResult>("session.stats", payload("sessionId" to jsonString(request.scope.sessionId)))
+                applySettingsStats(request, stats)
+            } catch (cancelled: CancellationException) { throw cancelled
+            } catch (error: Exception) {
+                if (isCurrent(request, true)) _state.update { it.copy(
+                    modelSaveError = if (it.modelSaved) "Model applied, but refreshing current settings failed: ${error.message ?: "retry refresh"}"
+                        else error.message ?: "Model selection failed; retry or refresh",
+                    modelSaved = false,
+                ) }
+            } finally {
+                if (isCurrent(request)) {
+                    settingsRevision.incrementAndGet() // Discard reads started during the save.
+                    _state.update { it.copy(modelSaving = false) }
+                }
+            }
         }
     }
 
-    fun setPermission(preset: String) {
-        val sessionId = _state.value.selectedSessionId ?: return
-        viewModelScope.launch {
-            val socket = connection ?: return@launch
-            runCatching {
-                socket.call<JsonObject>(
-                    "session.permission.set",
-                    payload("sessionId" to jsonString(sessionId), "preset" to jsonString(preset)),
-                )
-            }.onFailure { error -> _state.update { it.copy(problem = messageOf(error, addressOf())) } }
-            loadOnce()
+    fun setPermission(preset: String, dangerConfirmed: Boolean = false) {
+        val current = _state.value
+        if (current.modelSaving || current.permissionSaving) return
+        val option = SessionSettings.permissions(current.permissionCatalog).firstOrNull { it.value == preset }
+        if (option == null || (option.isDangerous && !dangerConfirmed)) {
+            _state.update { it.copy(permissionSaveError = "Choose an available preset; full access requires confirmation", permissionSaved = false) }
+            return
+        }
+        val original = settingsRequest() ?: run {
+            _state.update { it.copy(permissionSaveError = "Not connected; reconnect and retry", permissionSaved = false) }
+            return
+        }
+        val request = original.copy(revision = settingsRevision.incrementAndGet())
+        _state.update { it.copy(permissionSaving = true, permissionSaved = false, permissionSaveError = null, modelSaved = false) }
+        settingsSaveJob = viewModelScope.launch {
+            try {
+                val result = request.socket.call<SetPermissionResult>("session.permission.set",
+                    payload("sessionId" to jsonString(request.scope.sessionId), "preset" to jsonString(preset)))
+                require(result.commandResult?.succeeded == true) { result.commandResult?.text ?: "Host did not confirm the permission command" }
+                var confirmed = false
+                for (attempt in 0 until 6) {
+                    if (!isCurrent(request, true)) return@launch
+                    val stats = request.socket.call<SessionStatsResult>("session.stats",
+                        payload("sessionId" to jsonString(request.scope.sessionId)), timeoutMillis = 5_000)
+                    applySettingsStats(request, stats)
+                    if (SessionSettings.permissionConfirmed(request.scope, preset, stats)) {
+                        confirmed = true
+                        break
+                    }
+                    delay(400)
+                }
+                if (!confirmed) throw IllegalStateException("Permission command returned, but read-back did not confirm '$preset'. Refresh before retrying.")
+                if (isCurrent(request, true)) _state.update { it.copy(permissionSaved = true, permissionSaveError = null) }
+            } catch (cancelled: CancellationException) { throw cancelled
+            } catch (error: Exception) {
+                if (isCurrent(request, true)) _state.update { it.copy(permissionSaveError = error.message ?: "Could not confirm permission change") }
+            } finally {
+                if (isCurrent(request)) {
+                    settingsRevision.incrementAndGet()
+                    _state.update { it.copy(permissionSaving = false) }
+                }
+            }
         }
     }
 
@@ -1319,8 +1509,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 baseId = me.shirazu.dshmizar.push.Notifications.FINISHED_NOTIFICATION_BASE,
             )
         }
-        if (posted.isSuccess) announcer.record(sessionId, System.currentTimeMillis())
-        note("settled $sessionId: posted=${posted.isSuccess} failed=${detail.failed} body=$body")
+        if (posted.getOrDefault(false)) announcer.record(sessionId, System.currentTimeMillis())
+        note("settled $sessionId: posted=${posted.getOrDefault(false)} failed=${detail.failed} body=$body")
     }
 
     private fun applyIndex(index: SessionIndex) {

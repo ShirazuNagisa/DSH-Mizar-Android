@@ -6,6 +6,46 @@
   operator reads when nothing works is not a good place for a second language.
 -->
 <resources>
+    <string name="app_name">Mizar 附件版</string>
+    <string name="reasoning_effort">思考强度</string>
+    <string name="access_permissions">访问权限</string>
+    <string name="model_scope_note">用于此对话的后续请求；DSH 也可能将其记为新会话的默认模型。</string>
+    <string name="settings_current">当前：%1$s</string>
+    <string name="settings_selected">已选择：%1$s</string>
+    <string name="settings_active">当前选项</string>
+    <string name="settings_choose_model">先选择模型，再在上方选择思考强度</string>
+    <string name="effort_model_unavailable">当前模型不在已加载目录中。请选择可用模型或重新加载目录。</string>
+    <string name="effort_not_supported">此模型未提供可调节的思考档位；不会发送思考强度参数。</string>
+    <string name="settings_no_models">主机没有返回可选择的模型。</string>
+    <string name="settings_no_permissions">主机没有返回可选择的权限预设。</string>
+    <string name="settings_loading">正在加载目录…</string>
+    <string name="settings_reload_catalog">重新加载目录／重试</string>
+    <string name="settings_saving">正在保存并核对…</string>
+    <string name="settings_confirmed">主机已确认</string>
+    <string name="settings_apply">应用选择</string>
+    <string name="settings_retry_save">重试此选择</string>
+    <string name="settings_readback">刷新当前会话设置</string>
+    <string name="settings_cancel">取消</string>
+    <string name="permission_session_scope">仅修改当前会话。命令返回不代表已生效，应用会等待当前权限档位读回确认。</string>
+    <string name="permission_custom_current">当前权限为自定义（只读），不能将自定义作为目标预设。</string>
+    <string name="permission_danger_title">为当前会话开启完全访问？</string>
+    <string name="permission_danger_body">danger-full-access 会取消文件系统限制，并允许无需审批的操作。助手可能访问或修改工作目录之外的文件，执行危险命令。仅在信任此会话时开启。</string>
+    <string name="connection_service_text">已连接到电脑；此通知用于在后台保持连接。</string>
+    <string name="connection_service_channel">连接</string>
+    <string name="pending_title">助手正在等待</string>
+    <string name="pending_body">— 打开 Mizar 附件版回答。</string>
+    <string name="attach_photos">照片</string>
+    <string name="attach_history_image">图片</string>
+    <string name="attach_history_file">文件</string>
+    <string name="attach_history_placeholder">此消息包含附件；此处暂不提供预览或下载</string>
+    <string name="attach_files">文件</string>
+    <string name="attach_pause">暂停</string>
+    <string name="attach_remove">删除</string>
+    <string name="attach_discard">丢弃草稿</string>
+    <string name="attach_keep">保留</string>
+    <string name="attach_discard_body">删除草稿及其私有附件副本？每条消息最多 5 件，每件 20 MiB。</string>
+    <string name="attach_discard_uncertain">消息可能已经到达主机。再次发送前请核对主机记录。仍要丢弃草稿及其私有副本吗？</string>
+    <string name="attach_retry_notice">尚未确认送达。点击发送会使用原消息及原请求 ID 重试；为避免重复，暂不可编辑。</string>
     <string name="connecting">连接中…</string>
     <string name="reconnecting">重新连接中…</string>
     <string name="unpaired_title">还没有配对任何电脑</string>
