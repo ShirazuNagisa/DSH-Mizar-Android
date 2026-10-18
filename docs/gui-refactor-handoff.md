@@ -181,3 +181,21 @@ adb reverse tcp:19390 tcp:19390
 - 碰到协议层疑问（帧字段、事件时序）先问，不要在前端猜；`mizarkit` 的测试是唯一权威。
 - 不要改 `plugin/`、`scripts/`、`.github/`，也不要动 `E:\Projects\DSH-Mizar`。
 - 重构期间如果必须改 `UiState` 或 ViewModel 的函数签名，**先在这个文档里记一笔**，否则接手排查的人会照着旧契约去读。
+
+---
+
+## 十、重构前基线（2026-10-18，0.8.21 / versionCode 36）
+
+重构完成后逐条对比，行为一致才算通过：
+
+| 场景 | 基线表现 |
+|---|---|
+| 冷启动 | **直接恢复上次打开的会话**（不是先显示列表），状态行显示「正在思考…」如果那一轮还在跑 |
+| 返回列表 | 顶部 `Acer · N 个会话`，按工作区分组（bouncing-balls 1 / python 数据分析 1 / DSH-Mizar 2 / project01 1），右上刷新 + 设置，列表下方是「+ 新建会话」 |
+| 后台期间完成一轮 | 通知栏出现完成通知（id 2000–2899），正文是「会话标题 · 耗时 · 回答首行」 |
+| 前台期间完成一轮 | 不弹通知，日志 `settled …: on screen, nothing to announce` |
+| 轮询与事件重复读到同一轮 | 第二次判定 `already announced`，不重复弹 |
+| 连接稳定 | `heartbeat: connected=true silent=0` 每 61 秒一次，10 分钟无中断 |
+| 通知栏常驻 | 只有 id=1（前台服务）；完成通知随点即消 |
+
+网络路径基线：手机先走公网中继（`connected to Relay(...)`），USB 插上并 `adb reverse` 后不会自动切换 —— 这是正常的，App 的 endpoint 就是中继。
