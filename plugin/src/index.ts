@@ -20,6 +20,7 @@ import { InteractionBroker } from './bridge/interactions.js'
 import { listSessions, sessionStats } from './bridge/sessions.js'
 import { registerPanelApi } from './panel/api.js'
 import { createPushBinding } from './push/binding.js'
+import { MissedCompletions } from './push/missed.js'
 import { PushNotifier } from './push/notifier.js'
 import {
   anyNotifiableSessionRunning,
@@ -316,6 +317,18 @@ async function startListener(
   // the listener without every consumer holding a stale reference.
   const holder: { current: MizarListener | null } = { current: null }
 
+/** Completions announced to nobody, for the next client that connects. */
+const missed = new MissedCompletions()
+
+/**
+ * How long to wait after a client connects before handing it what it missed.
+ *
+ * The client's event collector starts after its own `connect()` returns, so a
+ * frame written with the welcome would be dropped on the floor. Two seconds is
+ * short enough to beat the eye and long enough to cover a slow phone.
+ */
+const MISSED_FLUSH_DELAY_MS = 2_000
+
   const listener = await MizarListener.start({
     plan,
     port: config.port,
@@ -328,6 +341,22 @@ async function startListener(
     log: report,
     onSession: (session) => {
       report(`client connected: ${session.deviceName} from ${session.remote}`)
+      // A turn that ended while this phone was away is handed over here, because
+      // nothing else would ever tell it: the broadcast went to nobody, and the list
+      // poll only sees a transition it was present for. Delayed by a moment on
+      // purpose -- the client subscribes to the socket's events only once its own
+      // connect() returns, so a frame written with the welcome is dropped.
+      const flush = setTimeout(() => {
+        for (const item of missed.take()) {
+          session.send({
+            v: 1,
+            type: 'event',
+            event: 'turn.settled',
+            data: { sessionId: item.sessionId, reason: item.reason },
+          } as never)
+        }
+      }, MISSED_FLUSH_DELAY_MS)
+      flush.unref?.()
     },
     // Dropping to zero clients is the broker's fail-closed trigger: an approval
     // with nobody left to answer it must settle rather than hang the agent.
@@ -497,13 +526,25 @@ async function startListener(
       // Google services cannot receive at all, so the same moment goes out as an event:
       // a connected client hears it immediately instead of polling the list and losing
       // whichever transition happened while it was away.
-      holder.current?.broadcast({
+      const frame = {
         v: 1,
         type: 'event',
         event: 'turn.settled',
         data: { sessionId: session.id, reason: kind },
-      } as never)
+      } as never
+      holder.current?.broadcast(frame)
+      // Nobody was listening. Keep it for the next phone that connects: a turn that
+      // starts and ends inside one outage leaves no other trace, because the list a
+      // client polls never saw the session running.
+      if ((holder.current?.clientCount ?? 0) === 0) {
+        missed.remember({ sessionId: session.id, reason: kind, at: Date.now() })
+      }
       return
+    }
+    if (event.type === 'turn/start') {
+      // A new turn supersedes any completion still waiting for a phone: announcing
+      // the previous one would describe work that has already been built on.
+      missed.forget(session.id)
     }
     // A continuation that starts before the quiet period runs out cancels the
     // announcement it was about to earn, which is what keeps one instruction

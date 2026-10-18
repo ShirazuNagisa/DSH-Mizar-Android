@@ -19,6 +19,7 @@
 | 文件 | 改动 | 为什么 |
 |---|---|---|
 | `src/index.ts` | `turn/end` 时除 `notifier.turnEnded` 外，再向所有客户端广播 `turn.settled { sessionId, reason }` | 没有 FCM 的手机收不到推送；完成通知只能靠这个事件，否则退化成轮询 |
+| `src/push/missed.ts` + `src/index.ts` | 广播时**没有客户端**的完成事件先记下来，下一个连上来的客户端补发（限 20 条 / 12 小时，新的一轮会作废旧的） | 断线期间"开始并结束"的那一轮，事件丢了、轮询也没见过它 running，否则永远补不回来 |
 | `lib/` | 由 `src/` 编译产生，与源码一同提交 | 宿主直接加载 `lib/`，不跑构建 |
 
 除此之外与上游完全一致。`session.refresh` 不再携带：客户端在宿主不实现时自动退回三次普通读取。
@@ -32,7 +33,7 @@
 git -C E:\Projects\DSH-Mizar fetch origin
 git -C E:\Projects\DSH-Mizar reset --hard origin/main
 
-# 2. 一条命令重建 plugin/：取 HEAD 的树 → 落增量 → 编译 → 跑 497 项测试
+# 2. 一条命令重建 plugin/：取 HEAD 的树 → 落增量 → 编译 → 跑 503 项测试
 node scripts/sync-plugin.mjs
 
 # 3. 看一眼被 staged 的 diff，然后提交
@@ -53,8 +54,13 @@ node scripts/sync-plugin.mjs --client        # 连浏览器半边的 bundle 一�
 `--client` 平时不要加：浏览器半边的产物由上游提交，重建只会改写一行内嵌了 `node_modules` 绝对路径的注释，
 让仓库无谓地变脏。
 
-增量本身很小（`src/index.ts` 里约 10 行），冲突时按上表的语义重写 `scripts/patches/turn-settled.patch`，
-不要机械合并；补丁打不上时脚本会停下并告诉你哪一段对不上。
+增量本身很小，作为**有序补丁系列**存在 `scripts/patches/`（按文件名顺序应用，编号就是依赖顺序），
+冲突时按上表的语义重写对应补丁，不要机械合并；补丁打不上时脚本会停下并告诉你哪一段对不上。
+
+| 补丁 | 内容 |
+|---|---|
+| `01-turn-settled.patch` | `turn/end` 时向客户端广播 `turn.settled` |
+| `02-missed-completions.patch` | 没有客户端时把完成事件记下来，下一个连上来的客户端补发（`push/missed.ts` + 单测） |
 
 ## 宿主的加载方式
 
@@ -95,3 +101,4 @@ agent 正常继续，但 GUI 那条分支的 promise 永远悬着，它的卡片
 
 如果哪天想彻底解决，正确的方向是给 DSH 上游提：waterfall 被认领后应当通知/取消其它 answerer，
 或在请求上提供一个结算时 abort 的共享信号。插件这边单独做不到。
+

@@ -1,0 +1,260 @@
+diff --git a/src/index.ts b/src/index.ts
+index 1dfad30..b53fdb7 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -20,6 +20,7 @@ import { InteractionBroker } from './bridge/interactions.js'
+ import { listSessions, sessionStats } from './bridge/sessions.js'
+ import { registerPanelApi } from './panel/api.js'
+ import { createPushBinding } from './push/binding.js'
++import { MissedCompletions } from './push/missed.js'
+ import { PushNotifier } from './push/notifier.js'
+ import {
+   anyNotifiableSessionRunning,
+@@ -316,6 +317,18 @@ async function startListener(
+   // the listener without every consumer holding a stale reference.
+   const holder: { current: MizarListener | null } = { current: null }
+ 
++/** Completions announced to nobody, for the next client that connects. */
++const missed = new MissedCompletions()
++
++/**
++ * How long to wait after a client connects before handing it what it missed.
++ *
++ * The client's event collector starts after its own `connect()` returns, so a
++ * frame written with the welcome would be dropped on the floor. Two seconds is
++ * short enough to beat the eye and long enough to cover a slow phone.
++ */
++const MISSED_FLUSH_DELAY_MS = 2_000
++
+   const listener = await MizarListener.start({
+     plan,
+     port: config.port,
+@@ -328,6 +341,22 @@ async function startListener(
+     log: report,
+     onSession: (session) => {
+       report(`client connected: ${session.deviceName} from ${session.remote}`)
++      // A turn that ended while this phone was away is handed over here, because
++      // nothing else would ever tell it: the broadcast went to nobody, and the list
++      // poll only sees a transition it was present for. Delayed by a moment on
++      // purpose -- the client subscribes to the socket's events only once its own
++      // connect() returns, so a frame written with the welcome is dropped.
++      const flush = setTimeout(() => {
++        for (const item of missed.take()) {
++          session.send({
++            v: 1,
++            type: 'event',
++            event: 'turn.settled',
++            data: { sessionId: item.sessionId, reason: item.reason },
++          } as never)
++        }
++      }, MISSED_FLUSH_DELAY_MS)
++      flush.unref?.()
+     },
+     // Dropping to zero clients is the broker's fail-closed trigger: an approval
+     // with nobody left to answer it must settle rather than hang the agent.
+@@ -497,14 +526,26 @@ async function startListener(
+       // Google services cannot receive at all, so the same moment goes out as an event:
+       // a connected client hears it immediately instead of polling the list and losing
+       // whichever transition happened while it was away.
+-      holder.current?.broadcast({
++      const frame = {
+         v: 1,
+         type: 'event',
+         event: 'turn.settled',
+         data: { sessionId: session.id, reason: kind },
+-      } as never)
++      } as never
++      holder.current?.broadcast(frame)
++      // Nobody was listening. Keep it for the next phone that connects: a turn that
++      // starts and ends inside one outage leaves no other trace, because the list a
++      // client polls never saw the session running.
++      if ((holder.current?.clientCount ?? 0) === 0) {
++        missed.remember({ sessionId: session.id, reason: kind, at: Date.now() })
++      }
+       return
+     }
++    if (event.type === 'turn/start') {
++      // A new turn supersedes any completion still waiting for a phone: announcing
++      // the previous one would describe work that has already been built on.
++      missed.forget(session.id)
++    }
+     // A continuation that starts before the quiet period runs out cancels the
+     // announcement it was about to earn, which is what keeps one instruction
+     // from producing three notifications. The record type goes through so the
+diff --git a/src/push/missed.ts b/src/push/missed.ts
+new file mode 100644
+index 0000000..8712589
+--- /dev/null
++++ b/src/push/missed.ts
+@@ -0,0 +1,104 @@
++/**
++ * Completions that had nobody to hear them.
++ *
++ * A finished turn is announced on the socket, and that is the whole mechanism:
++ * a connected client is told, and a client that was away when it happened was
++ * meant to find the transition by polling the session list. That fallback has a
++ * hole -- a turn that **starts and ends inside one outage** never produces a
++ * transition the poll can see, because by the time the phone reconnects the row
++ * has been idle the whole time the phone has existed. The completion is simply
++ * gone.
++ *
++ * This is the small memory that closes it: an event broadcast to zero clients is
++ * kept, and handed to the next client that connects. Three properties matter and
++ * are why this is a type rather than an array next to the socket code:
++ *
++ *   - **Bounded.** A phone left off for a week must not make the host grow a
++ *     queue per turn; the oldest are dropped first.
++ *   - **Expiring.** A completion from this morning is not news by tonight. The
++ *     window is long enough to cover "phone in a drawer overnight" and short
++ *     enough that what arrives is still worth reading.
++ *   - **Single delivery.** Taking empties the queue, so a reconnect cannot make
++ *     the phone announce the same turn twice.
++ *
++ * A new turn in the same session discards that session's stale entry: the phone
++ * would otherwise be told about work that has since been superseded.
++ *
++ * @module dsh-mizar/push/missed
++ */
++
++/** One completion nobody heard. */
++export interface MissedCompletion {
++  /** The session whose turn ended. */
++  readonly sessionId: string
++  /** Why it ended, as the host reported it, or `null`. */
++  readonly reason: string | null
++  /** When it was remembered, for expiry. */
++  readonly at: number
++}
++
++/** How many completions to hold, and for how long. */
++export interface MissedLimits {
++  /** Most entries kept; the oldest are dropped first. */
++  readonly limit: number
++  /** How old an entry may be before it is forgotten, in milliseconds. */
++  readonly ttlMs: number
++}
++
++/** Long enough for a phone left charging overnight; short enough to still matter. */
++export const DEFAULT_MISSED_LIMITS: MissedLimits = { limit: 20, ttlMs: 12 * 60 * 60 * 1000 }
++
++/** The completions awaiting a client, oldest first. */
++export class MissedCompletions {
++  private items: MissedCompletion[] = []
++
++  /**
++   * @param limits - how many to keep and for how long.
++   */
++  constructor(private readonly limits: MissedLimits = DEFAULT_MISSED_LIMITS) {}
++
++  /** How many are waiting. */
++  get size(): number {
++    return this.items.length
++  }
++
++  /**
++   * Keep one completion for the next client.
++   *
++   * @param completion - what happened, and when.
++   */
++  remember(completion: MissedCompletion): void {
++    this.expire(completion.at)
++    // The same session ending twice before anybody connects is two turns; the
++    // phone should hear about the latest one, which is what it will open to.
++    this.items = this.items.filter((item) => item.sessionId !== completion.sessionId)
++    this.items.push(completion)
++    while (this.items.length > this.limits.limit) this.items.shift()
++  }
++
++  /**
++   * Forget everything remembered for a session, because it is running again.
++   *
++   * @param sessionId - the session that started a new turn.
++   */
++  forget(sessionId: string): void {
++    this.items = this.items.filter((item) => item.sessionId !== sessionId)
++  }
++
++  /**
++   * Take everything waiting, oldest first, and leave the queue empty.
++   *
++   * @param now - the current time, for expiry.
++   */
++  take(now: number = Date.now()): MissedCompletion[] {
++    this.expire(now)
++    const taken = this.items
++    this.items = []
++    return taken
++  }
++
++  /** Drop what is too old to be worth announcing. */
++  private expire(now: number): void {
++    this.items = this.items.filter((item) => now - item.at < this.limits.ttlMs)
++  }
++}
+\ No newline at end of file
+diff --git a/test/missed.test.ts b/test/missed.test.ts
+new file mode 100644
+index 0000000..21c3c43
+--- /dev/null
++++ b/test/missed.test.ts
+@@ -0,0 +1,59 @@
++import { describe, expect, it } from 'vitest'
++import { MissedCompletions } from '../src/push/missed.js'
++
++/**
++ * The queue exists for one case, and these tests are written around it: a turn
++ * that starts and ends while the phone is away produces nothing the phone can
++ * find afterwards. Everything else here is the property that keeps that fix from
++ * becoming a new problem -- a queue that grows forever, delivers twice, or
++ * announces yesterday's work as if it were new.
++ */
++describe('missed completions', () => {
++  it('hands over what was kept, then forgets it', () => {
++    const missed = new MissedCompletions()
++    missed.remember({ sessionId: 'a', reason: 'completed', at: 1_000 })
++    missed.remember({ sessionId: 'b', reason: null, at: 1_001 })
++
++    const taken = missed.take(1_002)
++    expect(taken.map((item) => item.sessionId)).toEqual(['a', 'b'])
++    expect(taken[0]?.reason).toBe('completed')
++    // A second connect must not announce the same turns again.
++    expect(missed.take(1_003)).toEqual([])
++    expect(missed.size).toBe(0)
++  })
++
++  it('delivers nothing when nothing happened', () => {
++    expect(new MissedCompletions().take()).toEqual([])
++  })
++
++  it('drops what is too old to be news', () => {
++    const missed = new MissedCompletions({ limit: 10, ttlMs: 1_000 })
++    missed.remember({ sessionId: 'old', reason: null, at: 1_000 })
++    missed.remember({ sessionId: 'new', reason: null, at: 3_000 })
++    // The first is three seconds stale by the second's clock, the second is fresh.
++    expect(missed.take(3_100)).toEqual([{ sessionId: 'new', reason: null, at: 3_000 }])
++  })
++
++  it('keeps the newest when more arrive than the limit allows', () => {
++    const missed = new MissedCompletions({ limit: 2, ttlMs: 60_000 })
++    for (const sessionId of ['a', 'b', 'c']) {
++      missed.remember({ sessionId, reason: null, at: 1_000 })
++    }
++    expect(missed.take(1_000).map((item) => item.sessionId)).toEqual(['b', 'c'])
++  })
++
++  it('keeps one entry per session, describing the latest turn', () => {
++    const missed = new MissedCompletions()
++    missed.remember({ sessionId: 'a', reason: 'completed', at: 1_000 })
++    missed.remember({ sessionId: 'a', reason: 'failed', at: 2_000 })
++    expect(missed.take(2_000)).toEqual([{ sessionId: 'a', reason: 'failed', at: 2_000 }])
++  })
++
++  it('forgets a session that started a new turn', () => {
++    const missed = new MissedCompletions()
++    missed.remember({ sessionId: 'a', reason: null, at: 1_000 })
++    missed.remember({ sessionId: 'b', reason: null, at: 1_000 })
++    missed.forget('a')
++    expect(missed.take(1_000).map((item) => item.sessionId)).toEqual(['b'])
++  })
++})
+\ No newline at end of file
