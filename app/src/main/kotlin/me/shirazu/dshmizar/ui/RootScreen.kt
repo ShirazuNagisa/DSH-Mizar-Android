@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import me.shirazu.dshmizar.AppViewModel
 import me.shirazu.dshmizar.Phase
 import me.shirazu.dshmizar.R
+import me.shirazu.dshmizar.ui.pairing.UnpairedScreen
 import me.shirazu.dshmizar.ui.shell.MizarShell
 import me.shirazu.mizar.kit.PairingUri
 

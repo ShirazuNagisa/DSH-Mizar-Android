@@ -134,5 +134,6 @@
     <string name="allowed_tool">已允许 %1$s</string>
     <string name="rejected_tool">已拒绝 %1$s</string>
     <string name="answer_sent">答案已发送</string>
+    <string name="point_at_code">对准电脑上的二维码</string>
 </resources>
 

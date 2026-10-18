@@ -125,82 +125,6 @@ internal fun Centered(content: @Composable () -> Unit) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
 }
 
-/** Nothing paired yet: the one thing to do is scan the code on the Mac. */
-@Composable
-internal fun UnpairedScreen(model: AppViewModel) {
-    var authority by remember { mutableStateOf("") }
-    var code by remember { mutableStateOf("") }
-    var deviceName by remember { mutableStateOf("Android") }
-    var scanning by remember { mutableStateOf(false) }
-
-    var showManual by remember { mutableStateOf(false) }
-
-    if (scanning) {
-        ScannerScreen(
-            onCode = { scanned ->
-                scanning = false
-                PairingUri.parse(scanned)?.let { target -> model.pair(target, deviceName) }
-            },
-            onCancel = { scanning = false },
-        )
-        return
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Text(stringResource(R.string.unpaired_title), style = MaterialTheme.typography.headlineSmall)
-        Text(stringResource(R.string.unpaired_body), style = MaterialTheme.typography.bodyMedium)
-
-        Button(onClick = { scanning = true }, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Default.QrCodeScanner, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.scan_code))
-        }
-
-        TextButton(onClick = { showManual = !showManual }) {
-            Text(if (showManual) stringResource(R.string.hide_manual) else stringResource(R.string.enter_manually))
-        }
-
-        if (showManual) {
-            OutlinedTextField(
-                value = authority,
-                onValueChange = { authority = it },
-                label = { Text(stringResource(R.string.host_label)) },
-                placeholder = { Text("192.168.1.20:19390") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = code,
-                onValueChange = { code = it.uppercase() },
-                label = { Text(stringResource(R.string.pairing_code)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = deviceName,
-                onValueChange = { deviceName = it },
-                label = { Text(stringResource(R.string.device_name)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Button(
-                onClick = { model.pair(PairingTarget(authority = authority.trim(), code = code.trim(), hostName = null, protocolVersion = null, baseUrl = null), deviceName) },
-                enabled = authority.isNotBlank() && code.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.pair))
-            }
-        }
-    }
-}
-
 /** A host that was known and did not answer, or one that no longer knows this phone. */
 @Composable
 internal fun FailedScreen(state: UiState, onRetry: () -> Unit, onPairAgain: () -> Unit) {
@@ -495,51 +419,6 @@ internal fun DialogShell(title: String, onDismiss: () -> Unit, content: @Composa
         }
         content()
         Spacer(Modifier.height(24.dp))
-    }
-}
-
-/** The QR scanner, or a plain explanation when the camera permission is refused. */
-@Composable
-internal fun ScannerScreen(onCode: (String) -> Unit, onCancel: () -> Unit) {
-    val context = LocalContext.current
-    var granted by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED,
-        )
-    }
-    val request = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
-        granted = allowed
-    }
-
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        if (granted) {
-            CameraScanner(onCode = onCode)
-        } else {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(24.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    text = stringResource(R.string.camera_needed),
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Spacer(Modifier.height(16.dp))
-                Button(onClick = { request.launch(Manifest.permission.CAMERA) }) {
-                    Text(stringResource(R.string.allow_camera))
-                }
-            }
-        }
-
-        OutlinedButton(
-            onClick = onCancel,
-            modifier = Modifier.align(Alignment.TopStart).padding(16.dp),
-        ) {
-            Icon(Icons.Default.ArrowBack, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.cancel))
-        }
     }
 }
 

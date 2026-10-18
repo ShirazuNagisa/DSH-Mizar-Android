@@ -153,4 +153,5 @@
     <string name="allowed_tool">Allowed %1$s</string>
     <string name="rejected_tool">Rejected %1$s</string>
     <string name="answer_sent">Answer sent</string>
+    <string name="point_at_code">Point at the code on your computer</string>
 </resources>
