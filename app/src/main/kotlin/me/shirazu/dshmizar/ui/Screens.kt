@@ -77,41 +77,15 @@ import me.shirazu.mizar.kit.SessionGrouping
 import me.shirazu.mizar.kit.SessionRow
 
 /**
- * The root: a switch on the connection's phase.
+ * The screens that are not the shell: pairing, failure, and the shared pieces
+ * (session list, dialogs, scanner) the shell and the root both draw with.
  *
- * There is no navigation graph behind this, deliberately. Which screen the operator
- * is on *is* a property of the connection — the app can be unpaired, connecting, or
- * unable to reach a Mac it knows — and modelling that as a route made the two
- * disagree the first time the socket dropped.
+ * There is no navigation graph behind any of this, deliberately. Which screen the
+ * operator is on *is* a property of the connection — the app can be unpaired,
+ * connecting, or unable to reach a Mac it knows — and modelling that as a route
+ * made the two disagree the first time the socket dropped. The root dispatch lives
+ * in RootScreen.kt; the conversation/list shell lives in shell/MizarShell.kt.
  */
-@Composable
-fun RootScreen(model: AppViewModel, incomingPairUri: String?, onPairUriHandled: () -> Unit) {
-    val state by model.state.collectAsState()
-
-    // A scanned or deep-linked URI is handled once, then cleared, so a rotation does
-    // not pair a second time with a single-use code.
-    if (incomingPairUri != null) {
-        PairingUri.parse(incomingPairUri)?.let { target -> model.pair(target, "Android") }
-        onPairUriHandled()
-    }
-
-    Surface(modifier = Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize()) {
-            // Above both screens on purpose: a lost connection matters whether the
-            // operator is reading a conversation or looking at the list, and it is
-            // shown rather than navigated to so nothing on screen is thrown away.
-            if (state.reconnecting) {
-                ReconnectingBanner(state.disconnectReason)
-            }
-            Box(Modifier.weight(1f)) {
-                when {
-                    state.selectedSessionId != null -> SessionScreen(model, state)
-                    else -> HomeScreen(model, state)
-                }
-            }
-        }
-    }
-}
 
 /**
  * One narrow line saying the socket is being dialled again.
@@ -120,7 +94,7 @@ fun RootScreen(model: AppViewModel, incomingPairUri: String?, onPairUriHandled: 
  * is still readable, which is the whole point of retrying instead of failing.
  */
 @Composable
-private fun ReconnectingBanner(reason: String?) {
+internal fun ReconnectingBanner(reason: String?) {
     Surface(color = MaterialTheme.colorScheme.secondaryContainer, tonalElevation = 3.dp) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -146,137 +120,14 @@ private fun ReconnectingBanner(reason: String?) {
     }
 }
 
-/** The list, the settings and everything that is not one conversation. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HomeScreen(model: AppViewModel, state: UiState) {
-    var showingSettings by remember { mutableStateOf(false) }
-    var showingNewSession by remember { mutableStateOf(false) }
-    var showingPicker by remember { mutableStateOf(false) }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(state.host?.displayName ?: stringResource(R.string.app_name))
-                        if (state.sessions.isNotEmpty()) {
-                            Text(
-                                text = stringResource(R.string.session_count, state.sessions.size),
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                        }
-                    }
-                },
-                actions = {
-                    if (state.phase == Phase.READY) {
-                        IconButton(onClick = { model.refreshSessions() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
-                        }
-                    }
-                    IconButton(onClick = { showingSettings = true }) {
-                        Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings))
-                    }
-                },
-            )
-        },
-        bottomBar = {
-            // The same card as the conversation draws, and here for a reason measured
-            // on the device: an agent blocked on an approval or a question is stopped
-            // until somebody answers, and an operator sitting on the session list --
-            // which is where a phone spends most of its time -- used to see nothing at
-            // all while that happened. The state was already arriving; only this screen
-            // was not drawing it.
-            state.pending?.let { pending ->
-                if (!pending.isEmpty) {
-                    InteractionsSection(
-                        approvals = pending.approvals,
-                        questions = pending.questions,
-                        onApproval = { id, outcome -> model.answerApproval(id, outcome) },
-                        onQuestions = { callId, answers -> model.answerQuestions(callId, answers) },
-                    )
-                }
-            }
-        },
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding)) {
-            when (state.phase) {
-                Phase.LAUNCHING -> Centered { CircularProgressIndicator() }
-                Phase.UNPAIRED -> UnpairedScreen(model)
-                Phase.CONNECTING -> Centered {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Spacer(Modifier.height(12.dp))
-                        Text(stringResource(R.string.connecting))
-                    }
-                }
-
-                Phase.READY -> PullToRefreshBox(
-                    isRefreshing = state.refreshing,
-                    onRefresh = { model.refreshSessions() },
-                ) {
-                    SessionList(
-                        state = state,
-                        onOpen = { model.selectSession(it) },
-                        onNewSession = { showingNewSession = true },
-                        onPickHost = { showingPicker = true },
-                        onDismissProblem = { model.dismissProblem() },
-                        onLoadTitles = { model.loadTitles(it) },
-                    )
-                }
-
-                Phase.FAILED -> FailedScreen(state, onRetry = { model.retry() }, onPairAgain = { model.startPairing() })
-            }
-        }
-    }
-
-    if (showingSettings) {
-        SettingsDialog(
-            state = state,
-            onDismiss = { showingSettings = false },
-            onForget = { hostId ->
-                showingSettings = false
-                model.forget(hostId)
-            },
-            onAddHost = {
-                showingSettings = false
-                model.startPairing()
-            },
-            onTheme = { mode -> model.setTheme(mode) },
-        )
-    }
-
-    if (showingNewSession) {
-        NewSessionDialog(
-            state = state,
-            onDismiss = { showingNewSession = false },
-            onCreate = { cwd ->
-                showingNewSession = false
-                model.createSession(cwd)
-            },
-        )
-    }
-
-    if (showingPicker) {
-        HostPickerDialog(
-            state = state,
-            onDismiss = { showingPicker = false },
-            onOpen = { hostId ->
-                showingPicker = false
-                model.openHost(hostId)
-            },
-        )
-    }
-}
-
-@Composable
-private fun Centered(content: @Composable () -> Unit) {
+internal fun Centered(content: @Composable () -> Unit) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
 }
 
 /** Nothing paired yet: the one thing to do is scan the code on the Mac. */
 @Composable
-private fun UnpairedScreen(model: AppViewModel) {
+internal fun UnpairedScreen(model: AppViewModel) {
     var authority by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
     var deviceName by remember { mutableStateOf("Android") }
@@ -352,7 +203,7 @@ private fun UnpairedScreen(model: AppViewModel) {
 
 /** A host that was known and did not answer, or one that no longer knows this phone. */
 @Composable
-private fun FailedScreen(state: UiState, onRetry: () -> Unit, onPairAgain: () -> Unit) {
+internal fun FailedScreen(state: UiState, onRetry: () -> Unit, onPairAgain: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -386,7 +237,7 @@ private fun FailedScreen(state: UiState, onRetry: () -> Unit, onPairAgain: () ->
 
 /** The workspace-grouped session list. */
 @Composable
-private fun SessionList(
+internal fun SessionList(
     state: UiState,
     onOpen: (String) -> Unit,
     onNewSession: () -> Unit,
@@ -520,7 +371,7 @@ private fun SessionRowItem(
 
 /** Paired Macs, notification state, and the way out. */
 @Composable
-private fun SettingsDialog(
+internal fun SettingsDialog(
     state: UiState,
     onDismiss: () -> Unit,
     onForget: (String) -> Unit,
@@ -563,7 +414,7 @@ private fun SettingsDialog(
 
 /** Pick the machine to open. */
 @Composable
-private fun HostPickerDialog(state: UiState, onDismiss: () -> Unit, onOpen: (String) -> Unit) {
+internal fun HostPickerDialog(state: UiState, onDismiss: () -> Unit, onOpen: (String) -> Unit) {
     DialogShell(title = stringResource(R.string.choose_mac), onDismiss = onDismiss) {
         for (host in state.hosts) {
             ListItem(
@@ -582,7 +433,7 @@ private fun HostPickerDialog(state: UiState, onDismiss: () -> Unit, onOpen: (Str
 
 /** Start a session in a directory, which the host turns into a workspace. */
 @Composable
-private fun NewSessionDialog(state: UiState, onDismiss: () -> Unit, onCreate: (String) -> Unit) {
+internal fun NewSessionDialog(state: UiState, onDismiss: () -> Unit, onCreate: (String) -> Unit) {
     var path by remember { mutableStateOf("") }
     val recent = remember(state.sessions) {
         state.sessions.mapNotNull { it.cwd }.distinct()
@@ -631,7 +482,7 @@ private fun NewSessionDialog(state: UiState, onDismiss: () -> Unit, onCreate: (S
 /** A bottom sheet, with the title and a close button every dialog here wants. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DialogShell(title: String, onDismiss: () -> Unit, content: @Composable () -> Unit) {
+internal fun DialogShell(title: String, onDismiss: () -> Unit, content: @Composable () -> Unit) {
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
         Row(
             modifier = Modifier
@@ -649,7 +500,7 @@ private fun DialogShell(title: String, onDismiss: () -> Unit, content: @Composab
 
 /** The QR scanner, or a plain explanation when the camera permission is refused. */
 @Composable
-private fun ScannerScreen(onCode: (String) -> Unit, onCancel: () -> Unit) {
+internal fun ScannerScreen(onCode: (String) -> Unit, onCancel: () -> Unit) {
     val context = LocalContext.current
     var granted by remember {
         mutableStateOf(
@@ -697,7 +548,7 @@ private const val PAGE_SIZE = 10
 
 /** One theme option, with its current state visible. */
 @Composable
-private fun ThemeChoice(label: String, selected: Boolean, onClick: () -> Unit) {
+internal fun ThemeChoice(label: String, selected: Boolean, onClick: () -> Unit) {
     if (selected) {
         Button(onClick = onClick) { Text(label, style = MaterialTheme.typography.labelMedium) }
     } else {

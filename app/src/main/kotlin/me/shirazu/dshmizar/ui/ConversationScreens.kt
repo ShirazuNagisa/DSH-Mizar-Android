@@ -31,7 +31,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -112,7 +112,7 @@ import me.shirazu.mizar.kit.QuestionItem
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SessionScreen(model: AppViewModel, state: UiState) {
+fun SessionScreen(model: AppViewModel, state: UiState, onOpenSidebar: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val clipboard = LocalClipboardManager.current
@@ -260,8 +260,10 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { model.selectSession(null) }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back))
+                    // The shell's toggle: the list is a card underneath, not a
+                    // screen behind, so this opens the sidebar rather than popping.
+                    IconButton(onClick = onOpenSidebar) {
+                        Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.show_sidebar))
                     }
                 },
                 actions = {

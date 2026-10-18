@@ -122,5 +122,7 @@
     <string name="turn_completed_body_plain">%1$s 已完成，可以查看。</string>
     <string name="turn_failed_notice_title">本轮失败</string>
     <string name="quiet_hours">夜间静音（23:00–08:00 不推完成通知）</string>
+    <string name="home_hint">右滑或点按钮查看会话列表。</string>
+    <string name="show_sidebar">查看会话</string>
 </resources>
 
