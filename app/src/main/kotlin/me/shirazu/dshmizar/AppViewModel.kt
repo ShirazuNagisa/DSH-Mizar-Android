@@ -789,11 +789,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     *buildList {
                         add("sessionId" to jsonString(sessionId))
                         add("maxMessages" to me.shirazu.mizar.kit.jsonInt(tail))
-                        // Only what this screen has not read yet. The host plugin filters
-                        // the page by it, so a refresh with nothing new costs a few bytes
-                        // instead of the whole tail -- which on a tunnel was the visible
-                        // cost of refreshing.
-                        afterSeq?.let { add("afterSeq" to me.shirazu.mizar.kit.jsonInt(it)) }
+                        // A number is this screen's own claim about what it holds; `null`
+                        // is the claim that it holds **nothing**. The difference matters
+                        // since plugin 0.8.3: an *absent* key is silence, and the host
+                        // answers silence from a ledger of what it already delivered to
+                        // this device -- so a cold screen that stayed quiet would be sent
+                        // only the records after the last delivery and open empty.
+                        add(
+                            "afterSeq" to (
+                                afterSeq?.let { me.shirazu.mizar.kit.jsonInt(it) }
+                                    ?: kotlinx.serialization.json.JsonNull
+                                ),
+                        )
                     }.toTypedArray(),
                 ),
             )
