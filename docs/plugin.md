@@ -28,21 +28,33 @@
 上游更新后：
 
 ```sh
-# 1. 更新镜像源（保持干净）
-git -C E:\Projects\DSH-Mizar fetch origin && git -C E:\Projects\DSH-Mizar reset --hard origin/main
+# 1. 更新本地检出（它就是镜像源，保持干净、不提交任何东西）
+git -C E:\Projects\DSH-Mizar fetch origin
+git -C E:\Projects\DSH-Mizar reset --hard origin/main
 
-# 2. 用上游的树覆盖 plugin/（会丢掉增量）
-git -C E:\Projects\DSH-Mizar archive --format=zip -o %TEMP%\plugin.zip HEAD
-# 解开到 plugin/，然后重新落一次下面的增量
+# 2. 一条命令重建 plugin/：取 HEAD 的树 → 落增量 → 编译 → 跑 497 项测试
+node scripts/sync-plugin.mjs
 
-# 3. 重建并跑测试
-cd plugin && node node_modules\typescript\bin\tsc -p tsconfig.json && node client\build.mjs
-node node_modules\vitest\vitest.mjs run
-
-# 4. 装到宿主：DSH 的 profile 把 dsh-mizar 链接到本目录（见下），重启 DSH 后生效
+# 3. 看一眼被 staged 的 diff，然后提交
+git diff --cached --stat
 ```
 
-增量本身很小（`src/index.ts` 里约 10 行），冲突时按上表的语义重写即可，不要机械合并。
+`scripts/sync-plugin.mjs` 做的事就是上面四步，外加两个保护：检出里有未提交的改动会**警告但仍按 HEAD 镜像**
+（镜像必须可复现），补丁打不上会**在写盘前失败**（`--check` 先跑），并把结果 stage 好供审阅。
+它从不修改本地检出。
+
+```sh
+node scripts/sync-plugin.mjs                 # 默认源 ../DSH-Mizar
+node scripts/sync-plugin.mjs D:\other\clone  # 指定别的检出
+node scripts/sync-plugin.mjs --no-test       # 只编译不跑测试
+node scripts/sync-plugin.mjs --client        # 连浏览器半边的 bundle 一起重建
+```
+
+`--client` 平时不要加：浏览器半边的产物由上游提交，重建只会改写一行内嵌了 `node_modules` 绝对路径的注释，
+让仓库无谓地变脏。
+
+增量本身很小（`src/index.ts` 里约 10 行），冲突时按上表的语义重写 `scripts/patches/turn-settled.patch`，
+不要机械合并；补丁打不上时脚本会停下并告诉你哪一段对不上。
 
 ## 宿主的加载方式
 

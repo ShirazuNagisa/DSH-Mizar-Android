@@ -1,0 +1,24 @@
+diff --git a/src/index.ts b/src/index.ts
+index ba16eb1..1dfad30 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -491,7 +491,18 @@ async function startListener(
+     if (!isNotifiable(session.header)) return
+     if (event.type === 'turn/end') {
+       const reason = (event.data as { reason?: { kind?: unknown } } | undefined)?.reason
+-      notifier.turnEnded(session.id, typeof reason?.kind === 'string' ? reason.kind : null)
++      const kind = typeof reason?.kind === 'string' ? reason.kind : null
++      notifier.turnEnded(session.id, kind)
++      // Also announce on the socket. The push path needs FCM, which a phone without
++      // Google services cannot receive at all, so the same moment goes out as an event:
++      // a connected client hears it immediately instead of polling the list and losing
++      // whichever transition happened while it was away.
++      holder.current?.broadcast({
++        v: 1,
++        type: 'event',
++        event: 'turn.settled',
++        data: { sessionId: session.id, reason: kind },
++      } as never)
+       return
+     }
+     // A continuation that starts before the quiet period runs out cancels the
