@@ -46,7 +46,7 @@ import me.shirazu.dshmizar.ui.HostPickerDialog
 import me.shirazu.dshmizar.ui.LocalMizarDark
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.NewSessionDialog
-import me.shirazu.dshmizar.ui.SessionScreen
+import me.shirazu.dshmizar.ui.conversation.SessionScreen
 import me.shirazu.dshmizar.ui.SettingsDialog
 import me.shirazu.dshmizar.ui.design.LocalReduceMotion
 import me.shirazu.dshmizar.ui.design.Radius
