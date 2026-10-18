@@ -147,4 +147,10 @@
     <string name="search_sessions">Search</string>
     <string name="clear">Clear</string>
     <string name="connected">Connected</string>
+    <string name="requests_waiting">%1$d requests waiting</string>
+    <string name="deck_position">%1$d of %2$d</string>
+    <string name="next_card">Next</string>
+    <string name="allowed_tool">Allowed %1$s</string>
+    <string name="rejected_tool">Rejected %1$s</string>
+    <string name="answer_sent">Answer sent</string>
 </resources>

@@ -56,7 +56,6 @@ import androidx.compose.ui.unit.dp
 import me.shirazu.dshmizar.AppViewModel
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
-import me.shirazu.dshmizar.ui.InteractionsSection
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.GlassCircleLabel
 import me.shirazu.dshmizar.ui.design.Motion
@@ -245,20 +244,8 @@ fun Sidebar(
             )
         }
 
-        // The pending cards, as on the old home screen: an agent blocked on an
-        // answer is stopped until somebody answers, and the list is where a phone
-        // spends its time.
-        state.pending?.let { pending ->
-            if (!pending.isEmpty) {
-                InteractionsSection(
-                    approvals = pending.approvals,
-                    questions = pending.questions,
-                    onApproval = { id, outcome -> model.answerApproval(id, outcome) },
-                    onQuestions = { callId, answers -> model.answerQuestions(callId, answers) },
-                )
-            }
-        }
-
+        // The pending cards dock in the conversation, above the composer, as on
+        // iOS; the list says which rows are waiting with a raised hand instead.
         ConnectionFooter(state = state, onSettings = onSettings)
     }
 }

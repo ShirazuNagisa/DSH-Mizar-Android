@@ -57,7 +57,6 @@ import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.CommandSheet
 import me.shirazu.dshmizar.ui.ContextSheet
-import me.shirazu.dshmizar.ui.InteractionsSection
 import me.shirazu.dshmizar.ui.ModelPickerSheet
 import me.shirazu.dshmizar.ui.PermissionSheet
 import me.shirazu.dshmizar.ui.StatusLine
@@ -88,6 +87,9 @@ fun SessionScreen(model: AppViewModel, state: UiState, onOpenSidebar: () -> Unit
     }
     val listState = rememberLazyListState()
     var draft by remember { mutableStateOf("") }
+    // Whether the field holds the keyboard, so the dock can tuck into a pill.
+    var composerFocused by remember { mutableStateOf(false) }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var showingModelPicker by remember { mutableStateOf(false) }
     var showingPermissions by remember { mutableStateOf(false) }
     var showingContext by remember { mutableStateOf(false) }
@@ -301,16 +303,15 @@ fun SessionScreen(model: AppViewModel, state: UiState, onOpenSidebar: () -> Unit
                         }
                     }
                 }
-                state.pending?.let { pending ->
-                    if (!pending.isEmpty) {
-                        InteractionsSection(
-                            approvals = pending.approvals,
-                            questions = pending.questions,
-                            onApproval = { id, outcome -> model.answerApproval(id, outcome) },
-                            onQuestions = { callId, answers -> model.answerQuestions(callId, answers) },
-                        )
-                    }
-                }
+                InteractionsDock(
+                    pending = state.pending,
+                    titles = state.titles,
+                    selectedSessionId = state.selectedSessionId,
+                    composerFocused = composerFocused,
+                    onExpand = { focusManager.clearFocus() },
+                    onApproval = { id, outcome -> model.answerApproval(id, outcome) },
+                    onQuestions = { callId, answers -> model.answerQuestions(callId, answers) },
+                )
                 Composer(
                     state = state,
                     draft = draft,
@@ -326,6 +327,7 @@ fun SessionScreen(model: AppViewModel, state: UiState, onOpenSidebar: () -> Unit
                         model.sendPrompt(text)
                     },
                     onStop = { model.cancelTurn() },
+                    onFocusChanged = { composerFocused = it },
                 )
             }
         },

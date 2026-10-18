@@ -94,6 +94,8 @@ internal fun Composer(
     commandsOpen: Boolean,
     onSend: () -> Unit,
     onStop: () -> Unit,
+    /** Reported upward so the interactions dock can tuck itself away while typing. */
+    onFocusChanged: (Boolean) -> Unit = {},
 ) {
     var focused by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
@@ -140,7 +142,10 @@ internal fun Composer(
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(focusRequester)
-                .onFocusChanged { focused = it.isFocused }
+                .onFocusChanged {
+                    focused = it.isFocused
+                    onFocusChanged(it.isFocused)
+                }
                 .padding(horizontal = 8.dp)
                 .padding(top = 2.dp),
         )

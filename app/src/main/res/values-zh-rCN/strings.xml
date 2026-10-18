@@ -128,5 +128,11 @@
     <string name="search_sessions">搜索</string>
     <string name="clear">清除</string>
     <string name="connected">已连接</string>
+    <string name="requests_waiting">%1$d 个请求待处理</string>
+    <string name="deck_position">%1$d/%2$d</string>
+    <string name="next_card">下一张</string>
+    <string name="allowed_tool">已允许 %1$s</string>
+    <string name="rejected_tool">已拒绝 %1$s</string>
+    <string name="answer_sent">答案已发送</string>
 </resources>
 
