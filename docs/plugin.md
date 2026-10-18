@@ -72,3 +72,26 @@ grep -c "turn.settled" plugin/lib/index.js   # 应为 1
 ```
 
 `node_modules/` 不提交；在 `plugin/` 下按 `package-lock.json` 装一次即可（`npm ci`，或本机有的 pnpm）。
+
+## 已知限制：手机作答后桌面卡片不关（2026-10-18 决定不处理）
+
+宿主 `UserQuestionService.ask()` 是一次 Cordis waterfall：它取**最先返回**的那个答案，**不会通知或取消其他分支**；
+请求里带的 `signal` 是"调用方取消"（会话中断）用的，不是"别人已经答了"。
+
+插件为了让桌面和手机都能答，`prepend` 之后主动调用 `next()` 把 GUI 也拉进竞争。手机先答时，插件把答案交回宿主、
+agent 正常继续，但 GUI 那条分支的 promise 永远悬着，它的卡片就留在界面上，直到手动关掉。
+
+抓到的真实请求与结果（一次实测）：
+
+```json
+{"event":"request","keys":["questions","agent","signal"],"wait":null,
+ "agentId":"session-40f87284…","callId":"mizar-3a2108e2…"}
+{"event":"settled","from":"phone","answerCount":1}
+```
+
+**不是 bug，也不用修**：agent 已经拿到答案（`from: "phone"`）。插件侧没有 API 能关闭别人的卡 ——
+`userQuestions.answer(agent, callId, answer)` 需要宿主的 `callId`，而真实请求里 `wait` 为空，拿不到。
+审批卡是同一套 waterfall 结构，行为相同。
+
+如果哪天想彻底解决，正确的方向是给 DSH 上游提：waterfall 被认领后应当通知/取消其它 answerer，
+或在请求上提供一个结算时 abort 的共享信号。插件这边单独做不到。
