@@ -8,6 +8,10 @@ name: release
 on:
   push:
     tags: ['v*']
+  # Also runnable by hand: a pipeline that can only be exercised by cutting a
+  # release is a pipeline nobody tests, and this one was red for three tags
+  # before anybody noticed. A dispatch builds and verifies but publishes nothing.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -37,6 +41,11 @@ jobs:
         run: |
           mkdir -p keystore
           printf '%s' "$KEYSTORE_BASE64" | base64 -d > keystore/release.jks
+          # A secret that was never added decodes to an empty file, and the build
+          # then dies inside Gradle with a message about a tampered keystore --
+          # which reads like the key is wrong rather than missing.
+          [ -s keystore/release.jks ] \
+            || { echo 'MIZAR_KEYSTORE_BASE64 is empty or not set; add the MIZAR_* secrets' >&2; exit 1; }
 
       - name: Build
         env:
@@ -46,9 +55,13 @@ jobs:
           MIZAR_KEY_PASSWORD: ${{ secrets.MIZAR_KEY_PASSWORD }}
           GRADLE_USER_HOME: ${{ github.workspace }}/.gradle-home
         run: |
-          tag="${GITHUB_REF_NAME#v}"
           version=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
-          [ "$tag" = "$version" ] || { echo "tag $tag != versionName $version" >&2; exit 1; }
+          # The tag check only applies to a tag: a dispatch has no version to agree
+          # with, and its job is to prove the build still works.
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            tag="${GITHUB_REF_NAME#v}"
+            [ "$tag" = "$version" ] || { echo "tag $tag != versionName $version" >&2; exit 1; }
+          fi
           ./gradlew :mizarkit:test :app:assembleRelease --no-daemon
           mkdir -p dist
           cp app/build/outputs/apk/release/app-release.apk "dist/dsh-mizar-${version}.apk"
@@ -60,7 +73,9 @@ jobs:
             || { echo "the release apk is not signed; check the MIZAR_* secrets" >&2; exit 1; }
           echo "signed: $apk"
 
+      # Publishes on a tag only, so a manual run never moves a release.
       - uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
         with:
           files: dist/*.apk
           generate_release_notes: true
