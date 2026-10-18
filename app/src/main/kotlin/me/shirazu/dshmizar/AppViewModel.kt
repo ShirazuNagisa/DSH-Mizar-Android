@@ -165,8 +165,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     private val wasRunning = mutableMapOf<String, Boolean>()
 
-    /** The notification this build posted for a session, so it can be replaced not stacked. */
-    private val notifiedFinished = mutableSetOf<String>()
+    /**
+     * What keeps the two announcing paths from buzzing twice for one turn.
+     *
+     * See [me.shirazu.mizar.kit.CompletionAnnouncer]: it remembers *when* a notice went
+     * out, because a flag outlived the turn it described and swallowed the next one.
+     */
+    private val announcer = me.shirazu.mizar.kit.CompletionAnnouncer(ANNOUNCE_DEDUPE_MILLIS)
 
     /** Whether the last-opened conversation has already been restored this process. */
     private var restoredOnce = false
@@ -407,9 +412,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             note("list: ${row.sessionId} settled (was running)")
             // A turn ended. Announced once per turn: a second read of the same idle row
-            // must not buzz again.
-            if (row.sessionId in notifiedFinished) { note("list: ${row.sessionId} already announced"); continue }
-            notifiedFinished += row.sessionId
+            // must not buzz again, and neither must the event that reported the same
+            // ending. Nothing is recorded unless a notice is actually posted -- recording
+            // a suppression (on screen, quiet hours) is what lost the following turn.
+            if (announcer.announcedRecently(row.sessionId, System.currentTimeMillis())) { note("list: ${row.sessionId} already announced"); continue }
             if (foreground) { note("list: ${row.sessionId} on screen, nothing to announce"); continue }
             // A finished turn can wait; a blocked one cannot. Quiet hours silence only the
             // former.
@@ -433,11 +439,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     baseId = me.shirazu.dshmizar.push.Notifications.FINISHED_NOTIFICATION_BASE,
                 )
             }
+            if (posted.isSuccess) announcer.record(row.sessionId, System.currentTimeMillis())
             note("list: ${row.sessionId} posted=${posted.isSuccess} body=$body")
         }
         // Forget the memory once a session is seen running again, so the next completion
         // is announced too.
-        for (row in rows) if (row.running) notifiedFinished -= row.sessionId
+        for (row in rows) if (row.running) announcer.forget(row.sessionId)
     }
 
     /** What a finished turn was: failed or not, how long it took, and its first line. */
@@ -1269,15 +1276,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * when a turn ends, so a connected client is told instead of left to notice a
      * transition on a list refresh -- which is how a completion that happened during a
      * dropped socket was lost. The polling path stays as a fallback for a client that was
-     * away when the event fired; both share `notifiedFinished`, so a turn is announced
-     * once.
+     * away when the event fired; both record when they post, so a turn is announced once.
      */
     private suspend fun onTurnSettled(data: kotlinx.serialization.json.JsonElement) {
         val sessionId = (data["sessionId"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
             ?: run { note("settled: no sessionId in the frame"); return }
         if (foreground) { note("settled $sessionId: on screen, nothing to announce"); return }
-        if (sessionId in notifiedFinished) { note("settled $sessionId: already announced"); return }
-        notifiedFinished += sessionId
+        if (announcer.announcedRecently(sessionId, System.currentTimeMillis())) { note("settled $sessionId: already announced"); return }
         if (activity.quietHours() && isQuietNow()) { note("settled $sessionId: quiet hours"); return }
 
         val context = getApplication<Application>()
@@ -1298,6 +1303,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 baseId = me.shirazu.dshmizar.push.Notifications.FINISHED_NOTIFICATION_BASE,
             )
         }
+        if (posted.isSuccess) announcer.record(sessionId, System.currentTimeMillis())
         note("settled $sessionId: posted=${posted.isSuccess} failed=${detail.failed} body=$body")
     }
 
@@ -1400,6 +1406,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         /** How stale the screen may get before returning to it triggers a refresh. */
         const val STALE_MILLIS = 15_000L
+
+        /** How long a posted completion counts as "the same turn" for the other path. */
+        const val ANNOUNCE_DEDUPE_MILLIS = 5_000L
 
         /** How long a drop must last before the banner appears: one second is a blip. */
         const val BANNER_DELAY_MILLIS = 2_000L
