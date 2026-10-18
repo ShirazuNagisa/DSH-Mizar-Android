@@ -135,5 +135,8 @@
     <string name="rejected_tool">已拒绝 %1$s</string>
     <string name="answer_sent">答案已发送</string>
     <string name="point_at_code">对准电脑上的二维码</string>
+    <string name="paired_with">已配对 %1$s</string>
+    <string name="hosts_section">电脑</string>
+    <string name="notifications">通知</string>
 </resources>
 

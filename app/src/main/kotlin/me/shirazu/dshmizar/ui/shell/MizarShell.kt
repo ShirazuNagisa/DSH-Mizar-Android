@@ -42,12 +42,12 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import me.shirazu.dshmizar.AppViewModel
 import me.shirazu.dshmizar.UiState
-import me.shirazu.dshmizar.ui.HostPickerDialog
+import me.shirazu.dshmizar.ui.settings.HostPickerDialog
 import me.shirazu.dshmizar.ui.LocalMizarDark
 import me.shirazu.dshmizar.ui.MizarColors
-import me.shirazu.dshmizar.ui.NewSessionDialog
+import me.shirazu.dshmizar.ui.settings.NewSessionDialog
 import me.shirazu.dshmizar.ui.conversation.SessionScreen
-import me.shirazu.dshmizar.ui.SettingsDialog
+import me.shirazu.dshmizar.ui.settings.SettingsDialog
 import me.shirazu.dshmizar.ui.design.LocalReduceMotion
 import me.shirazu.dshmizar.ui.design.Radius
 import kotlin.math.min
@@ -180,6 +180,7 @@ fun MizarShell(model: AppViewModel, state: UiState) {
                 model.startPairing()
             },
             onTheme = { mode -> model.setTheme(mode) },
+            onQuietHours = { on -> model.setQuietHours(on) },
         )
     }
     if (showingNewSession) {
