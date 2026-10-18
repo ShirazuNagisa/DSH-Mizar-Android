@@ -761,7 +761,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * @returns false when the host does not know the method, so the caller can fall
      *   back to the three separate calls -- an older plugin must not lose the feature.
      */
+    /**
+     * Whether the host implements `session.refresh`.
+     *
+     * Asked once per process. The call is an optimisation -- one round trip for the
+     * whole screen instead of three -- and a host without it answers NOT_IMPLEMENTED
+     * every single time, so re-asking on every pull spends a round trip to be told the
+     * same thing. The 0.8.3 plugin does not implement it; the three plain reads below
+     * are the path that runs, and they are the path this build should be judged on.
+     */
+    private var refreshBundleSupported = true
+
     private suspend fun loadBundle(tail: Int, afterSeq: Int?): Boolean {
+        if (!refreshBundleSupported) return false
         val socket = connection ?: return true
         val sessionId = _state.value.selectedSessionId ?: return true
         val bundle = try {
@@ -776,6 +788,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 ),
             )
         } catch (error: Throwable) {
+            if ((error as? me.shirazu.mizar.kit.MizarError)?.known == me.shirazu.mizar.kit.MizarErrorCode.NOT_IMPLEMENTED) {
+                note("host does not implement session.refresh; using the three reads")
+                refreshBundleSupported = false
+            }
             return false
         }
         applyPage(bundle.messages)
