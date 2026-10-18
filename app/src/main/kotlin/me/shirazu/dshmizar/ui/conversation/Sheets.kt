@@ -1,6 +1,5 @@
-package me.shirazu.dshmizar.ui
+package me.shirazu.dshmizar.ui.conversation
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,11 +8,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
@@ -30,52 +26,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
+import me.shirazu.dshmizar.ui.Format
+import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.mizar.kit.ModelSelection
 
 /**
- * What remains of the old conversation screen file: the status line and the
- * sheets. The transcript, the composer and the pending interaction cards moved
- * to `conversation/` in the GUI rewrite; the sheets follow in the settings
- * stage.
+ * The sheets the session screen opens: the model picker, the permission
+ * presets, the context breakdown, and the command list.
  */
-
-/**
- * What the agent is doing, in the one place the operator already looks.
- *
- * The transcript says what happened; this says what is happening. Four states, because
- * they need four different reactions: waiting on you (act now), thinking (wait), a turn
- * that failed (read the red card), idle (nothing to do).
- */
-@Composable
-internal fun StatusLine(running: Boolean, pending: Boolean, failed: Boolean) {
-    val label: String
-    val tint: Color
-    when {
-        pending -> { label = stringResource(R.string.status_waiting); tint = MizarColors.Warning }
-        running -> { label = stringResource(R.string.status_thinking); tint = MizarColors.Busy }
-        failed -> { label = stringResource(R.string.status_failed); tint = MizarColors.Failure }
-        else -> { label = stringResource(R.string.status_idle); tint = MaterialTheme.colorScheme.onSurfaceVariant }
-    }
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-        if (running) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(10.dp),
-                strokeWidth = 1.5.dp,
-                color = tint,
-            )
-        } else {
-            Box(Modifier.size(6.dp).background(tint, CircleShape))
-        }
-        Spacer(Modifier.width(6.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = tint)
-    }
-}
 
 /** Choose a model, and then its reasoning effort. */
 @OptIn(ExperimentalMaterial3Api::class)

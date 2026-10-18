@@ -51,6 +51,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -106,6 +108,7 @@ internal fun Composer(
             .fillMaxWidth()
             .padding(horizontal = 10.dp)
             .padding(bottom = 6.dp)
+            .onGloballyPositioned { ComposerGeometry.slabTop = it.boundsInRoot().top }
             .glassCard(radius = Radius.xl)
             // A tap anywhere on the slab is a tap on the field.
             .clickable(
@@ -141,6 +144,7 @@ internal fun Composer(
             ),
             modifier = Modifier
                 .fillMaxWidth()
+                .onGloballyPositioned { ComposerGeometry.fieldBounds = it.boundsInRoot() }
                 .focusRequester(focusRequester)
                 .onFocusChanged {
                     focused = it.isFocused

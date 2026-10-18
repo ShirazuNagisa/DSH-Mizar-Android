@@ -144,6 +144,7 @@ fun MizarShell(model: AppViewModel, state: UiState) {
             reveal = reveal,
             sidebarWidth = sidebarWidth,
             sidebarWidthPx = sidebarWidthPx,
+            onNewSession = { showingNewSession = true },
         )
 
         // The card, while it is pushed aside, is one big button back.
@@ -215,6 +216,7 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
     reveal: Float,
     sidebarWidth: Dp,
     sidebarWidthPx: Float,
+    onNewSession: () -> Unit,
 ) {
     val density = LocalDensity.current
     val dark = LocalMizarDark.current
@@ -256,7 +258,12 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
                 SessionScreen(model, state, onOpenSidebar = { shell.toggle() })
             }
         } else {
-            HomeView(model = model, state = state, onOpenSidebar = { shell.toggle() })
+            HomeView(
+                model = model,
+                state = state,
+                onOpenSidebar = { shell.toggle() },
+                onChooseWorkspace = onNewSession,
+            )
         }
 
         // A shade, and a faint rim of the accent on the edge that faces the sidebar:

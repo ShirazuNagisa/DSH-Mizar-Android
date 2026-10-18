@@ -690,6 +690,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Create a session whose first prompt is already typed: create, then send. */
+    fun createSessionWithPrompt(cwd: String, prompt: String) {
+        viewModelScope.launch {
+            val socket = connection ?: return@launch
+            _state.update { it.copy(busy = true) }
+            try {
+                val created = socket.call<CreateSessionResult>(
+                    "session.create",
+                    buildJsonObject { put("cwd", cwd) },
+                )
+                refreshSessionsNow()
+                selectSession(created.sessionId)
+                sendPrompt(prompt)
+            } catch (error: Throwable) {
+                _state.update { it.copy(problem = messageOf(error, addressOf())) }
+            } finally {
+                _state.update { it.copy(busy = false) }
+            }
+        }
+    }
+
     /** Create a session in a directory, which the host turns into a workspace. */
     fun createSession(cwd: String) {
         viewModelScope.launch {

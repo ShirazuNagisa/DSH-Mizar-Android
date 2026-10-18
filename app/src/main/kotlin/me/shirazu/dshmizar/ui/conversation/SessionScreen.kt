@@ -2,6 +2,7 @@ package me.shirazu.dshmizar.ui.conversation
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,6 +45,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -55,11 +59,7 @@ import kotlinx.coroutines.launch
 import me.shirazu.dshmizar.AppViewModel
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
-import me.shirazu.dshmizar.ui.CommandSheet
-import me.shirazu.dshmizar.ui.ContextSheet
-import me.shirazu.dshmizar.ui.ModelPickerSheet
-import me.shirazu.dshmizar.ui.PermissionSheet
-import me.shirazu.dshmizar.ui.StatusLine
+import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.Transitions
 import me.shirazu.dshmizar.ui.design.glassCapsule
 import me.shirazu.dshmizar.ui.design.pressable
@@ -210,6 +210,20 @@ fun SessionScreen(model: AppViewModel, state: UiState, onOpenSidebar: () -> Unit
     val hasPending = state.pending?.isEmpty == false
     val lastTurnFailed = state.turns.lastOrNull()?.steps?.any { it is ConversationItem.Failure } == true
 
+    // A send in flight: the words lift out of the field towards the place their
+    // bubble will take. Skipped under Reduce Motion -- the send is as instant
+    // as it ever was.
+    val reduceMotion = me.shirazu.dshmizar.ui.design.LocalReduceMotion.current
+    var flight by remember { mutableStateOf<FlightSpec?>(null) }
+    var overlayOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    var overlaySize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { overlayOrigin = it.boundsInRoot().topLeft }
+            .onSizeChanged { overlaySize = it },
+    ) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
@@ -324,6 +338,10 @@ fun SessionScreen(model: AppViewModel, state: UiState, onOpenSidebar: () -> Unit
                     onSend = {
                         val text = draft
                         draft = ""
+                        val from = ComposerGeometry.fieldBounds
+                        if (!reduceMotion && from != null && atBottom) {
+                            flight = FlightSpec(text, from, System.nanoTime())
+                        }
                         model.sendPrompt(text)
                     },
                     onStop = { model.cancelTurn() },
@@ -359,6 +377,17 @@ fun SessionScreen(model: AppViewModel, state: UiState, onOpenSidebar: () -> Unit
                 }
             }
         }
+    }
+
+    // The ghost of what was just sent, flying up into the conversation.
+    flight?.let { spec ->
+        FlightGhost(
+            flight = spec,
+            overlaySize = overlaySize,
+            overlayOrigin = overlayOrigin,
+            onDone = { if (flight?.key == spec.key) flight = null },
+        )
+    }
     }
 
     if (showingModelPicker) {
@@ -408,5 +437,37 @@ private fun EmptyMessage(title: String, body: String?) {
             Spacer(Modifier.height(8.dp))
             Text(body, style = MaterialTheme.typography.bodyMedium)
         }
+    }
+}
+
+/**
+ * What the agent is doing, in the one place the operator already looks.
+ *
+ * The transcript says what happened; this says what is happening. Four states, because
+ * they need four different reactions: waiting on you (act now), thinking (wait), a turn
+ * that failed (read the red card), idle (nothing to do).
+ */
+@Composable
+private fun StatusLine(running: Boolean, pending: Boolean, failed: Boolean) {
+    val label: String
+    val tint: androidx.compose.ui.graphics.Color
+    when {
+        pending -> { label = stringResource(R.string.status_waiting); tint = MizarColors.Warning }
+        running -> { label = stringResource(R.string.status_thinking); tint = MizarColors.Busy }
+        failed -> { label = stringResource(R.string.status_failed); tint = MizarColors.Failure }
+        else -> { label = stringResource(R.string.status_idle); tint = MaterialTheme.colorScheme.onSurfaceVariant }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+        if (running) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(10.dp),
+                strokeWidth = 1.5.dp,
+                color = tint,
+            )
+        } else {
+            Box(Modifier.size(6.dp).background(tint, androidx.compose.foundation.shape.CircleShape))
+        }
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = tint)
     }
 }

@@ -157,4 +157,8 @@
     <string name="paired_with">Paired with %1$s</string>
     <string name="hosts_section">Computers</string>
     <string name="notifications">Notifications</string>
+    <string name="home_ask">What should the agent work on?</string>
+    <string name="home_no_workspaces">Start a session on your computer, then refresh.</string>
+    <string name="choose_workspace">Choose a workspace</string>
+    <string name="somewhere_else">Somewhere else…</string>
 </resources>

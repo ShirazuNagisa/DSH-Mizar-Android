@@ -101,35 +101,48 @@ private fun MessageText(
 /** The operator's words: a gradient bubble on the right, with the quiet tail. */
 @Composable
 private fun UserBubble(text: String, tail: Boolean, onCopy: (String) -> Unit) {
-    val accent = MaterialTheme.colorScheme.primary
-    val ink = MizarColors.OnAccent
     Row(modifier = Modifier.fillMaxWidth()) {
         Spacer(Modifier.weight(1f).widthIn(min = 56.dp))
-        // The corner nearest the answer tightens -- the tail that says "this is
-        // the message that was answered".
-        val shape = RoundedCornerShape(
-            topStart = Radius.lg,
-            topEnd = Radius.lg,
-            bottomEnd = if (tail) 6.dp else Radius.lg,
-            bottomStart = Radius.lg,
-        )
         SelectionContainer {
-            Box(
-                modifier = Modifier
-                    .clip(shape)
-                    .background(Brush.verticalGradient(listOf(accent, accent.scaled(0.80f))))
-                    .padding(horizontal = 14.dp, vertical = 9.dp),
-            ) {
-                MessageText(
-                    text = text,
-                    color = ink,
-                    codeColor = ink,
-                    linkColor = ink,
-                    onCopy = onCopy,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
+            SentBubbleBody(text = text, tail = tail, onCopy = onCopy)
         }
+    }
+}
+
+/**
+ * The look of a sent message, shared by the bubble in the conversation and the
+ * ghost that flies there -- iOS `SentBubbleBody`.
+ */
+@Composable
+internal fun SentBubbleBody(
+    text: String,
+    tail: Boolean = true,
+    onCopy: (String) -> Unit = {},
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    val ink = MizarColors.OnAccent
+    // The corner nearest the answer tightens -- the tail that says "this is
+    // the message that was answered".
+    val shape = RoundedCornerShape(
+        topStart = Radius.lg,
+        topEnd = Radius.lg,
+        bottomEnd = if (tail) 6.dp else Radius.lg,
+        bottomStart = Radius.lg,
+    )
+    Box(
+        modifier = Modifier
+            .clip(shape)
+            .background(Brush.verticalGradient(listOf(accent, accent.scaled(0.80f))))
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+    ) {
+        MessageText(
+            text = text,
+            color = ink,
+            codeColor = ink,
+            linkColor = ink,
+            onCopy = onCopy,
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 
