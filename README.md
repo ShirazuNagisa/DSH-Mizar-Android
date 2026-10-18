@@ -1,7 +1,9 @@
 # DSH-Mizar Android
 
+> **此功能分支为非官方源码扩展，不是作者的正式发布。** 新增图片/文件分块上传，以及模型思考强度、会话访问权限选择。Android 包名与原版不同，可并存安装；本分支不提交 APK、签名密钥或配对凭据。功能、构建、测试与授权边界见 [分支说明](docs/attachments-session-controls.md)。
+
 DSH-Mizar 的 Android 客户端：在手机上查看 DSH agent 的会话、读对话、发消息、回答审批与提问。
-推送走 FCM（可选），通知经中继转给 Firebase；没有 FCM 配置时 App 照常可用，只是没有后台通知。
+FCM 推送可选；没有 Firebase 配置时，App 仍可通过存活的 WebSocket/前台服务发出本地通知，但不保证进程被杀后的通知送达。
 
 - `mizarkit/` —— 纯 Kotlin/JVM 的协议核心：帧、配对、连接状态机、会话投影、缓存接口、诊断。
   不带任何 Android 依赖，测试在 JVM 上秒级跑完。

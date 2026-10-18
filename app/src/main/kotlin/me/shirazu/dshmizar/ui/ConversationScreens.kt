@@ -2,6 +2,8 @@ package me.shirazu.dshmizar.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import me.shirazu.mizar.kit.SessionSettings
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -97,7 +99,6 @@ import me.shirazu.mizar.kit.ConversationItem
 import me.shirazu.mizar.kit.ConversationTurn
 import me.shirazu.mizar.kit.Markdown
 import me.shirazu.mizar.kit.MarkdownStyle
-import me.shirazu.mizar.kit.ModelSelection
 import me.shirazu.mizar.kit.PendingApproval
 import me.shirazu.mizar.kit.PendingQuestion
 import me.shirazu.mizar.kit.QuestionAnswer
@@ -124,9 +125,10 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
         scope.launch { snackbar.showSnackbar(copiedMessage) }
     }
     val listState = rememberLazyListState()
-    var draft by remember { mutableStateOf("") }
-    var showingModelPicker by remember { mutableStateOf(false) }
-    var showingPermissions by remember { mutableStateOf(false) }
+    val draft = state.composer.text
+    var showingModelPicker by remember(state.settingsGeneration) { mutableStateOf(false) }
+    var showingEffort by remember(state.settingsGeneration) { mutableStateOf(false) }
+    var showingPermissions by remember(state.settingsGeneration) { mutableStateOf(false) }
     var showingContext by remember { mutableStateOf(false) }
     var showingCommands by remember { mutableStateOf(false) }
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -137,8 +139,8 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
     // when a sheet opens: a sheet that has to fetch before it can draw shows a spinner
     // for as long as the round trip takes, and on the device that looked like a sheet
     // that never loads at all. The model already skips a second fetch.
-    LaunchedEffect(state.selectedSessionId) {
-        if (state.selectedSessionId != null) model.loadCatalogs()
+    LaunchedEffect(state.settingsGeneration, state.phase) {
+        if (state.selectedSessionId != null && state.phase == Phase.READY) model.loadCatalogs()
     }
 
     // One ticker for every running turn on screen, alive only while this is.
@@ -285,7 +287,7 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
                             )
                         }
                     }
-                    IconButton(onClick = { showingPermissions = true }) {
+                    IconButton(onClick = { model.loadCatalogs(force = true); showingPermissions = true }) {
                         Icon(Icons.Default.Lock, contentDescription = stringResource(R.string.permissions))
                     }
                 },
@@ -337,19 +339,21 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
                 }
                 ComposerBar(
                     state = state,
-                    onModel = { showingModelPicker = true },
+                    onModel = { model.loadCatalogs(force = true); showingModelPicker = true },
+                    onEffort = { model.loadCatalogs(force = true); showingEffort = true },
+                    onPermissions = { model.loadCatalogs(force = true); showingPermissions = true },
                     onContext = { showingContext = true },
                     onCommands = { showingCommands = true },
                 )
+                AttachmentPanel(model, state.composer)
                 Composer(
                     draft = draft,
-                    onDraft = { draft = it },
+                    onDraft = model::setDraft,
                     running = running,
-                    onSend = {
-                        val text = draft
-                        draft = ""
-                        model.sendPrompt(text)
-                    },
+                    hasAttachments = state.composer.items.isNotEmpty(),
+                    busy = state.composer.busy,
+                    locked = state.composer.locked,
+                    onSend = model::sendDraft,
                     onStop = { model.cancelTurn() },
                 )
             }
@@ -385,24 +389,13 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
     }
 
     if (showingModelPicker) {
-        ModelPickerSheet(
-            state = state,
-            onDismiss = { showingModelPicker = false },
-            onChoose = { selection ->
-                showingModelPicker = false
-                model.setModel(selection)
-            },
-        )
+        SessionModelSheet(model, state, effortOnly = false, onDismiss = { showingModelPicker = false })
+    }
+    if (showingEffort) {
+        SessionModelSheet(model, state, effortOnly = true, onDismiss = { showingEffort = false })
     }
     if (showingPermissions) {
-        PermissionSheet(
-            state = state,
-            onDismiss = { showingPermissions = false },
-            onChoose = { preset ->
-                showingPermissions = false
-                model.setPermission(preset)
-            },
-        )
+        SessionPermissionSheet(model, state, onDismiss = { showingPermissions = false })
     }
     if (showingContext) {
         ContextSheet(state) { showingContext = false }
@@ -412,7 +405,7 @@ fun SessionScreen(model: AppViewModel, state: UiState) {
             onDismiss = { showingCommands = false },
             onCommand = { slash ->
                 // Into the draft, then closed: the operator finishes the sentence.
-                draft = if (draft.isBlank()) "$slash " else "$draft $slash "
+                model.setDraft(if (draft.isBlank()) "$slash " else "$draft $slash ")
                 showingCommands = false
             },
         )
@@ -508,8 +501,11 @@ private fun TurnSection(
                 if (turn.failed) {
                     // The prompt is already here, so the retry is one tap rather than
                     // retyping the sentence the agent failed to answer.
-                    val prompt = (turn.prompts.firstOrNull() as? ConversationItem.Message)?.text
-                    if (prompt != null) {
+                    val original = turn.prompts.firstOrNull() as? ConversationItem.Message
+                    val prompt = original?.text
+                    // History contains read-only references, not resendable uploads. Never silently
+                    // retry only the text of a failed image/file prompt and lose its attachments.
+                    if (!prompt.isNullOrBlank() && original?.attachments.isNullOrEmpty()) {
                         TextButton(
                             onClick = { onRetry(prompt) },
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
@@ -606,7 +602,24 @@ private fun MessageBubble(item: ConversationItem.Message, indent: Boolean, onCop
                 if (item.role == ConversationItem.Role.SYSTEM) {
                     Text(stringResource(R.string.system_label), style = MaterialTheme.typography.labelSmall, color = textColor)
                 }
-                MessageContent(item.text, textColor, onCopy)
+                if (item.text.isNotBlank()) MessageContent(item.text, textColor, onCopy)
+                for (attachment in item.attachments) {
+                    Surface(
+                        color = textColor.copy(alpha = 0.10f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) {
+                        Column(Modifier.padding(8.dp)) {
+                            val kind = stringResource(if (attachment.kind == "image") R.string.attach_history_image else R.string.attach_history_file)
+                            Text("$kind · ${attachment.name}", color = textColor, maxLines = 2,
+                                overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
+                            val detail = listOfNotNull(attachment.mediaType, attachment.bytes?.let { "$it B" }).joinToString(" · ")
+                            if (detail.isNotBlank()) Text(detail, color = textColor, style = MaterialTheme.typography.labelSmall)
+                            Text(stringResource(R.string.attach_history_placeholder), color = textColor,
+                                style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
             }
         }
     }
@@ -743,48 +756,62 @@ private fun markdown(source: String): AnnotatedString {
 private fun ComposerBar(
     state: UiState,
     onModel: () -> Unit,
+    onEffort: () -> Unit,
+    onPermissions: () -> Unit,
     onContext: () -> Unit,
     onCommands: () -> Unit,
 ) {
-    val selection = state.selectedSessionId?.let { state.modelChoice[it] }
-    val model = selection?.model ?: state.stats?.model?.next?.model ?: state.stats?.model?.lastUsed?.model
-    val effort = selection?.reasoningEffort ?: state.stats?.model?.next?.reasoningEffort
-    val label = listOfNotNull(model, effort?.replaceFirstChar { it.uppercase() }).joinToString(" · ")
+    val selection = SessionSettings.current(state.stats, state.modelCatalog)
+    val selectedOption = SessionSettings.option(state.modelCatalog, selection)
+    val modelLabel = selectedOption?.name ?: selection?.model ?: "—"
+    val effortLabel = selectedOption?.efforts?.firstOrNull { it.id == selection?.reasoningEffort }?.name
+        ?: selection?.reasoningEffort ?: "—"
+    val permission = state.stats?.permissionPreset
+    val permissionLabel = state.permissionCatalog?.options?.firstOrNull { it.value == permission }?.name ?: permission ?: "—"
 
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Pill(onClick = onModel, modifier = Modifier.weight(1f, fill = false)) {
-            Text(label.ifEmpty { stringResource(R.string.model) }, maxLines = 1, style = MaterialTheme.typography.labelMedium)
+    // Two rows: all three labelled settings remain visible even with a very long model name.
+    Column {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Pill(onClick = onModel, modifier = Modifier.weight(1f)) {
+                Column {
+                    Text(stringResource(R.string.model), style = MaterialTheme.typography.labelMedium)
+                    Text(modelLabel, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            Pill(onClick = onEffort, modifier = Modifier.weight(1f)) {
+                Column {
+                    Text(stringResource(R.string.reasoning_effort), style = MaterialTheme.typography.labelMedium)
+                    Text(effortLabel, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            Pill(onClick = onPermissions, modifier = Modifier.weight(1f)) {
+                Column {
+                    Text(stringResource(R.string.access_permissions), style = MaterialTheme.typography.labelMedium)
+                    Text(permissionLabel, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall)
+                }
+            }
         }
-
-        val context = state.stats?.context
-        val percent = context?.percent
-        Pill(
-            onClick = onContext,
-            enabled = context != null,
-            modifier = Modifier.weight(1f, fill = false),
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // An em dash when the host reported no context figure. Rendering a missing
-            // projection as `0%` is the one thing this protocol asks clients not to do
-            // -- "absent means the capability is not composed, not that its value is
-            // zero" -- and it is also just wrong: an empty context is not a full one.
-            Text(
-                text = if (context == null || percent == null) {
-                    stringResource(R.string.context_unknown)
-                } else {
-                    stringResource(R.string.context_percent, percent)
-                },
-                style = MaterialTheme.typography.labelMedium,
-            )
+            val context = state.stats?.context
+            val percent = context?.percent
+            Pill(onClick = onContext, enabled = context != null) {
+                Text(if (percent == null) stringResource(R.string.context_unknown) else stringResource(R.string.context_percent, percent),
+                    style = MaterialTheme.typography.labelMedium)
+            }
+            Pill(onClick = onCommands) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.commands), style = MaterialTheme.typography.labelMedium)
+            }
+            if (state.modelSaving || state.permissionSaving) Text(stringResource(R.string.settings_saving), style = MaterialTheme.typography.labelSmall)
         }
-
-        Pill(onClick = onCommands, modifier = Modifier.weight(1f, fill = false)) {
-            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
-            Spacer(Modifier.width(4.dp))
-            Text(stringResource(R.string.commands), maxLines = 1, style = MaterialTheme.typography.labelMedium)
+        (state.modelSaveError ?: state.permissionSaveError)?.let { error ->
+            Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall,
+                maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 12.dp))
         }
     }
 }
@@ -847,6 +874,9 @@ private fun Composer(
     draft: String,
     onDraft: (String) -> Unit,
     running: Boolean,
+    hasAttachments: Boolean,
+    busy: Boolean,
+    locked: Boolean,
     onSend: () -> Unit,
     onStop: () -> Unit,
 ) {
@@ -858,13 +888,14 @@ private fun Composer(
         OutlinedTextField(
             value = draft,
             onValueChange = onDraft,
+            readOnly = busy || locked,
             placeholder = { Text(stringResource(R.string.composer_hint)) },
             maxLines = 8,
             // Enter sends, as it does on the desktop. A multi-line draft is still
             // possible -- the field grows -- but the key that people expect to submit is
             // the one that submits.
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-            keyboardActions = KeyboardActions(onSend = { if (draft.isNotBlank()) onSend() }),
+            keyboardActions = KeyboardActions(onSend = { if (!busy && (draft.isNotBlank() || hasAttachments)) onSend() }),
             shape = RoundedCornerShape(19.dp),
             modifier = Modifier.weight(1f),
             // Explicit surfaces, not the theme defaults: the default container is a
@@ -883,8 +914,8 @@ private fun Composer(
             ),
         )
 
-        val showsStop = running && draft.isBlank()
-        val sendEnabled = !showsStop && draft.isNotBlank()
+        val showsStop = running && draft.isBlank() && !hasAttachments && !busy
+        val sendEnabled = !showsStop && !busy && (draft.isNotBlank() || hasAttachments)
         if (showsStop) {
             IconButton(
                 onClick = onStop,
@@ -1125,118 +1156,6 @@ private fun QuestionBody(
             maxLines = 4,
             modifier = Modifier.fillMaxWidth(),
         )
-    }
-}
-
-/** Choose a model, and then its reasoning effort. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ModelPickerSheet(state: UiState, onDismiss: () -> Unit, onChoose: (ModelSelection) -> Unit) {
-    val catalog = state.modelCatalog
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
-        Text(
-            stringResource(R.string.model),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(16.dp),
-        )
-        if (catalog == null) {
-            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-            return@ModalBottomSheet
-        }
-        LazyColumn {
-            for (provider in catalog.providers) {
-                item(key = "p-${provider.id}") {
-                    Text(
-                        provider.name,
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
-                }
-                items(provider.models, key = { "${provider.id}-${it.id}" }) { option ->
-                    ListItem(
-                        headlineContent = { Text(option.name) },
-                        supportingContent = option.description?.let { { Text(it) } },
-                        modifier = Modifier.clickable {
-                            onChoose(
-                                ModelSelection(
-                                    provider = provider.id,
-                                    model = option.id,
-                                    reasoningEffort = option.defaultEffort ?: option.efforts.firstOrNull()?.id,
-                                ),
-                            )
-                        },
-                    )
-                }
-            }
-            // A provider that could not be listed is shown, not hidden: an empty
-            // picker with no explanation is a bug report nobody can act on.
-            if (catalog.failures.isNotEmpty()) {
-                item(key = "failures") {
-                    Text(
-                        stringResource(R.string.unavailable),
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.padding(16.dp),
-                    )
-                }
-                items(catalog.failures, key = { it.id }) { failure ->
-                    ListItem(
-                        headlineContent = { Text(failure.name) },
-                        supportingContent = { Text(failure.message) },
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** Choose a permission preset, with a warning in front of the dangerous one. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PermissionSheet(state: UiState, onDismiss: () -> Unit, onChoose: (String) -> Unit) {
-    var confirming by remember { mutableStateOf<String?>(null) }
-    val catalog = state.permissionCatalog
-
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
-        Text(
-            stringResource(R.string.permissions),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(16.dp),
-        )
-        if (catalog == null) {
-            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            return@ModalBottomSheet
-        }
-        LazyColumn {
-            items(catalog.options, key = { it.value }) { option ->
-                ListItem(
-                    headlineContent = { Text(option.name) },
-                    supportingContent = option.description?.let { { Text(it) } },
-                    leadingContent = {
-                        if (option.isDangerous) {
-                            Icon(Icons.Default.Lock, contentDescription = null, tint = MizarColors.Failure)
-                        }
-                    },
-                    modifier = Modifier.clickable {
-                        if (option.isDangerous) confirming = option.value else onChoose(option.value)
-                    },
-                )
-            }
-        }
-        Text(
-            stringResource(R.string.permission_note),
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(16.dp),
-        )
-        confirming?.let { preset ->
-            Button(
-                onClick = { onChoose(preset) },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            ) {
-                Text(stringResource(R.string.allow_full_access))
-            }
-        }
     }
 }
 

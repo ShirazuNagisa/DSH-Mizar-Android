@@ -77,7 +77,8 @@ class MizarConnection(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var transport: WebSocketTransport? = null
     private var readJob: Job? = null
-    private val pending = LinkedHashMap<String, CompletableDeferred<JsonElement?>>()
+    // Upload calls run on IO alongside the normal UI/poll calls and the socket reader.
+    private val pending = java.util.concurrent.ConcurrentHashMap<String, CompletableDeferred<JsonElement?>>()
     private var handshake: CompletableDeferred<ServerFrame.Welcome>? = null
     private val subscribers = LinkedHashMap<String, Channel<ServerFrame>>()
 
@@ -216,8 +217,11 @@ class MizarConnection(
         return try {
             withTimeout(budget) { awaiting.await() }
         } catch (_: TimeoutCancellationException) {
-            pending.remove(id)
             throw MizarError("REQUEST_TIMEOUT", "$type did not answer in time", retryable = true)
+        } finally {
+            // Navigation/remove can cancel an upload while awaiting its acknowledgement.
+            // The upload checkpoint stays unchanged; the abandoned RPC waiter must not leak.
+            pending.remove(id)
         }
     }
 

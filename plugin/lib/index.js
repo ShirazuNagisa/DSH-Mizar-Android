@@ -13,6 +13,9 @@ import { join } from 'node:path';
 import { Config } from './config.js';
 import { registerAnswerers } from './bridge/answerers.js';
 import { DeliveryLedger } from './bridge/delivery.js';
+import { UploadStore } from './attachments/store.js';
+import { AttachmentBridge } from './attachments/bridge.js';
+import { optionalService } from './attachments/services.js';
 import { createMethodTable } from './bridge/index.js';
 import { InteractionBroker } from './bridge/interactions.js';
 import { listSessions, sessionStats } from './bridge/sessions.js';
@@ -55,7 +58,7 @@ const systemLocale = (() => {
  * code in place and every symptom unchanged. One line at boot turns that from a
  * guess into a fact.
  */
-const MIZAR_VERSION = '0.8.3';
+const MIZAR_VERSION = '0.8.3-attachments.1';
 /**
  * Services this plugin must observe before it activates.
  *
@@ -231,12 +234,25 @@ async function startListener(ctx, config, signal) {
     // is per plugin mount and per device: the phones' own cursors are the
     // authority when they send one, and this answers the requests that do not.
     const delivery = new DeliveryLedger();
+    const uploads = await UploadStore.open({
+        maxImageBytes: optionalService(ctx, 'attachments')?.imageLimits.maxImageBytes,
+        log: report,
+    });
+    const attachments = new AttachmentBridge(ctx, uploads);
+    const stopAttachments = () => {
+        void attachments.dispose().catch(() => report('attachment shutdown cleanup failed'));
+    };
+    signal.addEventListener('abort', stopAttachments, { once: true });
+    if (signal.aborted) {
+        await attachments.dispose();
+        signal.throwIfAborted();
+    }
     const methods = createMethodTable(ctx, {
         hostId: store.state.hostId,
         hostName: hostname(),
         home: stateDir,
         protocolVersion: PROTOCOL_VERSION,
-    }, broker, push, delivery);
+    }, broker, push, delivery, attachments);
     // A stable handle the rest of the plugin reads through, so a rebind can swap
     // the listener without every consumer holding a stale reference.
     const holder = { current: null };
@@ -532,6 +548,8 @@ export function apply(ctx, config) {
                 report(`ready — pair with the code shown in the DSH Web panel, or reach ${listener.authorities.join(' / ')}`);
             }
             catch (error) {
+                // Tear down attachment staging even when the listener never bound a port.
+                controller.abort();
                 report(`listener failed to start — ${describe(error)}`);
             }
         })();

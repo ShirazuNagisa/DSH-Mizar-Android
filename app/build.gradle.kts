@@ -33,13 +33,12 @@ android {
     buildToolsVersion = "35.0.0"
 
     defaultConfig {
-        applicationId = "me.shirazu.dshmizar"
+        applicationId = "me.shirazu.dshmizar.attachments"
         minSdk = 26
         targetSdk = 35
-        // Kept in step with the iOS target's MARKETING_VERSION/CURRENT_PROJECT_VERSION
-        // (0.8.0 / 15) so a build can be identified from either platform's report.
-        versionCode = 36
-        versionName = "0.8.21"
+        // Private side-by-side build; monotonically increasing for in-place upgrades.
+        versionCode = 38
+        versionName = "0.8.21-attachments.2"
     }
 
     buildFeatures {
