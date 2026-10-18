@@ -54,6 +54,18 @@ class BackoffTest {
     }
 
     @Test
+    fun `the persistent schedule keeps retrying at a bounded cap`() {
+        // A monitor must still be trying hours later, and must not be retrying so
+        // often that it costs battery: the cap is the contract.
+        val backoff = Backoff.persistent
+        repeat(40) { backoff.nextDelay(random = { 0.999 }) }
+        val top = backoff.nextDelay(random = { 0.999 })
+        assertTrue(top <= 30.0, "delay $top exceeded the cap")
+        assertTrue(top > 29.0, "delay $top was not the cap step")
+        assertTrue(backoff.nextDelay(random = { 0.0 }) >= 15.0)
+    }
+
+    @Test
     fun `clamps an out-of-range jitter rather than producing a negative delay`() {
         val overJittered = Backoff(steps = listOf(10.0), jitter = 5.0)
         assertTrue(overJittered.nextDelay(random = { 0.0 }) > 0)

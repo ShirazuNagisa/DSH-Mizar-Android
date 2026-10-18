@@ -47,5 +47,19 @@ class Backoff(
     companion object {
         /** The schedule the connection layer retries with. */
         val standard: Backoff = Backoff(listOf(0.5, 1.0, 2.0, 4.0, 8.0, 10.0), 0.5)
+
+        /**
+         * The schedule a lost socket retries with, for as long as the app is alive.
+         *
+         * [standard] was all this client had, and it was used for a *finite* number
+         * of attempts: six tries, about half a minute, and then the app sat in its
+         * failure screen and never dialled again. On a monitor that is the one
+         * outcome that must not happen -- a host restart, a tunnel re-establishing
+         * or a phone changing networks all outlast half a minute, and every second
+         * after that was a completion the operator never heard about. The last step
+         * is the cap: 30 seconds between attempts is cheap enough to run forever
+         * and short enough that the app is back before the operator needs it.
+         */
+        val persistent: Backoff = Backoff(listOf(0.5, 1.0, 2.0, 4.0, 8.0, 10.0, 20.0, 30.0), 0.5)
     }
 }

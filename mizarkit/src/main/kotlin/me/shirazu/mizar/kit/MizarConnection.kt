@@ -187,9 +187,17 @@ class MizarConnection(
      *
      * @param type the method name.
      * @param payload the arguments, omitted entirely when `null`.
+     * @param timeoutMillis how long to wait for an answer, or a non-positive value for
+     *   the configured request timeout. A liveness probe wants a short one: the whole
+     *   point is to notice silence quickly, and the default minute is long enough that
+     *   a backgrounded phone looks connected while it is not.
      * @returns whatever the host answered, or throws [MizarError].
      */
-    suspend fun request(type: String, payload: JsonElement? = null): JsonElement? {
+    suspend fun request(
+        type: String,
+        payload: JsonElement? = null,
+        timeoutMillis: Long = -1,
+    ): JsonElement? {
         val socket = transport
             ?: throw MizarError("NO_CONNECTION", "there is no connection to the host", retryable = true)
 
@@ -204,8 +212,9 @@ class MizarConnection(
             throw MizarError("SOCKET_CLOSED", "the request could not be sent", retryable = true)
         }
 
+        val budget = if (timeoutMillis > 0) timeoutMillis else configuration.requestTimeoutMillis
         return try {
-            withTimeout(configuration.requestTimeoutMillis) { awaiting.await() }
+            withTimeout(budget) { awaiting.await() }
         } catch (_: TimeoutCancellationException) {
             pending.remove(id)
             throw MizarError("REQUEST_TIMEOUT", "$type did not answer in time", retryable = true)
@@ -218,8 +227,12 @@ class MizarConnection(
      * A `null` result is an error rather than a default: a caller that asked for
      * stats and got nothing must not be handed a zeroed frame.
      */
-    suspend inline fun <reified T> call(method: String, payload: JsonElement? = null): T {
-        val result = request(method, payload)
+    suspend inline fun <reified T> call(
+        method: String,
+        payload: JsonElement? = null,
+        timeoutMillis: Long = -1,
+    ): T {
+        val result = request(method, payload, timeoutMillis)
         if (result == null || result is JsonNull) {
             throw MizarError("EMPTY_RESULT", "$method answered without a result")
         }

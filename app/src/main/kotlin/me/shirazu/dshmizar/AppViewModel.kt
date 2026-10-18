@@ -6,6 +6,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -245,10 +247,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 startWatchers(candidate)
                 watchConnection(candidate, host)
+                note("connected to $endpoint")
                 refreshSessions()
                 registerPush(candidate)
                 return
             } catch (error: Throwable) {
+                note("endpoint $endpoint failed: ${error.message}")
                 failure = error
                 candidate.disconnect()
             }
@@ -291,9 +295,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      *
      * `phase` deliberately stays READY. The operator may be reading a conversation, and
      * throwing them back to the list for a two-second blip is worse than a banner that
-     * says what is happening. The schedule is the protocol's own (0.5 s → 10 s with
-     * jitter) and it is finite: exhausting it means the host is really gone, which is
-     * the failure screen's job to say.
+     * says what is happening.
+     *
+     * **It never gives up.** This used to be six attempts -- about half a minute -- and
+     * then a permanent failure screen. That was the single defect behind a completion
+     * nobody ever heard about: the socket dropped while the phone sat in a pocket, the
+     * host (or the tunnel) took longer than thirty seconds to come back, and the app
+     * stopped dialling forever. With no socket there is no `turn.settled` event *and*
+     * no list refresh, so both announcements -- the pushed one and the polling
+     * fallback -- die together. A monitor has to outlast the outage, so the retry
+     * continues at [Backoff.persistent]'s capped cadence until it succeeds, until the
+     * credential is refused (which only pairing can fix), or until something else
+     * takes the socket.
      *
      * @param host - the host to dial again.
      * @param reason - what the connection said when it ended, shown beside the banner.
@@ -313,50 +326,40 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     _state.update { it.copy(reconnecting = true) }
                 }
             }
-            val backoff = Backoff.standard
-            repeat(6) {
+            val backoff = Backoff.persistent
+            var attempt = 0
+            while (isActive) {
                 delay((backoff.nextDelay() * 1000).toLong())
+                attempt += 1
+                note("reconnect attempt $attempt to ${host.displayName}")
                 _state.update { it.copy(problem = null) }
-                try {
-                    connect(host)
-                } catch (error: Throwable) {
-                    // A refused credential ends the whole affair: the host answered and
-                    // said it does not know this phone, so every further attempt is the
-                    // same rejection. Stop, and send the operator to pairing.
-                    if (error.isRepairNeeded()) {
-                        _state.update {
-                            it.copy(
-                                phase = Phase.FAILED,
-                                reconnecting = false,
-                                needsPairing = true,
-                                problem = messageOf(error, host.authority ?: host.baseUrl),
-                            )
-                        }
-                        return@launch
-                    }
-                    // `connect` marks the phase FAILED on every failure; during a retry
-                    // that would swap the screen for the failure page between attempts,
-                    // which is worse than the banner. Put the phase back and keep going.
-                    _state.update { if (it.reconnecting) it.copy(phase = Phase.READY) else it }
-                    return@repeat
-                }
-                if (_state.value.phase == Phase.READY) {
+                // `connect` reports every failure by setting the phase rather than
+                // throwing, so a thrown error here is only ever an unexpected one.
+                runCatching { connect(host) }
+                val current = _state.value
+                if (current.phase == Phase.READY) {
                     backoff.reset()
                     _state.update { it.copy(reconnecting = false, disconnectReason = null) }
+                    note("reconnected after $attempt attempt(s)")
                     // Whatever happened while the socket was down never arrived as an
-                    // event, so the screen has to be re-read once.
+                    // event, so the screen has to be re-read once -- and a turn that
+                    // ended during the outage is announced from the list it reads.
                     refreshConversation()
                     // The host forgot we were on screen while we were away.
                     setPresence(foreground)
                     return@launch
                 }
-            }
-            _state.update {
-                it.copy(
-                    phase = Phase.FAILED,
-                    reconnecting = false,
-                    problem = "lost the connection to ${host.displayName}: $reason",
-                )
+                // A refused credential ends the whole affair: the host answered and said
+                // it does not know this phone, so every further attempt is the same
+                // rejection. Stop, and send the operator to pairing.
+                if (current.needsPairing) {
+                    _state.update { it.copy(phase = Phase.FAILED, reconnecting = false) }
+                    return@launch
+                }
+                // `connect` marks the phase FAILED on every failure; during a retry that
+                // would swap the screen for the failure page between attempts, which is
+                // worse than the banner. Put the phase back and keep going.
+                _state.update { if (it.reconnecting) it.copy(phase = Phase.READY) else it }
             }
         }
     }
@@ -402,14 +405,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 if (was != true) { /* first sighting: nothing to announce */ }
                 continue
             }
+            note("list: ${row.sessionId} settled (was running)")
             // A turn ended. Announced once per turn: a second read of the same idle row
             // must not buzz again.
-            if (row.sessionId in notifiedFinished) continue
+            if (row.sessionId in notifiedFinished) { note("list: ${row.sessionId} already announced"); continue }
             notifiedFinished += row.sessionId
-            if (foreground) continue
+            if (foreground) { note("list: ${row.sessionId} on screen, nothing to announce"); continue }
             // A finished turn can wait; a blocked one cannot. Quiet hours silence only the
             // former.
-            if (activity.quietHours() && isQuietNow()) continue
+            if (activity.quietHours() && isQuietNow()) { note("list: ${row.sessionId} quiet hours"); continue }
 
             val detail = describeFinished(row.sessionId)
             val title = context.getString(
@@ -419,7 +423,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val body = detail.summary
                 ?.let { context.getString(R.string.turn_completed_body, name, it) }
                 ?: context.getString(R.string.turn_completed_body_plain, name)
-            runCatching {
+            val posted = runCatching {
                 Notifications.show(
                     context,
                     title,
@@ -429,6 +433,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     baseId = me.shirazu.dshmizar.push.Notifications.FINISHED_NOTIFICATION_BASE,
                 )
             }
+            note("list: ${row.sessionId} posted=${posted.isSuccess} body=$body")
         }
         // Forget the memory once a session is seen running again, so the next completion
         // is announced too.
@@ -949,17 +954,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { refreshInteractionsNow() }
     }
 
-    private suspend fun refreshInteractionsNow() {
-        val socket = connection ?: return
+    /**
+     * Read the pending interactions, and say whether the host answered at all.
+     *
+     * The answer matters as much as the contents: on a relay, a socket can be dead
+     * while both ends still believe it is open -- the tunnel drops the mapping, the
+     * relay keeps answering websocket pings, and nothing in either read loop ever
+     * fails. The only proof is a question that goes unanswered, which is why this
+     * returns a boolean and why every call carries a short timeout.
+     *
+     * @returns whether the host answered, or `true` when there is no connection to
+     *   judge (a reconnect already owns that case).
+     */
+    private suspend fun refreshInteractionsNow(): Boolean {
+        val socket = connection ?: return true
         // One retry: a refresh that loses a race with a reconnect, or that lands in
         // the same instant as the host restarting, would otherwise leave a card the
         // operator cannot see until the next poll -- and an agent is blocked the
         // whole time it is unseen.
-        val pending = runCatching { socket.call<PendingInteractions>("interactions.pending") }
-            .getOrElse {
-                delay(500)
-                runCatching { socket.call<PendingInteractions>("interactions.pending") }.getOrNull()
-            } ?: return
+        val pending = runCatching {
+            socket.call<PendingInteractions>("interactions.pending", timeoutMillis = POLL_TIMEOUT_MILLIS)
+        }.getOrElse {
+            delay(500)
+            runCatching {
+                socket.call<PendingInteractions>("interactions.pending", timeoutMillis = POLL_TIMEOUT_MILLIS)
+            }.getOrNull()
+        } ?: return false
         _state.update { it.copy(pending = pending) }
         // Announced only while the operator is elsewhere: in the foreground the cards
         // are already on screen, and a notification for what you are looking at is
@@ -973,8 +993,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // combined condition silently declined while the log above showed a
             // non-empty set in the background, and only side-specific logging can
             // say which half was false.
-            if (foreground) return
-            if (signature == lastNotified) return
+            if (foreground) return true
+            if (signature == lastNotified) return true
             lastNotified = signature
             val app = getApplication<Application>()
             val counts = listOfNotNull(
@@ -990,6 +1010,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
         }
+        return true
     }
 
     fun answerApproval(requestId: String, outcome: ApprovalOutcome) {
@@ -1142,13 +1163,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // ── internals ───────────────────────────────────────────────────────────
 
     private fun startWatchers(socket: MizarConnection) {
-        watchers = viewModelScope.launch {
+        // Off the main dispatcher on purpose. Everything here is network work, and the
+        // loop is also the connection's heartbeat -- a heartbeat that shares a thread
+        // with the UI stops when the UI does, which is exactly when nobody is watching
+        // it. On a backgrounded phone that showed up as minutes of silence: no polls,
+        // no reconnect, and every completion in the gap lost.
+        watchers = viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
             // The pushed signals, plus a safety-net poll. Notifications are best
             // effort, and a notification lost to a reconnect must not leave a card on
             // screen that no longer exists.
             launch {
                 socket.events().collect { frame ->
                     if (frame is me.shirazu.mizar.kit.ServerFrame.Event) {
+                        note("event ${frame.name}")
                         if (frame.name in INTERACTION_EVENTS) refreshInteractionsNow()
                         // The host knows when a turn ends; a connected client should be
                         // told, not left to infer it from a list refresh.
@@ -1156,16 +1183,49 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             }
-            while (true) {
-                delay(INTERACTION_POLL_MILLIS)
-                refreshInteractionsNow()
-                // No pushed signal says "the turn ended", so while the screen is elsewhere
-                // the list is the only place to see it -- and only worth asking when
-                // something was actually running.
-                val hostId = _state.value.host?.hostId
-                if (!foreground && (wasRunning.values.any { it } || hostId?.let { activity.hasRunningSessions(it) } == true)) {
-                    runCatching { refreshSessionsNow() }
+            var silentPolls = 0
+            var ticks = 0
+            try {
+                while (true) {
+                    delay(INTERACTION_POLL_MILLIS)
+                    if (!refreshInteractionsNow() && isActive) {
+                        // The poll is also the heartbeat. A websocket through a relay can
+                        // be dead while both read loops stay happy -- the tunnel drops the
+                        // mapping and the relay goes on answering websocket pings -- so an
+                        // unanswered question is the only evidence there is. Without this,
+                        // the app sat "connected" for minutes at a time and every
+                        // completion in the gap was lost: no event, and the list poll that
+                        // would have caught it was failing silently too.
+                        silentPolls += 1
+                        note("poll got no answer ($silentPolls)")
+                        if (silentPolls >= 2) {
+                            note("the socket is dead; reconnecting")
+                            val host = _state.value.host
+                            if (host != null) beginReconnect(host, "the host stopped answering") else socket.disconnect()
+                            return@launch
+                        }
+                    } else {
+                        silentPolls = 0
+                    }
+                    ticks += 1
+                    if (ticks % 6 == 0) {
+                        note("heartbeat: connected=${connection != null} silent=$silentPolls foreground=$foreground")
+                    }
+                    // No pushed signal says "the turn ended", so while the screen is elsewhere
+                    // the list is the only place to see it -- and only worth asking when
+                    // something was actually running. Bounded, because this read is the
+                    // long one: left to the default minute per call it blocked the poll
+                    // that watches for silence, and a dead socket went unnoticed for
+                    // minutes at a time.
+                    val hostId = _state.value.host?.hostId
+                    if (!foreground && (wasRunning.values.any { it } || hostId?.let { activity.hasRunningSessions(it) } == true)) {
+                        withTimeoutOrNull(SESSIONS_POLL_TIMEOUT_MILLIS) {
+                            runCatching { refreshSessionsNow() }
+                        }
+                    }
                 }
+            } finally {
+                note("watchers stopped")
             }
         }
     }
@@ -1173,6 +1233,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun stopWatchers() {
         watchers?.cancel()
         watchers = null
+    }
+
+    /**
+     * One line on the device log, under a tag an operator can filter on.
+     *
+     * The notification path is invisible by construction -- it fires while the app is
+     * off screen, so nothing on the display can say whether it ran -- and `logcat -s
+     * mizar-notify` is the only way to tell "the host never sent it" from "the app
+     * decided not to". Cheap enough to keep, and the alternative is guessing.
+     */
+    private fun note(message: String) {
+        android.util.Log.i("mizar-notify", message)
     }
 
     private fun regroup() {
@@ -1194,11 +1266,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * once.
      */
     private suspend fun onTurnSettled(data: kotlinx.serialization.json.JsonElement) {
-        val sessionId = (data["sessionId"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull ?: return
-        if (foreground) return
-        if (sessionId in notifiedFinished) return
+        val sessionId = (data["sessionId"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
+            ?: run { note("settled: no sessionId in the frame"); return }
+        if (foreground) { note("settled $sessionId: on screen, nothing to announce"); return }
+        if (sessionId in notifiedFinished) { note("settled $sessionId: already announced"); return }
         notifiedFinished += sessionId
-        if (activity.quietHours() && isQuietNow()) return
+        if (activity.quietHours() && isQuietNow()) { note("settled $sessionId: quiet hours"); return }
 
         val context = getApplication<Application>()
         val detail = describeFinished(sessionId)
@@ -1209,7 +1282,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val body = detail.summary
             ?.let { context.getString(R.string.turn_completed_body, name, it) }
             ?: context.getString(R.string.turn_completed_body_plain, name)
-        runCatching {
+        val posted = runCatching {
             Notifications.show(
                 context,
                 title,
@@ -1218,6 +1291,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 baseId = me.shirazu.dshmizar.push.Notifications.FINISHED_NOTIFICATION_BASE,
             )
         }
+        note("settled $sessionId: posted=${posted.isSuccess} failed=${detail.failed} body=$body")
     }
 
     private fun applyIndex(index: SessionIndex) {
@@ -1287,6 +1361,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
          * will wait through.
          */
         const val INTERACTION_POLL_MILLIS = 10_000L
+
+        /**
+         * How long a poll waits before deciding the host is not there.
+         *
+         * Much shorter than the 60 s a normal call gets, because this is the
+         * heartbeat: the whole value of the poll is noticing silence, and a host on
+         * the other end of a tunnel answers in milliseconds when it answers at all.
+         */
+        const val POLL_TIMEOUT_MILLIS = 5_000L
+
+        /**
+         * How long the background session-list read may take.
+         *
+         * Long enough for a slow host, short enough that it cannot hold up the poll
+         * that is the connection's heartbeat.
+         */
+        const val SESSIONS_POLL_TIMEOUT_MILLIS = 20_000L
 
         /** The transcript page an open session starts with. */
         const val FULL_PAGE = 200
