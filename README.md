@@ -6,6 +6,10 @@ DSH-Mizar 的 Android 客户端：在手机上查看 DSH agent 的会话、读�
 - `mizarkit/` —— 纯 Kotlin/JVM 的协议核心：帧、配对、连接状态机、会话投影、缓存接口、诊断。
   不带任何 Android 依赖，测试在 JVM 上秒级跑完。
 - `app/` —— Compose 界面、扫码配对、通知、Keystore 支撑的加密存储。
+- `plugin/` —— 与这个客户端配套的**主机插件**（`dsh-mizar` 的一份镜像）。上游
+  [DSH-Mizar](https://github.com/ShirazuNagisa/DSH-Mizar) 同时服务 iOS 和 Android，不能只为一边改；
+  Android 需要的增量（目前只有 `turn.settled` 广播）落在这一份里。同步方法见
+  [docs/plugin.md](docs/plugin.md)。
 
 构建环境、对真实宿主跑通链路、与 iOS 客户端的差异，见 [docs/android.md](docs/android.md)。
 

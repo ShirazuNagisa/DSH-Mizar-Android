@@ -28,3 +28,6 @@ app/google-services.json
 keystore.properties
 keystore/
 dist/
+
+# The vendored plugin's dependencies are installed locally, not committed.
+plugin/node_modules/
