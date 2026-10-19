@@ -201,4 +201,8 @@
     <string name="link_server_unresponsive">Server not responding · retrying</string>
     <string name="link_no_host">No host connected</string>
     <string name="connection_latency">Latency</string>
+    <string name="greeting_morning">GOOD MORNING</string>
+    <string name="greeting_afternoon">GOOD AFTERNOON</string>
+    <string name="greeting_evening">GOOD EVENING</string>
+    <string name="greeting_night">UP LATE</string>
 </resources>

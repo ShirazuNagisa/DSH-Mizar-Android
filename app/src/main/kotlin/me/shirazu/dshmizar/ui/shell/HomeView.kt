@@ -46,6 +46,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import me.shirazu.dshmizar.AppViewModel
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
@@ -91,6 +92,21 @@ fun HomeView(
         ) {
             MizarMarkConnecting(modifier = Modifier.width(64.dp))
             Spacer(Modifier.height(18.dp))
+            // A word for the hour before the machine's name: the console greets
+            // the operator, not the other way round.
+            Text(
+                text = stringResource(
+                    when (java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)) {
+                        in 5..11 -> R.string.greeting_morning
+                        in 12..17 -> R.string.greeting_afternoon
+                        in 18..22 -> R.string.greeting_evening
+                        else -> R.string.greeting_night
+                    },
+                ),
+                style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.2.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(4.dp))
             Text(
                 text = state.host?.displayName ?: stringResource(R.string.app_name),
                 style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),

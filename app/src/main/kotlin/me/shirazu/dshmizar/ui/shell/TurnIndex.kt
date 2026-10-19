@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -92,6 +94,10 @@ fun TurnIndex(
             return@Column
         }
 
+        // The shape of the session at a glance: one segment per turn, as wide as
+        // it took, in the colour it ended in. A tap on a segment jumps to it.
+        SessionStrip(turns = turns, now = now, onPick = onPick)
+
         // Narrowing to the turns that did not finish: the reason to open this list is
         // usually "which one went wrong", not "list everything".
         Row(
@@ -142,6 +148,45 @@ fun TurnIndex(
                     onClick = { onPick(index) },
                 )
             }
+        }
+    }
+}
+
+/** One segment per turn: width is the turn's share of the session, colour its
+ *  fate -- amber for unfinished, the accent for the one still working, the
+ *  quiet line for everything that ended cleanly. */
+@Composable
+private fun SessionStrip(
+    turns: List<ConversationTurn>,
+    now: Long,
+    onPick: (index: Int) -> Unit,
+) {
+    val durations = turns.map { (it.elapsedMillis(now) ?: 0L).coerceAtLeast(1L) }
+    val total = durations.sum().coerceAtLeast(1L)
+    val runningTint = MaterialTheme.colorScheme.primary
+    val failedTint = MizarColors.Warning
+    val doneTint = MaterialTheme.colorScheme.outlineVariant
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Space.lg, vertical = Space.xs)
+            .height(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        turns.forEachIndexed { index, turn ->
+            val share = (durations[index].toFloat() / total).coerceIn(0.02f, 1f)
+            Box(
+                Modifier
+                    .weight(share)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(
+                        if (turn.failed) failedTint
+                        else if (turn.isRunning) runningTint
+                        else doneTint,
+                    )
+                    .clickable { onPick(index) },
+            )
         }
     }
 }

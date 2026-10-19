@@ -188,5 +188,9 @@
     <string name="link_server_unresponsive">服务器未响应 · 正在重试</string>
     <string name="link_no_host">未连接主机</string>
     <string name="connection_latency">延迟</string>
+    <string name="greeting_morning">早上好</string>
+    <string name="greeting_afternoon">下午好</string>
+    <string name="greeting_evening">晚上好</string>
+    <string name="greeting_night">夜深了</string>
 </resources>
 
