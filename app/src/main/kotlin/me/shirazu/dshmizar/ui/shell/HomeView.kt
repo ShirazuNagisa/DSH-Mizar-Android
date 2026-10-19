@@ -10,11 +10,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -38,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -140,61 +144,64 @@ fun HomeView(
             )
         }
 
-        // The composer, ready: type, choose where the work happens, send.
+        // The composer, ready: type, choose where the work happens, send. The
+        // field is its own slab with the send key at its right end; the
+        // workspace menu is the company's row a breath below, as in the session.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp)
-                .padding(bottom = 6.dp)
-                .glassCard(radius = Radius.md, translucent = true),
+                .padding(bottom = 14.dp),
         ) {
-            TextField(
-                value = draft,
-                onValueChange = { draft = it },
-                placeholder = { Text(stringResource(R.string.composer_hint)) },
-                maxLines = 8,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(
-                    onSend = {
-                        val target = workspace
-                        if (target != null && draft.isNotBlank()) {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            val text = draft
-                            draft = ""
-                            model.createSessionWithPrompt(target, text)
-                        }
-                    },
-                ),
-                textStyle = MaterialTheme.typography.bodyLarge,
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    cursorColor = MaterialTheme.colorScheme.primary,
-                ),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp).padding(top = 2.dp),
-            )
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp).padding(bottom = 8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .glassCard(radius = Radius.xl, translucent = true),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                WorkspaceMenu(
-                    choices = choices.map { it.path to it.title },
-                    selected = workspace,
-                    state = state,
-                    model = model,
-                    onSelect = { workspace = it },
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                Spacer(Modifier.weight(1f))
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (draft.isEmpty()) {
+                        Text(
+                            stringResource(R.string.composer_hint),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    BasicTextField(
+                        value = draft,
+                        onValueChange = { draft = it },
+                        maxLines = 8,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(
+                            onSend = {
+                                val target = workspace
+                                if (target != null && draft.isNotBlank()) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    val text = draft
+                                    draft = ""
+                                    model.createSessionWithPrompt(target, text)
+                                }
+                            },
+                        ),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 44.dp)
+                            .wrapContentHeight(Alignment.CenterVertically)
+                            .padding(start = 14.dp),
+                    )
+                }
                 val canSend = workspace != null && draft.isNotBlank()
                 val scale by animateFloatAsState(if (canSend) 1f else 0.92f, Motion.pick(Motion.bouncy()), label = "homeSend")
                 Box(
                     modifier = Modifier
+                        .padding(end = 8.dp)
                         .size(34.dp)
                         .scale(scale)
-                        .clip(RoundedCornerShape(Radius.lg))
+                        .clip(CircleShape)
                         .background(
                             if (canSend) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
@@ -216,6 +223,19 @@ fun HomeView(
                         modifier = Modifier.size(20.dp),
                     )
                 }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                WorkspaceMenu(
+                    choices = choices.map { it.path to it.title },
+                    selected = workspace,
+                    state = state,
+                    model = model,
+                    onSelect = { workspace = it },
+                )
             }
         }
     }
@@ -242,7 +262,7 @@ private fun WorkspaceMenu(
             modifier = Modifier
                 .height(32.dp)
                 .clip(RoundedCornerShape(Radius.lg))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f))
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.lg))
                 .pressable()
                 .clickable { open = true }

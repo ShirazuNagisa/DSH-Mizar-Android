@@ -412,16 +412,14 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
             AnchoredPopover(
                 expanded = showingConnection,
                 onDismiss = { showingConnection = false },
-                width = PopoverSize.COMPACT_WIDTH,
+                // Three short rows: the smallest window on the ladder.
+                width = 240.dp,
+                maxHeight = 280.dp,
+                offset = androidx.compose.ui.unit.DpOffset(0.dp, (-8).dp),
             ) {
                 ConnectionPanel(
-                    model = model,
                     state = state,
                     onDismiss = { showingConnection = false },
-                    onSettings = {
-                        showingConnection = false
-                        showingSettings = true
-                    },
                 )
             }
         }
@@ -432,8 +430,11 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
             AnchoredPopover(
                 expanded = showingSettings,
                 onDismiss = { showingSettings = false },
-                width = PopoverSize.TALL_WIDTH,
-                maxHeight = PopoverSize.TALL_HEIGHT,
+                // Narrower and taller than the ladder's tall window: the settings
+                // list scrolls, and more sections are coming.
+                width = 300.dp,
+                maxHeight = 600.dp,
+                offset = androidx.compose.ui.unit.DpOffset(0.dp, (-8).dp),
             ) {
                 SettingsDialog(
                     state = state,

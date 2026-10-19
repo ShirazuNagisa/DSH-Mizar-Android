@@ -76,7 +76,7 @@ fun SettingsDialog(
     DialogShell(title = stringResource(R.string.settings), onDismiss = onDismiss) {
         // What this is, before what it does: the icon, the name, the pairing.
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
@@ -115,7 +115,7 @@ fun SettingsDialog(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 12.dp)
                 .clip(RoundedCornerShape(Radius.sm))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.sm))
@@ -131,10 +131,10 @@ fun SettingsDialog(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 12.dp)
                 .clip(RoundedCornerShape(Radius.md))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .padding(horizontal = 16.dp, vertical = 4.dp),
+                .padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -192,7 +192,7 @@ fun SettingsDialog(
             text = stringResource(R.string.settings_note),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(12.dp),
         )
     }
 }
@@ -228,7 +228,7 @@ private fun SectionLabel(text: String) {
             letterSpacing = 1.5.sp,
         ),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 16.dp).padding(top = 14.dp, bottom = 6.dp),
+        modifier = Modifier.padding(horizontal = 12.dp).padding(top = 14.dp, bottom = 6.dp),
     )
 }
 
@@ -280,19 +280,19 @@ fun NewSessionDialog(state: UiState, onDismiss: () -> Unit, onCreate: (String) -
             singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 12.dp),
         )
         Text(
             text = stringResource(R.string.new_session_note),
             style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = 16.dp),
+            modifier = Modifier.padding(horizontal = 12.dp),
         )
         Button(
             onClick = { onCreate(path.trim()) },
             enabled = path.isNotBlank() && !state.busy,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(12.dp),
             shape = RoundedCornerShape(Radius.md),
         ) {
             Text(stringResource(R.string.start_session))
@@ -307,7 +307,7 @@ internal fun DialogShell(title: String, onDismiss: () -> Unit, content: @Composa
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))

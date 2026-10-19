@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -48,11 +49,15 @@ fun AnchoredPopover(
     title: String? = null,
     width: Dp = PopoverSize.LIST_WIDTH,
     maxHeight: Dp = PopoverSize.LIST_HEIGHT,
+    // The window grows out of its control; a small negative pull keeps it on
+    // its leash instead of hovering a hand's breadth away from it.
+    offset: DpOffset = DpOffset(0.dp, (-4).dp),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
+        offset = offset,
         shape = RoundedCornerShape(Radius.md),
         // Translucent, but only just: the work behind shows as a breath, not as
         // words competing with the window's own.

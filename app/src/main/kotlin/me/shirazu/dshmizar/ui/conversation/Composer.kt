@@ -17,12 +17,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -50,6 +53,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -114,58 +118,74 @@ internal fun Composer(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 10.dp)
-            .padding(bottom = 6.dp)
-            .onGloballyPositioned { ComposerGeometry.slabTop = it.boundsInRoot().top }
-            .glassCard(radius = Radius.md, translucent = true)
-            // A tap anywhere on the slab is a tap on the field.
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-            ) { focusRequester.requestFocus() },
+            .padding(bottom = 14.dp),
     ) {
-        TextField(
-            value = draft,
-            onValueChange = onDraft,
-            placeholder = {
-                Text(
-                    stringResource(R.string.composer_hint),
-                    style = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
-                )
-            },
-            maxLines = 8,
-            // Enter sends, as it does on the desktop. A multi-line draft is still
-            // possible -- the field grows -- but the key that people expect to submit
-            // is the one that submits.
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-            keyboardActions = KeyboardActions(onSend = { if (draft.isNotBlank()) onSend() }),
-            textStyle = MaterialTheme.typography.bodyLarge,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
-                disabledContainerColor = Color.Transparent,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                cursorColor = MaterialTheme.colorScheme.primary,
-                focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .onGloballyPositioned { ComposerGeometry.fieldBounds = it.boundsInRoot() }
-                .focusRequester(focusRequester)
-                .onFocusChanged {
-                    focused = it.isFocused
-                    onFocusChanged(it.isFocused)
-                }
-                .padding(horizontal = 8.dp)
-                .padding(top = 2.dp),
-        )
-
+        // The field is its own slab now, and the send key rides at its right
+        // end; the chips are not the field's contents, they are its company,
+        // in a row of their own a breath below it.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp)
-                .padding(bottom = 8.dp),
+                .onGloballyPositioned { ComposerGeometry.slabTop = it.boundsInRoot().top }
+                .glassCard(radius = Radius.xl, translucent = true)
+                // A tap anywhere on the slab is a tap on the field.
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) { focusRequester.requestFocus() },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                if (draft.isEmpty()) {
+                    Text(
+                        stringResource(R.string.composer_hint),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                BasicTextField(
+                    value = draft,
+                    onValueChange = onDraft,
+                    maxLines = 8,
+                    // Enter sends, as it does on the desktop. A multi-line draft is still
+                    // possible -- the field grows -- but the key that people expect to
+                    // submit is the one that submits.
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { if (draft.isNotBlank()) onSend() }),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 44.dp)
+                        .wrapContentHeight(Alignment.CenterVertically)
+                        .onGloballyPositioned { ComposerGeometry.fieldBounds = it.boundsInRoot() }
+                        .focusRequester(focusRequester)
+                        .onFocusChanged {
+                            focused = it.isFocused
+                            onFocusChanged(it.isFocused)
+                        }
+                        .padding(start = 14.dp),
+                )
+            }
+            Box(modifier = Modifier.padding(end = 8.dp)) {
+                PrimaryButton(
+                    running = running,
+                    draftBlank = draft.isBlank(),
+                    onSend = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onSend()
+                    },
+                    onStop = onStop,
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement6,
         ) {
@@ -186,17 +206,6 @@ internal fun Composer(
                     onChooseModel(selection)
                 },
                 onCommand = onCommand,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(4.dp))
-            PrimaryButton(
-                running = running,
-                draftBlank = draft.isBlank(),
-                onSend = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onSend()
-                },
-                onStop = onStop,
             )
         }
     }
@@ -230,8 +239,10 @@ private fun ComposerBarRow(
                 expanded = showingCommands,
                 onDismiss = onDismissCommands,
                 title = stringResource(R.string.commands),
-                width = PopoverSize.COMPACT_WIDTH,
-                maxHeight = PopoverSize.COMPACT_HEIGHT,
+                // Four short words that will never grow: the window fits them,
+                // not some future list.
+                width = 208.dp,
+                maxHeight = 300.dp,
             ) {
                 CommandContent(onCommand = { onCommand(it); onDismissCommands() })
             }
@@ -269,7 +280,7 @@ private fun CommandButton(open: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .size(32.dp)
             .clip(RoundedCornerShape(Radius.lg))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.lg))
             .pressable(scale = 0.9f)
             .clickable(onClick = onClick),
@@ -310,7 +321,7 @@ private fun ModelPill(
             .height(32.dp)
             .animateContentSize(Motion.smooth())
             .clip(RoundedCornerShape(Radius.lg))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.lg))
             .pressable()
             .clickable(onClick = onClick)
@@ -346,7 +357,7 @@ private fun ContextPill(state: UiState, onClick: () -> Unit) {
         modifier = Modifier
             .height(32.dp)
             .clip(RoundedCornerShape(Radius.lg))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.lg))
             .then(if (context != null) Modifier.pressable().clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 9.dp),
@@ -456,7 +467,7 @@ private fun PrimaryButton(
         modifier = Modifier
             .size(34.dp)
             .scale(scale)
-            .clip(RoundedCornerShape(Radius.lg))
+            .clip(CircleShape)
             .background(fill)
             .pressable(scale = 0.88f)
             .clickable(enabled = mode != Mode.IDLE, onClick = if (mode == Mode.STOP) onStop else onSend),

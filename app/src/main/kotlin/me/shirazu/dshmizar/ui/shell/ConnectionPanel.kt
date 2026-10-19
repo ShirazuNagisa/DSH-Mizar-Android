@@ -37,10 +37,8 @@ import me.shirazu.mizar.kit.PairedHost
  */
 @Composable
 fun ConnectionPanel(
-    model: AppViewModel,
     state: UiState,
     onDismiss: () -> Unit,
-    onSettings: () -> Unit,
 ) {
     DialogShell(title = stringResource(R.string.connection_details), onDismiss = onDismiss) {
         Column(
@@ -60,45 +58,7 @@ fun ConnectionPanel(
                 RowValue(stringResource(R.string.connection_latency), "$rtt ms")
             }
             state.host?.let { host ->
-                RowValue(stringResource(R.string.connection_address), addressText(host))
                 RowValue(stringResource(R.string.connection_route), routeText(host))
-            }
-            // The last thing that went wrong, in the words the failure screen would use
-            // for it. Silence when nothing has.
-            (state.disconnectReason ?: state.problem)?.let { problem ->
-                RowValue(
-                    label = stringResource(R.string.connection_problem),
-                    value = problem,
-                    tint = MizarColors.Failure,
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.retry_connection),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .clickable {
-                            model.retry()
-                            onDismiss()
-                        }
-                        .padding(vertical = 10.dp, horizontal = 12.dp),
-                )
-                Text(
-                    text = stringResource(R.string.settings),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .clickable {
-                            onSettings()
-                            onDismiss()
-                        }
-                        .padding(vertical = 10.dp, horizontal = 12.dp),
-                )
             }
         }
     }
@@ -127,9 +87,6 @@ private fun statusText(state: UiState): String = when {
     state.phase == Phase.FAILED -> stringResource(R.string.connection_failed)
     else -> stringResource(R.string.connecting)
 }
-
-private fun addressText(host: PairedHost): String =
-    host.authority ?: host.baseUrl ?: host.displayName
 
 private fun routeText(host: PairedHost): String = host.endpoints.joinToString(" · ") { endpoint ->
     when (endpoint) {
