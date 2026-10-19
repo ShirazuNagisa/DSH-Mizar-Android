@@ -372,6 +372,12 @@ fun Sidebar(
 private fun ConnectionFooter(model: AppViewModel, state: UiState) {
     var showingConnection by remember { mutableStateOf(false) }
     var showingSettings by remember { mutableStateOf(false) }
+    // Both windows are anchored to the footer as a whole, not to their own button:
+    // a window anchored to the gear at the right end gets pushed against the screen
+    // edge by the popup's own right margin, and the window reads as detached from
+    // the sidebar. The footer's left edge is inside it, so both windows grow out of
+    // the footer and stay in the card.
+    Box(modifier = Modifier.fillMaxWidth()) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -409,50 +415,58 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
                     )
                 }
             }
-            AnchoredPopover(
-                expanded = showingConnection,
-                onDismiss = { showingConnection = false },
-                // Three short rows: the smallest window on the ladder.
-                width = 240.dp,
-                maxHeight = 280.dp,
-                offset = androidx.compose.ui.unit.DpOffset(0.dp, (-8).dp),
-            ) {
-                ConnectionPanel(
-                    state = state,
-                    onDismiss = { showingConnection = false },
-                )
-            }
         }
         Box {
             GlassCircleLabel(size = 54.dp, onClick = { showingSettings = true }) {
-                Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings), modifier = Modifier.size(20.dp))
-            }
-            AnchoredPopover(
-                expanded = showingSettings,
-                onDismiss = { showingSettings = false },
-                // Narrower and taller than the ladder's tall window: the settings
-                // list scrolls, and more sections are coming.
-                width = 300.dp,
-                maxHeight = 600.dp,
-                offset = androidx.compose.ui.unit.DpOffset(0.dp, (-8).dp),
-            ) {
-                SettingsDialog(
-                    state = state,
-                    onDismiss = { showingSettings = false },
-                    onForget = { hostId ->
-                        showingSettings = false
-                        model.forget(hostId)
-                    },
-                    onAddHost = {
-                        showingSettings = false
-                        model.startPairing()
-                    },
-                    onTheme = { mode -> model.setTheme(mode) },
-                    onQuietHours = { on -> model.setQuietHours(on) },
-                    onRename = { hostId, label -> model.renameHost(hostId, label) },
+                Icon(
+                    Icons.Default.Settings,
+                    contentDescription = stringResource(R.string.settings),
+                    modifier = Modifier.size(20.dp),
                 )
             }
         }
+    }
+    AnchoredPopover(
+        expanded = showingConnection,
+        onDismiss = { showingConnection = false },
+        // Three short rows: the smallest window on the ladder.
+        width = 240.dp,
+        maxHeight = 280.dp,
+        // The window sits a hand's breadth off its anchor by default; the footer is
+        // one row off the bottom of the screen, where that breadth reads as a gap.
+        offset = androidx.compose.ui.unit.DpOffset(0.dp, 44.dp),
+    ) {
+        ConnectionPanel(
+            state = state,
+            onDismiss = { showingConnection = false },
+        )
+    }
+    // Narrower than the ladder's tall window: the settings list scrolls, and more
+    // sections are coming. Anchored to the footer, so the window sits inside the
+    // sidebar instead of being pushed against the screen edge.
+    AnchoredPopover(
+        expanded = showingSettings,
+        onDismiss = { showingSettings = false },
+        width = 300.dp,
+        maxHeight = 400.dp,
+        offset = androidx.compose.ui.unit.DpOffset(0.dp, 44.dp),
+    ) {
+        SettingsDialog(
+            state = state,
+            onDismiss = { showingSettings = false },
+            onForget = { hostId ->
+                showingSettings = false
+                model.forget(hostId)
+            },
+            onAddHost = {
+                showingSettings = false
+                model.startPairing()
+            },
+            onTheme = { mode -> model.setTheme(mode) },
+            onQuietHours = { on -> model.setQuietHours(on) },
+            onRename = { hostId, label -> model.renameHost(hostId, label) },
+        )
+    }
     }
 }
 

@@ -2,6 +2,8 @@ package me.shirazu.dshmizar.ui.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -73,27 +76,53 @@ fun SettingsDialog(
     onQuietHours: (Boolean) -> Unit,
     onRename: (String, String?) -> Unit = { _, _ -> },
 ) {
-    DialogShell(title = stringResource(R.string.settings), onDismiss = onDismiss) {
+    // The whole window scrolls as one: the header is part of it, because a settings
+    // list that grows must not make the rows below the fold unreachable. Drawn like
+    // the workspace list -- one column, dragged vertically.
+    // The popup measures its content unbounded, and a scrollable column cannot be
+    // measured that way; a height here is what makes the window scroll instead of
+    // crash -- the same reason a LazyColumn needs one inside a popup.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = SETTINGS_WINDOW_HEIGHT)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                stringResource(R.string.settings),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+            }
+        }
         // What this is, before what it does: the icon, the name, the pairing.
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
                 modifier = Modifier
-                    .size(64.dp)
+                    .size(48.dp)
                     .clip(RoundedCornerShape(Radius.md))
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.md)),
                 contentAlignment = Alignment.Center,
             ) {
                 MizarMarkConnecting(
-                    modifier = Modifier.width(36.dp),
+                    modifier = Modifier.width(28.dp),
                     accent = MaterialTheme.colorScheme.primary,
                     ink = MaterialTheme.colorScheme.onSurface,
                 )
             }
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(12.dp))
             Column {
                 Text(
                     "DSH-Mizar",
@@ -115,11 +144,11 @@ fun SettingsDialog(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp)
+                .padding(horizontal = 10.dp)
                 .clip(RoundedCornerShape(Radius.sm))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.sm))
-                .padding(3.dp),
+                .padding(2.dp),
             horizontalArrangement = Arrangement4,
         ) {
             ThemeSegment(stringResource(R.string.theme_system), state.themeMode == ThemeMode.SYSTEM, Modifier.weight(1f)) { onTheme(ThemeMode.SYSTEM) }
@@ -131,10 +160,10 @@ fun SettingsDialog(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp)
+                .padding(horizontal = 10.dp)
                 .clip(RoundedCornerShape(Radius.md))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .padding(horizontal = 12.dp, vertical = 4.dp),
+                .padding(horizontal = 10.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -148,30 +177,39 @@ fun SettingsDialog(
         SectionLabel(stringResource(R.string.hosts_section))
         var renaming by remember { mutableStateOf<me.shirazu.mizar.kit.PairedHost?>(null) }
         for (host in state.hosts) {
-            PopoverRow(
-                title = host.displayName,
-                subtitle = host.authority ?: host.baseUrl.orEmpty(),
-                trailing = {
-                    Row {
-                        Text(
-                            stringResource(R.string.rename),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .clickable { renaming = host }
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                        )
-                        Text(
-                            stringResource(R.string.forget),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MizarColors.Failure,
-                            modifier = Modifier
-                                .clickable { onForget(host.hostId) }
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                        )
-                    }
-                },
-            )
+            // Measured like the workspace rows, not like the popover's list rows: this
+            // window is where settings will keep growing, so every row is compact
+            // enough to leave room for the ones that are coming.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(host.displayName, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                    Text(
+                        host.authority ?: host.baseUrl.orEmpty(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+                Text(
+                    stringResource(R.string.rename),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clickable { renaming = host }
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                )
+                Text(
+                    stringResource(R.string.forget),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MizarColors.Failure,
+                    modifier = Modifier
+                        .clickable { onForget(host.hostId) }
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                )
+            }
         }
         renaming?.let { host ->
             NamingDialog(
@@ -183,7 +221,7 @@ fun SettingsDialog(
                 onSkip = { renaming = null },
             )
         }
-        TextButton(onClick = onAddHost, modifier = Modifier.padding(horizontal = 8.dp)) {
+        TextButton(onClick = onAddHost, modifier = Modifier.padding(horizontal = 6.dp)) {
             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(4.dp))
             Text(stringResource(R.string.add_mac))
@@ -192,7 +230,7 @@ fun SettingsDialog(
             text = stringResource(R.string.settings_note),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
         )
     }
 }
@@ -208,7 +246,7 @@ private fun ThemeSegment(label: String, selected: Boolean, modifier: Modifier, o
             .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
             .pressable(scale = 0.95f)
             .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
+            .padding(vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -228,7 +266,7 @@ private fun SectionLabel(text: String) {
             letterSpacing = 1.5.sp,
         ),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 12.dp).padding(top = 14.dp, bottom = 6.dp),
+        modifier = Modifier.padding(horizontal = 10.dp).padding(top = 10.dp, bottom = 4.dp),
     )
 }
 
@@ -307,12 +345,19 @@ internal fun DialogShell(title: String, onDismiss: () -> Unit, content: @Composa
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-        IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = null) }
+        // The default touch target is 48dp, which is a whole row in a window this
+        // short; 36 keeps it a comfortable target without owning the header.
+        IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+        }
     }
     content()
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(8.dp))
 }
+
+/** How tall the settings window grows before it starts scrolling. */
+private val SETTINGS_WINDOW_HEIGHT = 360.dp
