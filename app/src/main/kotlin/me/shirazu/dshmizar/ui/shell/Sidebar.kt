@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import me.shirazu.dshmizar.AppViewModel
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
@@ -231,8 +232,11 @@ fun Sidebar(
         }
 
         Text(
-            text = stringResource(R.string.workspaces),
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+            text = stringResource(R.string.workspaces).uppercase(),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.5.sp,
+            ),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.xs),
         )

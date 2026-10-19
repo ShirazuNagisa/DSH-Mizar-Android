@@ -1,6 +1,5 @@
 package me.shirazu.dshmizar.ui.shell
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -38,8 +37,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -111,16 +108,7 @@ fun WorkspaceGroups(
         if (visibleIds.isNotEmpty()) onLoadTitles(visibleIds)
     }
 
-    // The selected row's bounds, so the paper sheet can slide to it.
-    val rowTops = remember { mutableMapOf<String, Float>() }
-    val rowHeights = remember { mutableMapOf<String, Float>() }
-    val selectedTop = state.selectedSessionId?.let { rowTops[it] } ?: 0f
-    val selectedHeight = state.selectedSessionId?.let { rowHeights[it] } ?: 0f
-    val sheetTop by animateFloatAsState(selectedTop, Motion.smooth(), label = "sheetTop")
-    val sheetHeight by animateFloatAsState(selectedHeight, Motion.smooth(), label = "sheetHeight")
-
-    Box(Modifier.fillMaxSize()) {
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
             if (groups.isEmpty()) {
                 item(key = "empty") {
                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -159,10 +147,6 @@ fun WorkspaceGroups(
                                 waiting = session.sessionId in waitingSessions,
                                 query = query,
                                 onClick = { onOpen(session.sessionId) },
-                                onPositioned = { top, height ->
-                                    rowTops[session.sessionId] = top
-                                    rowHeights[session.sessionId] = height
-                                },
                             )
                         }
                     }
@@ -181,7 +165,6 @@ fun WorkspaceGroups(
                     }
                 }
             }
-        }
     }
 }
 
@@ -248,7 +231,7 @@ private fun WorkspaceHeader(
             modifier = Modifier.weight(1f),
         )
         if (waiting) {
-            Text("\u270B", style = MaterialTheme.typography.labelSmall)
+            Box(Modifier.size(6.dp).background(MizarColors.Waiting, CircleShape))
             Spacer(Modifier.width(Space.xs))
         }
         if (!open && running) {
@@ -274,7 +257,6 @@ private fun SessionRowButton(
     waiting: Boolean,
     query: String,
     onClick: () -> Unit,
-    onPositioned: (Float, Float) -> Unit,
 ) {
     // A turn that finished while the operator was elsewhere shows the unread dot.
     val unread = !session.running && session.updatedMillis > (state.seenAt[session.sessionId] ?: 0L)
@@ -286,18 +268,29 @@ private fun SessionRowButton(
             .padding(horizontal = Space.md, vertical = 1.dp)
             .then(
                 if (selected) {
+                    // The console's selection is a whisper of the accent with a
+                    // leading bar, not a lifted sheet of paper.
                     Modifier
-                        .shadow(2.dp, RoundedCornerShape(Radius.sm + 2.dp))
-                        .clip(RoundedCornerShape(Radius.sm + 2.dp))
+                        .clip(RoundedCornerShape(Radius.sm))
                         .background(MizarColors.SelectionFill)
                 } else {
                     Modifier
                 },
             )
             .clickable(onClick = onClick)
-            .padding(start = 28.dp - Space.md, top = 9.dp, bottom = 9.dp, end = Space.md),
+            .padding(top = 9.dp, bottom = 9.dp, end = Space.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Box(modifier = Modifier.width(28.dp - Space.md), contentAlignment = Alignment.Center) {
+            if (selected) {
+                Box(
+                    Modifier
+                        .width(2.dp)
+                        .height(20.dp)
+                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(1.dp)),
+                )
+            }
+        }
         Box(modifier = Modifier.width(14.dp), contentAlignment = Alignment.Center) {
             if (session.running) {
                 TwinStar(size = 13.dp)
@@ -317,12 +310,14 @@ private fun SessionRowButton(
             )
             Text(
                 Format.relativeTime(session.updatedMillis),
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontFeatureSettings = "tnum",
+                ),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         if (waiting) {
-            Text("\u270B", style = MaterialTheme.typography.bodySmall)
+            Box(Modifier.size(6.dp).background(MizarColors.Waiting, CircleShape))
             Spacer(Modifier.width(Space.xs))
         }
         if (unread) {

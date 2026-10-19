@@ -75,7 +75,9 @@ fun TurnIndex(
             )
             Text(
                 text = stringResource(R.string.turn_count, turns.size),
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontFeatureSettings = "tnum",
+                ),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -175,7 +177,9 @@ private fun TurnIndexRow(
     ) {
         Text(
             text = number.toString(),
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontFeatureSettings = "tnum",
+            ),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(24.dp),
         )
@@ -190,7 +194,9 @@ private fun TurnIndexRow(
                 Spacer(Modifier.size(2.dp))
                 Text(
                     text = Format.duration(elapsed) ?: "",
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFeatureSettings = "tnum",
+                    ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 // A hairline as long as the turn took, against the longest here: the
