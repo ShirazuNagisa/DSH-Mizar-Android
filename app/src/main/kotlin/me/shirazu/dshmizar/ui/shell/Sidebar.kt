@@ -442,14 +442,15 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
         )
     }
     // Narrower than the ladder's tall window: the settings list scrolls, and more
-    // sections are coming. Anchored to the footer, so the window sits inside the
-    // sidebar instead of being pushed against the screen edge.
+    // sections are coming. The footer is the anchor so the window is not pushed off
+    // the right edge, and the offset slides it back toward the gear it belongs to --
+    // right-aligned inside the sidebar, not flush against its left edge.
     AnchoredPopover(
         expanded = showingSettings,
         onDismiss = { showingSettings = false },
-        width = 300.dp,
+        width = 272.dp,
         maxHeight = 400.dp,
-        offset = androidx.compose.ui.unit.DpOffset(0.dp, 44.dp),
+        offset = androidx.compose.ui.unit.DpOffset(x = 21.dp, y = 44.dp),
     ) {
         SettingsDialog(
             state = state,
