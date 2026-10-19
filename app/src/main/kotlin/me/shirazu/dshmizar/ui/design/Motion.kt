@@ -1,39 +1,36 @@
 package me.shirazu.dshmizar.ui.design
 
 import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.EaseInOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 
 /**
- * How things move, in four springs -- ported from iOS `Design/Motion.swift`.
+ * How things move on the console: fast and short.
  *
- * Springs rather than curves because a spring can be interrupted: retargeted
- * mid-flight it carries its velocity into the new destination instead of
- * restarting, and that -- not speed -- is what makes a touch feel answered.
+ * No springs, no overshoot -- an operator's tool answers in 150–220 ms and
+ * sits down. The four names survive so call sites keep their intent:
  *
  *   snappy  controls answering a tap: chevrons, toggles, highlights
  *   smooth  things changing place: rows, sheets of content, the composer
- *   bouncy  something arriving that wants to be noticed: a send, a badge
- *   gentle  the slow settle of large surfaces and of numbers counting up
+ *   bouncy  something arriving that wants to be noticed (a send, a badge) --
+ *           still quick; "noticed" comes from the pop scale, not the spring
+ *   gentle  the settle of large surfaces and of numbers counting up
  *
- * iOS spring(duration, bounce) pairs map onto Compose (dampingRatio, stiffness)
- * by matching the response time:
- *   0.30s/b0 -> NoBouncy + High; 0.50s/b0 -> NoBouncy + MediumLow;
- *   0.45s/b0.18 -> damping 0.82 + Medium; 0.80s/b0.05 -> damping 0.95 + Low.
+ * Reduce Motion replaces every one of them with the same short fade.
  */
 object Motion {
-    fun <T> snappy(): FiniteAnimationSpec<T> = spring(Spring.DampingRatioNoBouncy, Spring.StiffnessHigh)
-    fun <T> smooth(): FiniteAnimationSpec<T> = spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow)
-    fun <T> bouncy(): FiniteAnimationSpec<T> = spring(0.82f, Spring.StiffnessMedium)
-    fun <T> gentle(): FiniteAnimationSpec<T> = spring(0.95f, Spring.StiffnessLow)
+    private val Emphasized = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+
+    fun <T> snappy(): FiniteAnimationSpec<T> = tween(150, easing = Emphasized)
+    fun <T> smooth(): FiniteAnimationSpec<T> = tween(200, easing = Emphasized)
+    fun <T> bouncy(): FiniteAnimationSpec<T> = tween(220, easing = Emphasized)
+    fun <T> gentle(): FiniteAnimationSpec<T> = tween(300, easing = Emphasized)
 
     /** What every one of them becomes under Reduce Motion. */
-    fun <T> fade(): FiniteAnimationSpec<T> = tween(220, easing = EaseInOut)
+    fun <T> fade(): FiniteAnimationSpec<T> = tween(220)
 
     /** The animation to use, given the operator's Reduce Motion setting. */
     @Composable

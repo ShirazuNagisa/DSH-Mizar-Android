@@ -11,71 +11,72 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 
 /**
- * The panel's accent, ported from the iOS app's asset catalogue: a cyan deep
- * enough to carry white text in the light appearance and bright enough to
- * glow in the dark one.
- */
-val AccentLight = Color(0xFF0A78AE)
-val AccentDark = Color(0xFF3CCBF4)
-
-/**
- * Neutral surfaces, on purpose.
+ * The console palette.
  *
- * Setting only `primary` left every other role at Material's baseline palette, which is
- * blue-violet. On a phone that reads as "the input box is dark blue", and a text
- * selection drawn in the accent over it leaves the selected words hard to read -- the
- * two things an operator complained about before this file had any surfaces in it. The
- * greys below are the panel's own neutrality, so the accent is the only colour that
- * means anything.
+ * The app is an operator's console -- a phone whose job is to be read while a
+ * remote agent works -- so it is dressed like one: a dark ink-blue ground as the
+ * primary scene, one signal cyan that means "this is the accent", and a
+ * blue-grey neutral ladder for everything else. The light appearance is the
+ * paper counterpart, not the other way around.
+ *
+ * State colours stay legible next to the accent by hue distance: running is the
+ * accent itself (the console's own colour of work), waiting is amber, failure
+ * is red, a question is blue.
  */
+
+/** The one accent: signal cyan. Deep on light, glowing on dark. */
+val AccentLight = Color(0xFF0E7C86)
+val AccentDark = Color(0xFF57D7E3)
+
 private val Light = lightColorScheme(
     primary = AccentLight,
     onPrimary = Color.White,
-    background = Color(0xFFF7F8FA),
-    surface = Color(0xFFFDFDFF),
-    surfaceVariant = Color(0xFFEDEFF3),
+    primaryContainer = Color(0xFFD7EEF1),
+    onPrimaryContainer = Color(0xFF062024),
+    background = Color(0xFFF6F7F9),
+    surface = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFFEDF0F4),
     surfaceContainerLowest = Color(0xFFFFFFFF),
-    surfaceContainerLow = Color(0xFFF9FAFC),
-    surfaceContainer = Color(0xFFF2F4F7),
-    surfaceContainerHigh = Color(0xFFEBEEF2),
-    surfaceContainerHighest = Color(0xFFE4E8EE),
-    onSurface = Color(0xFF14171C),
-    onSurfaceVariant = Color(0xFF444A55),
-    outline = Color(0xFF8A9099),
-    outlineVariant = Color(0xFFD3D8DF),
+    surfaceContainerLow = Color(0xFFF4F6F8),
+    surfaceContainer = Color(0xFFEDF0F4),
+    surfaceContainerHigh = Color(0xFFE6EAEF),
+    surfaceContainerHighest = Color(0xFFDDE2EA),
+    onSurface = Color(0xFF161B26),
+    onSurfaceVariant = Color(0xFF5A6372),
+    outline = Color(0xFF9AA3B2),
+    outlineVariant = Color(0xFFDDE2EA),
 )
 
 private val Dark = darkColorScheme(
     primary = AccentDark,
-    onPrimary = Color(0xFF03141F),
-    background = Color(0xFF0D0F12),
-    surface = Color(0xFF111418),
-    surfaceVariant = Color(0xFF1B1F25),
-    surfaceContainerLowest = Color(0xFF090B0E),
-    surfaceContainerLow = Color(0xFF0F1216),
-    surfaceContainer = Color(0xFF14171C),
-    surfaceContainerHigh = Color(0xFF1A1E24),
-    surfaceContainerHighest = Color(0xFF21262E),
-    onSurface = Color(0xFFE8EAEE),
-    onSurfaceVariant = Color(0xFFB3BAC4),
-    outline = Color(0xFF6B7280),
-    outlineVariant = Color(0xFF2C323A),
+    onPrimary = Color(0xFF062024),
+    primaryContainer = Color(0xFF14343B),
+    onPrimaryContainer = Color(0xFFCDEFF4),
+    background = Color(0xFF0C111B),
+    surface = Color(0xFF101623),
+    surfaceVariant = Color(0xFF161D2C),
+    surfaceContainerLowest = Color(0xFF080C14),
+    surfaceContainerLow = Color(0xFF0E1320),
+    surfaceContainer = Color(0xFF121828),
+    surfaceContainerHigh = Color(0xFF161D2E),
+    surfaceContainerHighest = Color(0xFF1C2438),
+    onSurface = Color(0xFFE3E8F0),
+    onSurfaceVariant = Color(0xFF8B94A7),
+    outline = Color(0xFF3A4356),
+    outlineVariant = Color(0xFF232B3B),
 )
 
 /**
- * A selection an operator can actually read.
- *
- * The accent is light in the dark theme, and a translucent accent over dark text is
- * exactly the combination that makes selected words disappear. These are solid mid
- * tones chosen so `onSurface` text keeps its contrast on top of them in both themes.
+ * A selection an operator can actually read: solid mid tones so `onSurface`
+ * text keeps its contrast on top of them in both themes.
  */
 private val SelectionLight = TextSelectionColors(
     handleColor = AccentLight,
-    backgroundColor = Color(0xFFADD4E8),
+    backgroundColor = Color(0xFFBCE3E8),
 )
 private val SelectionDark = TextSelectionColors(
     handleColor = AccentDark,
-    backgroundColor = Color(0xFF2A4A5C),
+    backgroundColor = Color(0xFF1E4A52),
 )
 
 /** How the screen is lit. The default follows the system. */
@@ -86,7 +87,7 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
  *
  * Material 3 with neutral surfaces and one accent, and **no dynamic colour**: the panel
  * is a tool an operator reads under pressure, and a palette that changes with the
- * wallpaper changes what "orange means waiting for you" looks like.
+ * wallpaper changes what "amber means waiting for you" looks like.
  */
 @Composable
 fun MizarTheme(mode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -> Unit) {
@@ -126,39 +127,38 @@ private fun rememberReduceMotion(): Boolean {
 val LocalMizarDark = androidx.compose.runtime.staticCompositionLocalOf { false }
 
 /**
- * The semantic colours the app has always drawn with, ported from the iOS
- * `Theme.swift`. States keep the platform hues so they read the same on both
- * systems; the brand navy and the sidebar ground are the icon's own.
+ * The semantic colours of the console. The brand navy survives for the pairing
+ * screen; the states are chosen to read at a glance against both grounds.
  */
 object MizarColors {
-    /** The icon's navy: pairing screen, Live Activity, settings headers. */
+    /** The icon's navy: pairing screen and brand surfaces. */
     val Navy = Color(0xFF131F3D)
     val NavyDeep = Color(0xFF080D1B)
 
-    // States, in the platform hues (iOS systemGreen/Orange/Red/Blue).
-    val Running @Composable get() = if (LocalMizarDark.current) Color(0xFF30D158) else Color(0xFF34C759)
-    val Waiting @Composable get() = if (LocalMizarDark.current) Color(0xFFFF9F0A) else Color(0xFFFF9500)
-    val Failed @Composable get() = if (LocalMizarDark.current) Color(0xFFFF453A) else Color(0xFFFF3B30)
-    val Question @Composable get() = if (LocalMizarDark.current) Color(0xFF0A84FF) else Color(0xFF007AFF)
+    // States. Running is the accent itself: on this console, "working" is the
+    // house colour.
+    val Running @Composable get() = MaterialTheme.colorScheme.primary
+    val Waiting = Color(0xFFE8A33D)
+    val Failed = Color(0xFFE5484D)
+    val Question @Composable get() = if (LocalMizarDark.current) Color(0xFF6EA2FF) else Color(0xFF2F6FED)
 
     /** Ink for text drawn on an accent fill. */
-    val OnAccent @Composable get() = if (LocalMizarDark.current) Color(0xFF03141F) else Color.White
+    val OnAccent @Composable get() = MaterialTheme.colorScheme.onPrimary
 
     /** The sidebar's ground: one step off the conversation's, so the lifted card reads. */
-    val SidebarBackground @Composable get() = if (LocalMizarDark.current) Color(0xFF131519) else Color(0xFFF3F4F7)
+    val SidebarBackground @Composable get() = if (LocalMizarDark.current) Color(0xFF080C14) else Color(0xFFEEF1F5)
 
-    /** Under the selected row: a sheet of paper on light, a faint lift on dark. */
-    val SelectionFill @Composable get() = if (LocalMizarDark.current) Color.White.copy(alpha = 0.085f) else Color.White
+    /** The selected row: a whisper of the accent, so the mark is colour, not lift. */
+    val SelectionFill @Composable get() = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
 
-    // Kept names, retinted to the state hues above: existing call sites
-    // (approval/failure surfaces) keep compiling while the look moves over.
-    val Warning @Composable get() = Waiting
-    val WarningFill @Composable get() = Waiting.copy(alpha = 0.12f)
+    // Kept names for the approval/failure call sites; the look is the state hues.
+    val Warning get() = Waiting
+    val WarningFill get() = Waiting.copy(alpha = 0.12f)
     val Info @Composable get() = Question
     val InfoFill @Composable get() = Question.copy(alpha = 0.10f)
-    val Failure @Composable get() = Failed
-    val FailureFill @Composable get() = Failed.copy(alpha = 0.09f)
+    val Failure get() = Failed
+    val FailureFill get() = Failed.copy(alpha = 0.09f)
 
-    /** A running turn's indicator: distinct from the accent so it reads as "busy". */
+    /** A running turn's indicator. */
     val Busy @Composable get() = Running
 }

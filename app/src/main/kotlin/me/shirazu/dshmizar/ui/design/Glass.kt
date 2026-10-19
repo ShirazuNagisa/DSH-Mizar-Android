@@ -12,47 +12,36 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import me.shirazu.dshmizar.ui.LocalMizarDark
 
 /**
- * Glass, approximated.
+ * Panels, not glass.
  *
- * The iOS app draws its floating controls in Liquid Glass; Android has no
- * system glass, and minSdk 26 rules out unconditional blur. The approximation
- * the design itself suggests: a translucent solid fill, a hairline highlight
- * stroke (light from above), and a soft shadow. Glass belongs to things that
- * float above content -- toolbars, the composer, the approval dock -- content
- * itself stays solid.
+ * The console draws its floating controls the way it draws everything else: a
+ * flat fill one step up the surface ladder, a hairline stroke, no shadow. The
+ * `glass*` names survive because the call sites picked them; what they mean
+ * now is "a control that floats above content".
  */
 object Glass {
 
-    /** The fill under a glass surface. */
+    /** The fill under a panel: solid, one step up from the ground beneath it. */
     @Composable
-    fun fill(tint: Color? = null): Color {
-        val base = MaterialTheme.colorScheme.surface
-        val dark = LocalMizarDark.current
-        return (tint?.copy(alpha = 0.08f) ?: base).let {
-            if (tint != null) it else base.copy(alpha = if (dark) 0.66f else 0.72f)
-        }
-    }
+    fun fill(tint: Color? = null): Color =
+        tint?.copy(alpha = 0.08f) ?: MaterialTheme.colorScheme.surfaceContainerHigh
 
-    /** The hairline highlight stroke: light from above, stronger on dark. */
+    /** The hairline stroke around a panel. */
     @Composable
     fun strokeBrush(): Brush {
-        val dark = LocalMizarDark.current
-        val top = Color.White.copy(alpha = if (dark) 0.16f else 0.55f)
-        val bottom = Color.White.copy(alpha = if (dark) 0.05f else 0.18f)
-        return Brush.verticalGradient(listOf(top, bottom))
+        val line = MaterialTheme.colorScheme.outlineVariant
+        return Brush.verticalGradient(listOf(line, line))
     }
 }
 
-/** A rounded-rectangle glass surface. */
+/** A rounded-rectangle panel. */
 @Composable
 fun Modifier.glassCard(
     radius: Dp = Radius.card,
@@ -61,31 +50,29 @@ fun Modifier.glassCard(
 ): Modifier {
     val shape: Shape = RoundedCornerShape(radius)
     val borderBrush = if (tintedBorder != null) {
-        Brush.verticalGradient(listOf(tintedBorder.copy(alpha = 0.28f), tintedBorder.copy(alpha = 0.14f)))
+        Brush.verticalGradient(listOf(tintedBorder.copy(alpha = 0.35f), tintedBorder.copy(alpha = 0.20f)))
     } else {
         Glass.strokeBrush()
     }
     return this
-        .shadow(8.dp, shape, ambientColor = Color.Black.copy(alpha = 0.10f), spotColor = Color.Black.copy(alpha = 0.10f))
         .clip(shape)
         .background(Glass.fill(tint))
-        .border(0.75.dp, borderBrush, shape)
+        .border(1.dp, borderBrush, shape)
 }
 
-/** A capsule glass surface. */
+/** A capsule panel. */
 @Composable
 fun Modifier.glassCapsule(tint: Color? = null): Modifier {
     val shape = CircleShape
     return this
-        .shadow(6.dp, shape, ambientColor = Color.Black.copy(alpha = 0.08f), spotColor = Color.Black.copy(alpha = 0.08f))
         .clip(shape)
         .background(Glass.fill(tint))
-        .border(0.75.dp, Glass.strokeBrush(), shape)
+        .border(1.dp, Glass.strokeBrush(), shape)
 }
 
 /**
- * The circular glass buttons the iOS app uses for the sidebar toggle, refresh,
- * jump-to-latest and close: 40/42/44/54 pt.
+ * The circular buttons for the sidebar toggle, refresh, jump-to-latest and
+ * close: 40/42/44/54 dp.
  */
 @Composable
 fun GlassCircleLabel(

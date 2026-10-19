@@ -4,22 +4,31 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * The few numbers the whole app is drawn with, ported from the iOS
- * `Design/Theme.swift`: one radius scale (continuous corners) and the 4-pt
- * spacing grid.
+ * The few numbers the whole app is drawn with. The console look is small
+ * corners and flat surfaces: three radii cover everything, and the 4-pt
+ * spacing grid carries over.
  */
 object Radius {
-    val xs = 8.dp
-    val sm = 12.dp
-    val md = 16.dp
-    val lg = 20.dp
-    val xl = 26.dp
+    /** Chips, small buttons. */
+    val xs = 4.dp
+
+    /** Rows, code blocks, inner surfaces. */
+    val sm = 6.dp
+
+    /** Cards, sheets, the composer. */
+    val md = 10.dp
+
+    /** The one large corner: a sheet-sized card's top. */
+    val lg = 14.dp
+
+    /** Kept for call sites that sized a big sheet. */
+    val xl = 18.dp
 
     /** A sheet-sized card. */
-    val card = 22.dp
+    val card = 10.dp
 
-    /** The conversation card pushed aside to reveal the sidebar. */
-    val cardPushed = 39.dp
+    /** The conversation card pushed aside to reveal a drawer. */
+    val cardPushed = 20.dp
 }
 
 /** The radius of a surface nested inside another, so their curves stay parallel. */
