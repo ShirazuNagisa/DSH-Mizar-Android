@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -232,18 +231,16 @@ fun NewSessionDialog(state: UiState, onDismiss: () -> Unit, onCreate: (String) -
     }
 
     DialogShell(title = stringResource(R.string.new_session), onDismiss = onDismiss) {
-        LazyColumn {
-            for (directory in recent) {
-                item(key = directory) {
-                    ListItem(
-                        headlineContent = { Text(SessionGrouping.lastComponent(directory)) },
-                        supportingContent = {
-                            Text(directory, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                        },
-                        modifier = Modifier.clickable { onCreate(directory) },
-                    )
-                }
-            }
+        // A plain column, not a LazyColumn: the window this lives in already
+        // scrolls, and a lazy list inside a scrolling column never measures.
+        for (directory in recent) {
+            ListItem(
+                headlineContent = { Text(SessionGrouping.lastComponent(directory)) },
+                supportingContent = {
+                    Text(directory, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                },
+                modifier = Modifier.clickable { onCreate(directory) },
+            )
         }
         OutlinedTextField(
             value = path,
@@ -272,21 +269,19 @@ fun NewSessionDialog(state: UiState, onDismiss: () -> Unit, onCreate: (String) -
     }
 }
 
-/** A bottom sheet, with the title and a close button every dialog here wants. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** A window's header: the title and a close button. Mounted inside an
+ *  `AnchoredPopover` at the control that opened it -- no sheet anywhere. */
 @Composable
 internal fun DialogShell(title: String, onDismiss: () -> Unit, content: @Composable () -> Unit) {
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = null) }
-        }
-        content()
-        Spacer(Modifier.height(24.dp))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = null) }
     }
+    content()
+    Spacer(Modifier.height(12.dp))
 }

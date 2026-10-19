@@ -47,12 +47,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import me.shirazu.dshmizar.AppViewModel
 import me.shirazu.dshmizar.UiState
-import me.shirazu.dshmizar.ui.settings.HostPickerDialog
 import me.shirazu.dshmizar.ui.LocalMizarDark
 import me.shirazu.dshmizar.ui.MizarColors
-import me.shirazu.dshmizar.ui.settings.NewSessionDialog
 import me.shirazu.dshmizar.ui.conversation.SessionScreen
-import me.shirazu.dshmizar.ui.settings.SettingsDialog
 import me.shirazu.dshmizar.ui.design.LocalReduceMotion
 import me.shirazu.dshmizar.ui.design.Radius
 import kotlin.math.min
@@ -102,10 +99,9 @@ fun MizarShell(model: AppViewModel, state: UiState) {
         }
     }
 
-    var showingSettings by remember { mutableStateOf(false) }
-    var showingNewSession by remember { mutableStateOf(false) }
-    var showingPicker by remember { mutableStateOf(false) }
-    var showingConnection by remember { mutableStateOf(false) }
+    // Every window grows out of the control that opens it, anchored where the
+    // tap happened: the sidebar and the home view mount their own popovers, and
+    // nothing floats free at the shell's level.
 
     // Open on a launch with nothing selected: the list is the only useful thing to
     // look at. Placed without animating; the first frame is a state, not a change.
@@ -166,10 +162,6 @@ fun MizarShell(model: AppViewModel, state: UiState) {
                 model = model,
                 state = state,
                 shell = shell,
-                onNewSession = { showingNewSession = true },
-                onPickHost = { showingPicker = true },
-                onSettings = { showingSettings = true },
-                onOpenConnection = { showingConnection = true },
             )
         }
 
@@ -216,7 +208,6 @@ fun MizarShell(model: AppViewModel, state: UiState) {
             indexWidthPx = indexWidthPx,
             conversationList = conversationList,
             glowingTurn = glowingTurn,
-            onNewSession = { showingNewSession = true },
         )
 
         // The card, while it is pushed aside, is one big button back.
@@ -239,51 +230,6 @@ fun MizarShell(model: AppViewModel, state: UiState) {
             )
         }
     }
-
-    if (showingSettings) {
-        SettingsDialog(
-            state = state,
-            onDismiss = { showingSettings = false },
-            onForget = { hostId ->
-                showingSettings = false
-                model.forget(hostId)
-            },
-            onAddHost = {
-                showingSettings = false
-                model.startPairing()
-            },
-            onTheme = { mode -> model.setTheme(mode) },
-            onQuietHours = { on -> model.setQuietHours(on) },
-        )
-    }
-    if (showingConnection) {
-        ConnectionPanel(
-            model = model,
-            state = state,
-            onDismiss = { showingConnection = false },
-            onSettings = { showingSettings = true },
-        )
-    }
-    if (showingNewSession) {
-        NewSessionDialog(
-            state = state,
-            onDismiss = { showingNewSession = false },
-            onCreate = { cwd ->
-                showingNewSession = false
-                model.createSession(cwd)
-            },
-        )
-    }
-    if (showingPicker) {
-        HostPickerDialog(
-            state = state,
-            onDismiss = { showingPicker = false },
-            onOpen = { hostId ->
-                showingPicker = false
-                model.openHost(hostId)
-            },
-        )
-    }
 }
 
 /** The conversation, pushed aside as a card while the sidebar shows. */
@@ -299,7 +245,6 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
     indexWidthPx: Float,
     conversationList: LazyListState,
     glowingTurn: Int?,
-    onNewSession: () -> Unit,
 ) {
     val density = LocalDensity.current
     val dark = LocalMizarDark.current
@@ -347,7 +292,6 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
                 model = model,
                 state = state,
                 onOpenSidebar = { shell.toggle() },
-                onChooseWorkspace = onNewSession,
             )
         }
 

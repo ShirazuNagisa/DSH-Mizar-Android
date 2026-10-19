@@ -61,6 +61,8 @@ import me.shirazu.dshmizar.AppViewModel
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.MizarColors
+import me.shirazu.dshmizar.ui.design.AnchoredPopover
+import me.shirazu.dshmizar.ui.design.PopoverSize
 import me.shirazu.dshmizar.ui.design.Transitions
 import me.shirazu.dshmizar.ui.design.glassCapsule
 import me.shirazu.dshmizar.ui.design.pressable
@@ -106,10 +108,7 @@ fun SessionScreen(
     // Whether the field holds the keyboard, so the dock can tuck into a pill.
     var composerFocused by remember { mutableStateOf(false) }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
-    var showingModelPicker by remember { mutableStateOf(false) }
     var showingPermissions by remember { mutableStateOf(false) }
-    var showingContext by remember { mutableStateOf(false) }
-    var showingCommands by remember { mutableStateOf(false) }
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
 
     BackHandler(enabled = !drawerOpen) { model.selectSession(null) }
@@ -278,8 +277,25 @@ fun SessionScreen(
                             )
                         }
                     }
-                    IconButton(onClick = { showingPermissions = true }) {
-                        Icon(Icons.Default.Lock, contentDescription = stringResource(R.string.permissions))
+                    Box {
+                        IconButton(onClick = { showingPermissions = true }) {
+                            Icon(Icons.Default.Lock, contentDescription = stringResource(R.string.permissions))
+                        }
+                        AnchoredPopover(
+                            expanded = showingPermissions,
+                            onDismiss = { showingPermissions = false },
+                            title = stringResource(R.string.permissions),
+                            width = PopoverSize.COMPACT_WIDTH,
+                            maxHeight = PopoverSize.COMPACT_HEIGHT,
+                        ) {
+                            PermissionContent(
+                                state = state,
+                                onChoose = { preset ->
+                                    showingPermissions = false
+                                    model.setPermission(preset)
+                                },
+                            )
+                        }
                     }
                 },
             )
@@ -343,10 +359,11 @@ fun SessionScreen(
                     draft = draft,
                     onDraft = { draft = it },
                     running = running,
-                    onModel = { showingModelPicker = true },
-                    onContext = { showingContext = true },
-                    onCommands = { showingCommands = true },
-                    commandsOpen = showingCommands,
+                    onChooseModel = { selection -> model.setModel(selection) },
+                    onCommand = { slash ->
+                        // Into the draft: the operator finishes the sentence.
+                        draft = if (draft.isBlank()) "$slash " else "$draft $slash "
+                    },
                     onSend = {
                         val text = draft
                         draft = ""
@@ -401,40 +418,6 @@ fun SessionScreen(
             onDone = { if (flight?.key == spec.key) flight = null },
         )
     }
-    }
-
-    if (showingModelPicker) {
-        ModelPickerSheet(
-            state = state,
-            onDismiss = { showingModelPicker = false },
-            onChoose = { selection ->
-                showingModelPicker = false
-                model.setModel(selection)
-            },
-        )
-    }
-    if (showingPermissions) {
-        PermissionSheet(
-            state = state,
-            onDismiss = { showingPermissions = false },
-            onChoose = { preset ->
-                showingPermissions = false
-                model.setPermission(preset)
-            },
-        )
-    }
-    if (showingContext) {
-        ContextSheet(state) { showingContext = false }
-    }
-    if (showingCommands) {
-        CommandSheet(
-            onDismiss = { showingCommands = false },
-            onCommand = { slash ->
-                // Into the draft, then closed: the operator finishes the sentence.
-                draft = if (draft.isBlank()) "$slash " else "$draft $slash "
-                showingCommands = false
-            },
-        )
     }
 }
 

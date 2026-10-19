@@ -64,14 +64,19 @@ import me.shirazu.dshmizar.AppViewModel
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.MizarColors
+import me.shirazu.dshmizar.ui.design.AnchoredPopover
 import me.shirazu.dshmizar.ui.design.GlassCircleLabel
 import me.shirazu.dshmizar.ui.design.Motion
+import me.shirazu.dshmizar.ui.design.PopoverSize
 import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.RefreshSpinner
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.glassCapsule
 import me.shirazu.dshmizar.ui.design.glassCard
 import me.shirazu.dshmizar.ui.design.pressable
+import me.shirazu.dshmizar.ui.settings.HostPickerDialog
+import me.shirazu.dshmizar.ui.settings.NewSessionDialog
+import me.shirazu.dshmizar.ui.settings.SettingsDialog
 
 /**
  * The session list under the conversation card, ported from iOS
@@ -84,10 +89,6 @@ fun Sidebar(
     model: AppViewModel,
     state: UiState,
     shell: ShellState,
-    onNewSession: () -> Unit,
-    onPickHost: () -> Unit,
-    onSettings: () -> Unit,
-    onOpenConnection: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     val hostId = state.host?.hostId
@@ -149,16 +150,38 @@ fun Sidebar(
     }
 
     Column(modifier = Modifier.fillMaxSize().nestedScroll(pullConnection).statusBarsPadding().navigationBarsPadding()) {
-        // Header: the Mac's name, and a refresh button that turns while it works.
+        // Header: the computer's name -- a tap on it switches computers, when
+        // there is more than one -- and a refresh button that turns while it works.
+        var showingPicker by remember { mutableStateOf(false) }
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = Space.lg, vertical = Space.md),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = state.host?.displayName ?: stringResource(R.string.app_name),
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                modifier = Modifier.weight(1f),
-            )
+            Box(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = state.host?.displayName ?: stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    maxLines = 1,
+                    modifier = Modifier.clickable(
+                        enabled = state.hosts.size > 1,
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null,
+                    ) { showingPicker = true },
+                )
+                AnchoredPopover(
+                    expanded = showingPicker,
+                    onDismiss = { showingPicker = false },
+                ) {
+                    HostPickerDialog(
+                        state = state,
+                        onDismiss = { showingPicker = false },
+                        onOpen = { hostId ->
+                            showingPicker = false
+                            model.openHost(hostId)
+                        },
+                    )
+                }
+            }
             val spin by rememberInfiniteTransition(label = "refresh").animateFloat(
                 initialValue = 0f,
                 targetValue = if (state.refreshing) 360f else 0f,
@@ -259,29 +282,45 @@ fun Sidebar(
             }
         }
 
-        // New session.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Space.md, vertical = Space.xs)
-                .height(48.dp)
-                .glassCard(radius = Radius.md)
-                .pressable(scale = 0.97f)
-                .clickable { onNewSession() }
-                .padding(horizontal = Space.lg),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Default.Add,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(Space.sm))
-            Text(
-                stringResource(R.string.new_session),
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-            )
+        // New session, and the window that grows out of it.
+        var showingNewSession by remember { mutableStateOf(false) }
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Space.md, vertical = Space.xs)
+                    .height(48.dp)
+                    .glassCard(radius = Radius.md)
+                    .pressable(scale = 0.97f)
+                    .clickable { showingNewSession = true }
+                    .padding(horizontal = Space.lg),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(Space.sm))
+                Text(
+                    stringResource(R.string.new_session),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                )
+            }
+            AnchoredPopover(
+                expanded = showingNewSession,
+                onDismiss = { showingNewSession = false },
+            ) {
+                NewSessionDialog(
+                    state = state,
+                    onDismiss = { showingNewSession = false },
+                    onCreate = { cwd ->
+                        showingNewSession = false
+                        model.createSession(cwd)
+                    },
+                )
+            }
         }
 
         // The gap a pull opens between the new-session key and the workspaces:
@@ -323,13 +362,16 @@ fun Sidebar(
 
         // The pending cards dock in the conversation, above the composer, as on
         // iOS; the list says which rows are waiting with a raised hand instead.
-        ConnectionFooter(state = state, onSettings = onSettings, onOpen = onOpenConnection)
+        ConnectionFooter(model = model, state = state)
     }
 }
 
-/** The capsule at the bottom: a breathing dot, the route, and settings. */
+/** The capsule at the bottom: a breathing dot, the route, and settings -- and
+ *  the two windows that grow out of them. */
 @Composable
-private fun ConnectionFooter(state: UiState, onSettings: () -> Unit, onOpen: () -> Unit) {
+private fun ConnectionFooter(model: AppViewModel, state: UiState) {
+    var showingConnection by remember { mutableStateOf(false) }
+    var showingSettings by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -337,37 +379,77 @@ private fun ConnectionFooter(state: UiState, onSettings: () -> Unit, onOpen: () 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Space.sm),
     ) {
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .height(54.dp)
-                .glassCapsule()
-                .clickable(onClick = onOpen)
-                .padding(horizontal = Space.lg),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ConnectionDot(connected = state.phase == me.shirazu.dshmizar.Phase.READY && !state.reconnecting)
-            Spacer(Modifier.width(Space.md))
-            Column {
-                Text(
-                    text = stringResource(
-                        if (state.phase == me.shirazu.dshmizar.Phase.READY && !state.reconnecting) {
-                            R.string.connected
-                        } else {
-                            R.string.connecting
-                        },
-                    ),
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Text(
-                    text = state.host?.displayName ?: "",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Box(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp)
+                    .glassCapsule()
+                    .clickable { showingConnection = true }
+                    .padding(horizontal = Space.lg),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ConnectionDot(connected = state.phase == me.shirazu.dshmizar.Phase.READY && !state.reconnecting)
+                Spacer(Modifier.width(Space.md))
+                Column {
+                    Text(
+                        text = stringResource(
+                            if (state.phase == me.shirazu.dshmizar.Phase.READY && !state.reconnecting) {
+                                R.string.connected
+                            } else {
+                                R.string.connecting
+                            },
+                        ),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Text(
+                        text = state.host?.displayName ?: "",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            AnchoredPopover(
+                expanded = showingConnection,
+                onDismiss = { showingConnection = false },
+                width = PopoverSize.COMPACT_WIDTH,
+            ) {
+                ConnectionPanel(
+                    model = model,
+                    state = state,
+                    onDismiss = { showingConnection = false },
+                    onSettings = {
+                        showingConnection = false
+                        showingSettings = true
+                    },
                 )
             }
         }
-        GlassCircleLabel(size = 54.dp, onClick = onSettings) {
-            Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings), modifier = Modifier.size(20.dp))
+        Box {
+            GlassCircleLabel(size = 54.dp, onClick = { showingSettings = true }) {
+                Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings), modifier = Modifier.size(20.dp))
+            }
+            AnchoredPopover(
+                expanded = showingSettings,
+                onDismiss = { showingSettings = false },
+                width = PopoverSize.TALL_WIDTH,
+                maxHeight = PopoverSize.TALL_HEIGHT,
+            ) {
+                SettingsDialog(
+                    state = state,
+                    onDismiss = { showingSettings = false },
+                    onForget = { hostId ->
+                        showingSettings = false
+                        model.forget(hostId)
+                    },
+                    onAddHost = {
+                        showingSettings = false
+                        model.startPairing()
+                    },
+                    onTheme = { mode -> model.setTheme(mode) },
+                    onQuietHours = { on -> model.setQuietHours(on) },
+                )
+            }
         }
     }
 }

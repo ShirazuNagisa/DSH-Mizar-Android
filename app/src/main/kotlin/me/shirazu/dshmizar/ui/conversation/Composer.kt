@@ -66,6 +66,8 @@ import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.LocalReduceMotion
 import me.shirazu.dshmizar.ui.design.Motion
+import me.shirazu.dshmizar.ui.design.AnchoredPopover
+import me.shirazu.dshmizar.ui.design.PopoverSize
 import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.glassCard
@@ -92,10 +94,8 @@ internal fun Composer(
     draft: String,
     onDraft: (String) -> Unit,
     running: Boolean,
-    onModel: () -> Unit,
-    onContext: () -> Unit,
-    onCommands: () -> Unit,
-    commandsOpen: Boolean,
+    onChooseModel: (me.shirazu.mizar.kit.ModelSelection) -> Unit,
+    onCommand: (String) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
     /** Reported upward so the interactions dock can tuck itself away while typing. */
@@ -104,6 +104,11 @@ internal fun Composer(
     var focused by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val haptics = LocalHapticFeedback.current
+    // Each window grows out of the chip that opens it; the chips own their
+    // windows, so the screen above never has to know they exist.
+    var showingModel by remember { mutableStateOf(false) }
+    var showingContext by remember { mutableStateOf(false) }
+    var showingCommands by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -167,10 +172,20 @@ internal fun Composer(
             ComposerBarRow(
                 state = state,
                 focused = focused,
-                commandsOpen = commandsOpen,
-                onModel = onModel,
-                onContext = onContext,
-                onCommands = onCommands,
+                showingModel = showingModel,
+                showingContext = showingContext,
+                showingCommands = showingCommands,
+                onModel = { showingModel = true },
+                onContext = { showingContext = true },
+                onCommands = { showingCommands = true },
+                onDismissModel = { showingModel = false },
+                onDismissContext = { showingContext = false },
+                onDismissCommands = { showingCommands = false },
+                onChooseModel = { selection ->
+                    showingModel = false
+                    onChooseModel(selection)
+                },
+                onCommand = onCommand,
                 modifier = Modifier.weight(1f),
             )
             Spacer(Modifier.width(4.dp))
@@ -189,21 +204,60 @@ internal fun Composer(
 
 private val Arrangement6 = Arrangement.spacedBy(6.dp)
 
-/** The controls along the bottom of the composer: commands, the model, context. */
+/** The controls along the bottom of the composer: commands, the model, context.
+ *  Each chip carries its window: a popover that grows out of the chip itself. */
 @Composable
 private fun ComposerBarRow(
     state: UiState,
     focused: Boolean,
-    commandsOpen: Boolean,
+    showingModel: Boolean,
+    showingContext: Boolean,
+    showingCommands: Boolean,
     onModel: () -> Unit,
     onContext: () -> Unit,
     onCommands: () -> Unit,
+    onDismissModel: () -> Unit,
+    onDismissContext: () -> Unit,
+    onDismissCommands: () -> Unit,
+    onChooseModel: (me.shirazu.mizar.kit.ModelSelection) -> Unit,
+    onCommand: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement6) {
-        CommandButton(open = commandsOpen, onClick = onCommands)
-        ModelPill(state = state, focused = focused, onClick = onModel, modifier = Modifier.weight(1f, fill = false))
-        ContextPill(state = state, onClick = onContext)
+        Box {
+            CommandButton(open = showingCommands, onClick = onCommands)
+            AnchoredPopover(
+                expanded = showingCommands,
+                onDismiss = onDismissCommands,
+                title = stringResource(R.string.commands),
+                width = PopoverSize.COMPACT_WIDTH,
+                maxHeight = PopoverSize.COMPACT_HEIGHT,
+            ) {
+                CommandContent(onCommand = { onCommand(it); onDismissCommands() })
+            }
+        }
+        Box(modifier = Modifier.weight(1f, fill = false)) {
+            ModelPill(state = state, focused = focused, onClick = onModel)
+            AnchoredPopover(
+                expanded = showingModel,
+                onDismiss = onDismissModel,
+                title = stringResource(R.string.model),
+            ) {
+                ModelPickerContent(state = state, onChoose = onChooseModel)
+            }
+        }
+        Box {
+            ContextPill(state = state, onClick = onContext)
+            AnchoredPopover(
+                expanded = showingContext,
+                onDismiss = onDismissContext,
+                title = stringResource(R.string.context),
+                width = PopoverSize.COMPACT_WIDTH,
+                maxHeight = PopoverSize.COMPACT_HEIGHT,
+            ) {
+                ContextContent(state = state)
+            }
+        }
     }
 }
 

@@ -50,10 +50,12 @@ import me.shirazu.dshmizar.AppViewModel
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.MizarColors
+import me.shirazu.dshmizar.ui.design.AnchoredPopover
 import me.shirazu.dshmizar.ui.design.MizarMarkConnecting
 import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.glassCard
 import me.shirazu.dshmizar.ui.design.pressable
+import me.shirazu.dshmizar.ui.settings.NewSessionDialog
 import androidx.compose.animation.core.animateFloatAsState
 import me.shirazu.dshmizar.ui.design.Motion
 
@@ -69,7 +71,6 @@ fun HomeView(
     model: AppViewModel,
     state: UiState,
     onOpenSidebar: () -> Unit,
-    onChooseWorkspace: () -> Unit,
 ) {
     var draft by remember { mutableStateOf("") }
     // Where the new session will work. Defaults to the first workspace, and
@@ -165,8 +166,9 @@ fun HomeView(
                 WorkspaceMenu(
                     choices = choices.map { it.path to it.title },
                     selected = workspace,
+                    state = state,
+                    model = model,
                     onSelect = { workspace = it },
-                    onChooseOther = onChooseWorkspace,
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 Spacer(Modifier.weight(1f))
@@ -203,16 +205,19 @@ fun HomeView(
     }
 }
 
-/** One button, labelled with its choice, opening the list of workspaces. */
+/** One button, labelled with its choice, opening the list of workspaces; the
+ *  "somewhere else" window grows out of the same button. */
 @Composable
 private fun WorkspaceMenu(
     choices: List<Pair<String, String>>,
     selected: String?,
+    state: UiState,
+    model: AppViewModel,
     onSelect: (String) -> Unit,
-    onChooseOther: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var open by remember { mutableStateOf(false) }
+    var choosingOther by remember { mutableStateOf(false) }
     val title = choices.firstOrNull { it.first == selected }?.second
         ?: stringResource(R.string.choose_workspace)
 
@@ -265,7 +270,20 @@ private fun WorkspaceMenu(
                 text = { Text(stringResource(R.string.somewhere_else)) },
                 onClick = {
                     open = false
-                    onChooseOther()
+                    choosingOther = true
+                },
+            )
+        }
+        AnchoredPopover(
+            expanded = choosingOther,
+            onDismiss = { choosingOther = false },
+        ) {
+            NewSessionDialog(
+                state = state,
+                onDismiss = { choosingOther = false },
+                onCreate = { cwd ->
+                    choosingOther = false
+                    model.createSession(cwd)
                 },
             )
         }
