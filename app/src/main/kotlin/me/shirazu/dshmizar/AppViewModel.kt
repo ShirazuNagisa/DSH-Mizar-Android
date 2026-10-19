@@ -1323,7 +1323,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         selection.reasoningEffort?.let { put("reasoningEffort", it) }
                     },
                 )
-            }.onFailure { error -> _state.update { it.copy(problem = messageOf(error, addressOf())) } }
+            }.onSuccess {
+                note("model set: ${selection.provider}/${selection.model} effort=${selection.reasoningEffort}")
+            }.onFailure { error ->
+                note("model set failed: ${error.message}")
+                _state.update { it.copy(problem = messageOf(error, addressOf())) }
+            }
         }
     }
 

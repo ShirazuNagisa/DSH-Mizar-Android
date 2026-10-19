@@ -57,6 +57,7 @@
     <string name="load_earlier">加载更早的消息</string>
     <string name="step_count">%1$d 个步骤</string>
     <string name="turn_deep_seeking">深度求索中~</string>
+    <string name="reasoning_effort">推理强度</string>
     <string name="completed_in">已完成，用时 %1$s</string>
     <string name="completed">已完成</string>
     <string name="unfinished_after">未完成，已用时 %1$s</string>

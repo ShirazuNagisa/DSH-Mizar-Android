@@ -1,6 +1,10 @@
 package me.shirazu.dshmizar.ui.conversation
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -22,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -33,6 +39,7 @@ import me.shirazu.dshmizar.ui.design.PopoverRow
 import me.shirazu.dshmizar.ui.design.PopoverSection
 import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.mizar.kit.ModelSelection
+import me.shirazu.mizar.kit.ReasoningEffortOption
 
 /**
  * The contents of the windows the composer and the top bar open: the model
@@ -53,22 +60,60 @@ internal fun ModelPickerContent(state: UiState, onChoose: (ModelSelection) -> Un
         }
         return
     }
+
+    // What this session is on, by the same three sources the composer's chip reads.
+    // Seed the local choice from it, or the rows open with nothing ticked and no way
+    // to tell which model is in force.
+    val inForce = state.selectedSessionId?.let { state.modelChoice[it] }
+        ?: state.stats?.model?.next
+        ?: state.stats?.model?.lastUsed
+        ?: catalog.defaultSelection
+    var chosenProvider by remember(inForce) { mutableStateOf(inForce?.provider) }
+    var chosenModel by remember(inForce) { mutableStateOf(inForce?.model) }
+    var chosenEffort by remember(inForce) { mutableStateOf(inForce?.reasoningEffort) }
+
     for (provider in catalog.providers) {
         PopoverSection(provider.name)
         for (option in provider.models) {
+            val chosen = chosenProvider == provider.id && chosenModel == option.id
             PopoverRow(
                 title = option.name,
                 subtitle = option.description,
                 onClick = {
-                    onChoose(
-                        ModelSelection(
-                            provider = provider.id,
-                            model = option.id,
-                            reasoningEffort = option.defaultEffort ?: option.efforts.firstOrNull()?.id,
-                        ),
-                    )
+                    chosenProvider = provider.id
+                    chosenModel = option.id
+                    chosenEffort = option.defaultEffort
+                    // A model with no levels commits at once: there is nothing else
+                    // to choose, and a second tap would be a formality.
+                    if (option.efforts.isEmpty()) {
+                        onChoose(ModelSelection(provider.id, option.id, null))
+                    }
+                },
+                trailing = if (chosen) {
+                    {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                } else {
+                    null
                 },
             )
+            // The levels are the second half of the same choice, so they fold out
+            // under the row that was tapped rather than opening a window of their own.
+            if (chosen && option.efforts.isNotEmpty()) {
+                EffortChooser(
+                    efforts = option.efforts,
+                    selected = chosenEffort ?: option.defaultEffort,
+                    onPick = { effort ->
+                        chosenEffort = effort
+                        onChoose(ModelSelection(provider.id, option.id, effort))
+                    },
+                )
+            }
         }
     }
     // A provider that could not be listed is shown, not hidden: an empty
@@ -77,6 +122,53 @@ internal fun ModelPickerContent(state: UiState, onChoose: (ModelSelection) -> Un
         PopoverSection(stringResource(R.string.unavailable))
         for (failure in catalog.failures) {
             PopoverRow(title = failure.name, subtitle = failure.message)
+        }
+    }
+}
+
+/**
+ * The reasoning levels of the chosen model.
+ *
+ * It used to be missing entirely: every row committed `defaultEffort`, so picking a
+ * model silently reset the intensity and there was no way to set one. The chip went
+ * on naming a level the host was not running at.
+ */
+@Composable
+private fun EffortChooser(
+    efforts: List<ReasoningEffortOption>,
+    selected: String?,
+    onPick: (String) -> Unit,
+) {
+    Column(modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 9.dp)) {
+        Text(
+            stringResource(R.string.reasoning_effort),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(5.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (effort in efforts) {
+                val on = effort.id == selected
+                Box(
+                    modifier = Modifier
+                        .height(26.dp)
+                        .clip(RoundedCornerShape(Radius.sm))
+                        .background(
+                            if (on) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        )
+                        .clickable { onPick(effort.id) }
+                        .padding(horizontal = 10.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        effort.name,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (on) MaterialTheme.colorScheme.onPrimary
+                        else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
         }
     }
 }

@@ -86,6 +86,7 @@
     <string name="load_earlier">Load earlier messages</string>
     <string name="step_count">%1$d steps</string>
     <string name="turn_deep_seeking">DeepSeeking…</string>
+    <string name="reasoning_effort">Thinking</string>
     <string name="completed_in">Completed in %1$s</string>
     <string name="completed">Completed</string>
     <string name="unfinished_after">Unfinished after %1$s</string>

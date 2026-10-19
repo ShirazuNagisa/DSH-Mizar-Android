@@ -311,10 +311,16 @@ private fun ModelPill(
             ?: state.modelCatalog?.defaultSelection
         // The button naming nothing but "Model" is the one thing it must never do.
         if (chosen == null) return@run stringResource(R.string.model)
-        listOfNotNull(
-            chosen.model,
-            chosen.reasoningEffort?.replaceFirstChar { it.uppercase() },
-        ).joinToString(" · ")
+        // The level's name as the catalogue spells it, not the raw id: the wire value
+        // need not read like a word ("max", "high"), and the picker draws its names.
+        val effortName = chosen.reasoningEffort?.let { effort ->
+            state.modelCatalog?.providers
+                ?.firstOrNull { it.id == chosen.provider }
+                ?.models?.firstOrNull { it.id == chosen.model }
+                ?.efforts?.firstOrNull { it.id == effort }?.name
+                ?: effort.replaceFirstChar { it.uppercase() }
+        }
+        listOfNotNull(chosen.model, effortName).joinToString(" · ")
     }
 
     Row(
