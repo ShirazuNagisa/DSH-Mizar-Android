@@ -1,10 +1,9 @@
 package me.shirazu.dshmizar.ui.conversation
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.EaseInOut
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -12,17 +11,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.min
-import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
@@ -52,6 +49,9 @@ internal object ComposerGeometry {
 /** One send in flight. */
 internal data class FlightSpec(val text: String, val from: Rect, val key: Long)
 
+/** Critically damped: the trip arrives without overshooting the bubble's place. */
+private val FlightSpring = spring<Float>(dampingRatio = 1f, stiffness = 300f)
+
 /**
  * The words in flight: from the field's leading edge, arcing up and out, into
  * the row above the composer where the host's copy will land.
@@ -66,10 +66,14 @@ internal fun FlightGhost(
     // Measured before it moves, so the text does not reflow mid-air and the
     // destination is the bubble's own size.
     var size by remember(flight.key) { mutableStateOf(IntSize.Zero) }
-    val progress = remember(flight.key) { Animatable(0f) }
+    // Settled means landed: the threshold is a thousandth of the trip, well under a
+    // pixel, so the ghost hands over at its destination and never a few points short.
+    val progress = remember(flight.key) { Animatable(0f, visibilityThreshold = 0.001f) }
     LaunchedEffect(flight.key, size) {
         if (size == IntSize.Zero) return@LaunchedEffect
-        progress.animateTo(1f, tween(550, easing = EaseInOut))
+        // A spring, not a fixed 550 ms: most of the trip happens at once, so the
+        // words leave the field with the tap, and the landing eases in on its own.
+        progress.animateTo(1f, FlightSpring)
         onDone()
     }
 
@@ -78,7 +82,6 @@ internal fun FlightGhost(
     val margin = with(density) { 18.dp.toPx() }
     val gap = with(density) { 8.dp.toPx() }
 
-    val p = progress.value
     val bubbleW = size.width.toFloat()
     val bubbleH = size.height.toFloat()
     val startX = flight.from.left - overlayOrigin.x
@@ -86,16 +89,27 @@ internal fun FlightGhost(
     val endX = overlaySize.width - bubbleW - margin
     val endY = (ComposerGeometry.slabTop ?: overlaySize.height.toFloat()) - overlayOrigin.y - bubbleH - gap
 
-    // A little arc: up and out first, then down into place.
-    val x = startX + (endX - startX) * p
-    val y = startY + (endY - startY) * p - sin(p * Math.PI).toFloat() * arc
-
+    // The bubble it becomes is at most the conversation's width less its margins; a
+    // ghost measured against the whole overlay came out wider than its destination,
+    // and a long send landed with its left edge off the screen.
+    val maxWidth = with(density) { (overlaySize.width - 2 * margin).coerceAtLeast(0f).toDp() }
     Box(
         modifier = Modifier
-            .offset { IntOffset(x.roundToInt(), y.roundToInt()) }
-            .scale(0.86f + 0.14f * p)
-            .alpha(if (size == IntSize.Zero) 0f else min(1f, p * 4f))
-            .onSizeChanged { if (size == IntSize.Zero) size = it },
+            .widthIn(max = maxWidth)
+            .onSizeChanged { if (size == IntSize.Zero) size = it }
+            // Every frame of the flight is drawn, never laid out: progress is read here,
+            // in the layer, so the trip recomposes nothing.
+            .graphicsLayer {
+                val p = progress.value.coerceIn(0f, 1f)
+                // A little arc: up and out first, then down into place.
+                translationX = startX + (endX - startX) * p
+                translationY = startY + (endY - startY) * p - sin(p * Math.PI).toFloat() * arc
+                transformOrigin = TransformOrigin(0f, 1f)
+                val s = 0.86f + 0.14f * p
+                scaleX = s
+                scaleY = s
+                alpha = if (size == IntSize.Zero) 0f else min(1f, p * 4f)
+            },
     ) {
         SentBubbleBody(text = flight.text, tail = true)
     }
