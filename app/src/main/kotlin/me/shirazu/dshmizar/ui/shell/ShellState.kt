@@ -55,6 +55,7 @@ class ShellState(
     private val expandedByHost = mutableMapOf<String, Set<String>>()
 
     private var dragOrigin = 0f
+    private var dragStartState = 0f
 
     val isOpen: Boolean get() = kotlin.math.abs(progress.value) > 0.5f
 
@@ -77,6 +78,10 @@ class ShellState(
     fun beginDrag() {
         isDragging = true
         dragOrigin = progress.value
+        // Which drawer (if any) was out when the finger landed. Every drag has to be
+        // able to answer "can this gesture open a drawer, or only close the one that is
+        // already here", and the answer cannot change mid-gesture.
+        dragStartState = settledAt
         dismissKeyboard()
     }
 
@@ -95,30 +100,42 @@ class ShellState(
             raw < -1f -> -1f - rubberBand(-raw - 1f)
             else -> raw
         }
-        // A very short spring rather than an assignment: grabbing the card while it is
-        // still settling blends from where it is drawn instead of jumping.
-        scope.launch {
-            progress.animateTo(banded, spring(dampingRatio = 0.86f, stiffness = Spring.StiffnessHigh))
-        }
+        // A snap, not a spring. Every pointer event used to launch its own animation,
+        // which restarted the spring fifty times a second: the card spent the whole
+        // drag catching up to where the finger had already been, and the drawer felt
+        // heavy exactly when it should feel attached. Under the finger the card is at
+        // the finger's position; the spring belongs to letting go.
+        scope.launch { progress.snapTo(banded) }
     }
 
     /**
      * Let go.
      *
      * @param velocity the finger's speed in sidebar widths per second.
+     * @param travelled how far it moved, as a fraction of the drawer's width, signed.
      */
-    fun endDrag(velocity: Float) {
+    fun endDrag(velocity: Float, travelled: Float) {
         isDragging = false
-        // Where a flick would carry it, a tenth of a second on. Deciding on the
-        // projection rather than the position is what lets a short quick flick open a
-        // drawer and a long slow drag that changes its mind close it. The nearest of
-        // the three stops wins, so a flick that closes one drawer can never throw the
-        // card on into the other -- there is only ever one target.
-        val projected = (progress.value + velocity * 0.12f).coerceIn(-1f, 1f)
+        // Two rules, both deliberate.
+        //
+        // A closed shell opens the drawer the finger actually moved toward -- the sign
+        // of `travelled`, not the sign of a velocity that a synthetic swipe can report
+        // backwards. A quick flick counts on its own; a slow drag has to get a third of
+        // the way, not half.
+        //
+        // A drawer that is already out can only close or stay. It cannot be thrown
+        // across into the other one: that was possible while the target was chosen from
+        // velocity alone, and a rightward flick on the index used to open the sidebar
+        // behind it.
+        val flick = 0.7f
         val target = when {
-            projected > 0.5f -> 1f
-            projected < -0.5f -> -1f
-            else -> 0f
+            dragStartState == 0f -> when {
+                travelled > 0f && (velocity > flick || travelled > 0.34f) -> 1f
+                travelled < 0f && (velocity < -flick || travelled < -0.34f) -> -1f
+                else -> 0f
+            }
+            dragStartState > 0f -> if (velocity < -flick || travelled < -0.34f) 0f else 1f
+            else -> if (velocity > flick || travelled > 0.34f) 0f else -1f
         }
         settle(target, velocity)
     }
@@ -131,9 +148,11 @@ class ShellState(
             } else {
                 // initialVelocity is measured in progress per second, which is exactly
                 // what the drag reports, so no iOS-style relative conversion is needed.
+                // Medium rather than MediumLow: the drawer is a direct-manipulation
+                // surface, and a slow settle reads as the app thinking about it.
                 progress.animateTo(
                     target,
-                    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+                    spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMedium),
                     initialVelocity = velocity,
                 )
             }

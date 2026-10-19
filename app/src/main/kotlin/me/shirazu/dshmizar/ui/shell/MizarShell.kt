@@ -442,7 +442,7 @@ private fun Modifier.drawerDrag(
             } catch (_: IllegalStateException) {
                 0f
             }
-            shell.endDrag(velocity)
+            shell.endDrag(velocity, travelled)
         }
     }
 }
