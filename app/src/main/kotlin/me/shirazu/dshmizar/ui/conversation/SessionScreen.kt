@@ -217,8 +217,17 @@ fun SessionScreen(
     // conversation whose newest turn is in flight is running whatever the list said
     // a second ago. `isPending` covers the window between the prompt being recorded
     // and the host opening its turn.
-    val pendingTurn = state.turns.lastOrNull()?.let { it.isRunning || it.isPending } == true
-    val running = state.sessions.firstOrNull { it.sessionId == state.selectedSessionId }?.running == true || pendingTurn
+    //
+    // Both are bounded by freshness: a copy of the transcript left behind by an older
+    // host, or one whose refresh failed, must not hold the screen on "深度求索中~"
+    // after the work is over. The list turning the row idle and a re-read of the
+    // transcript are the real corrections; this is the belt.
+    val sessionRunning = state.sessions.firstOrNull { it.sessionId == state.selectedSessionId }?.running == true
+    val newestAt = state.conversation.lastOrNull()?.atMillis
+    val recent = newestAt != null && System.currentTimeMillis() - newestAt < IN_FLIGHT_FRESH_MILLIS
+    val lastTurn = state.turns.lastOrNull()
+    val inFlight = lastTurn != null && (lastTurn.isRunning || lastTurn.isPending) && (sessionRunning || recent)
+    val running = sessionRunning || inFlight
     val hasPending = state.pending?.isEmpty == false
     val lastTurnFailed = state.turns.lastOrNull()?.steps?.any { it is ConversationItem.Failure } == true
 
@@ -476,3 +485,12 @@ private fun StatusLine(running: Boolean, pending: Boolean, failed: Boolean) {
         )
     }
 }
+
+/**
+ * How long a copy of the transcript is trusted to say "a turn is in flight".
+ *
+ * The window between sending a prompt and the host opening its turn is milliseconds;
+ * two minutes is generous for that window and short enough that a stale copy cannot
+ * hold the screen on "深度求索中~" after the work is over.
+ */
+private const val IN_FLIGHT_FRESH_MILLIS = 120_000L

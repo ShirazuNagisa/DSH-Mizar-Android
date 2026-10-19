@@ -202,7 +202,8 @@ data class ConversationTurn(
      * alone would draw those as done.
      */
     val failed: Boolean
-        get() = (endedReason != null && endedReason != "completed") || steps.any { it is ConversationItem.Failure }
+        get() = turn != null &&
+        ((endedReason != null && endedReason != "completed") || steps.any { it is ConversationItem.Failure })
 
     /**
      * Whether the steps should be folded behind a summary bar.
@@ -233,8 +234,11 @@ data class ConversationTurn(
             prompts = prompts,
             steps = union(steps, next.steps),
             startedAtMillis = startedAtMillis,
-            endedAtMillis = if (continuation) next.endedAtMillis else endedAtMillis,
-            endedReason = unfinished ?: if (continuation) next.endedReason else endedReason,
+            // An unnumbered group is not a turn: a continuation cannot end it and a
+            // reason cannot belong to it. Clearing both here is what stops a folded
+            // aborted turn from tagging the prompt above it as 未完成.
+            endedAtMillis = if (turn == null) null else if (continuation) next.endedAtMillis else endedAtMillis,
+            endedReason = if (turn == null) null else unfinished ?: if (continuation) next.endedReason else endedReason,
         )
     }
 
@@ -252,8 +256,10 @@ data class ConversationTurn(
         prompts = union(other.prompts, prompts),
         steps = union(other.steps, steps),
         startedAtMillis = listOfNotNull(startedAtMillis, other.startedAtMillis).minOrNull(),
-        endedAtMillis = endedAtMillis ?: other.endedAtMillis,
-        endedReason = endedReason ?: other.endedReason,
+        // Same rule as `absorbing`: whatever either copy carries, an unnumbered group
+        // has no end and no reason.
+        endedAtMillis = if (turn == null && other.turn == null) null else endedAtMillis ?: other.endedAtMillis,
+        endedReason = if (turn == null && other.turn == null) null else endedReason ?: other.endedReason,
     )
 
     companion object {
@@ -377,8 +383,15 @@ object Conversation {
                 // Only a `turn/end` ends a turn. Falling back to the last step's time
                 // made every unfinished turn look finished, with a duration that was
                 // just the age of the newest message in it.
-                endedAtMillis = ended[key],
-                endedReason = reason[key],
+                //
+                // An unnumbered group is not a turn at all -- it is everything before
+                // the first one, or a prompt whose number the host's summary dropped.
+                // An ending recorded under a number cannot be the ending of "no turn",
+                // and letting one through made a prompt-only group carry an `aborted`
+                // reason: a row saying 未完成 over a conversation that had simply moved
+                // on, until the next read rebuilt it.
+                endedAtMillis = if (key == null) null else ended[key],
+                endedReason = if (key == null) null else reason[key],
             )
         }
     }
@@ -519,8 +532,28 @@ fun mergeTurns(cached: List<ConversationTurn>, fresh: List<ConversationTurn>): L
         val known = byId[turn.id]
         byId[turn.id] = if (known == null) turn else turn.merging(known)
     }
-    return collapseContinuations(reclaimStrandedPrompts(byId.values.sortedWith(ConversationTurn.PRECEDES)))
+    return collapseContinuations(
+        // Silenced turns are dropped before folding, not after: an aborted turn that
+        // said nothing must not be absorbed into the completed turn above it, which
+        // would hand that turn the abort's reason and draw it as 未完成.
+        reclaimStrandedPrompts(withoutSilentTurns(byId.values.sortedWith(ConversationTurn.PRECEDES))),
+    )
 }
+
+/**
+ * Drop turns that recorded nothing the operator can see.
+ *
+ * A turn opened and then aborted before it said anything -- the operator pressed
+ * stop, or a new message superseded a turn that had not started working -- leaves a
+ * numbered turn with no prompt and no step. Drawing it drew a bare "未完成" bar under
+ * a conversation that had simply moved on; the report was "the conversation
+ * finished, but the last row says unfinished". A running turn with no prompt yet is
+ * kept: it is the row that says the agent is working.
+ */
+fun withoutSilentTurns(turns: List<ConversationTurn>): List<ConversationTurn> =
+    turns.filterNot { turn ->
+        turn.turn != null && turn.prompts.isEmpty() && turn.steps.isEmpty() && turn.endedAtMillis != null
+    }
 
 /**
  * Fold the turns an agent continued on its own back into the turn they continued.

@@ -197,6 +197,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var lastNotified: String? = null
     private var watchers: Job? = null
 
+    /**
+     * The one in-flight re-read of the open conversation after a turn ended.
+     *
+     * Two things can say the transcript is stale -- the host's `turn.settled` event,
+     * and the session list turning a row from running to idle -- and both can arrive
+     * within the same second. One job, replaced never, keeps the two from fighting.
+     */
+    private var quietRefreshJob: Job? = null
+
     /** Why the last dial failed, and where it was dialling: the notice classifies from these. */
     private var lastConnectFailure: Throwable? = null
     private var lastConnectEndpoint: MizarConnection.Endpoint? = null
@@ -744,6 +753,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         regroup()
         persistIndex()
+        // The host's list is the authority on whether the selected turn is still
+        // running. If the open conversation still thinks it is, that copy is stale --
+        // a host that does not broadcast `turn.settled` (an older plugin) would
+        // otherwise leave the row running for ever.
+        val selected = _state.value.selectedSessionId
+        if (selected != null) {
+            val rowRunning = list.items.firstOrNull { it.sessionId == selected }?.running == true
+            val lastInFlight = _state.value.turns.lastOrNull()?.let { it.isRunning || it.isPending } == true
+            if (!rowRunning && lastInFlight) refreshConversationQuietly()
+        }
         announceFinishedTurns(list.items)
         // The screen opens on what was last read, once: after that the operator is in
         // control of where they are.
@@ -1130,6 +1149,44 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Re-read the open conversation after something made it stale, without the pull
+     * spinner.
+     *
+     * A turn that has ended leaves the last row saying it is still running, and the
+     * status line under the title derives "running" from that row -- so without this
+     * the screen sat on "深度求索中~" until the operator sent something else, which is
+     * exactly what made the completion look like it never happened. The read is a
+     * tail, not a page: the merge keeps the history and only what arrived is fetched.
+     */
+    private fun refreshConversationQuietly() {
+        if (quietRefreshJob?.isActive == true) return
+        quietRefreshJob = viewModelScope.launch {
+            val sessionId = _state.value.selectedSessionId ?: return@launch
+            runCatching {
+                if (!loadBundle(REFRESH_PAGE, _state.value.newestSeq)) {
+                    reload(tail = REFRESH_PAGE, afterSeq = _state.value.newestSeq)
+                }
+                refreshSessionsNow()
+            }.onFailure { note("quiet refresh failed: ${it.message}") }
+            if (_state.value.selectedSessionId == sessionId) lastRefreshAt = System.currentTimeMillis()
+        }
+    }
+
+    /**
+     * A settled turn makes the transcript stale even when the operator is looking at
+     * it: there is nothing to announce, but the last row still reads "running".
+     */
+    private fun afterTurnSettled(sessionId: String) {
+        val current = _state.value
+        if (current.selectedSessionId == sessionId) {
+            refreshConversationQuietly()
+        } else {
+            // Not on screen: the list is what shows it, and the badge is about to stop.
+            viewModelScope.launch { runCatching { refreshSessionsNow() } }
+        }
+    }
+
+    /**
      * Read the pending interactions, and say whether the host answered at all.
      *
      * The answer matters as much as the contents: on a relay, a socket can be dead
@@ -1460,6 +1517,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun onTurnSettled(data: kotlinx.serialization.json.JsonElement) {
         val sessionId = (data["sessionId"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
             ?: run { note("settled: no sessionId in the frame"); return }
+        // Before any decision about the notice: the transcript is stale the moment the
+        // turn ends, in the foreground as much as in the background. A refresh that
+        // only happened off screen is what left the row saying "running" while the
+        // operator watched it finish.
+        afterTurnSettled(sessionId)
         if (foreground) { note("settled $sessionId: on screen, nothing to announce"); return }
         if (announcer.announcedRecently(sessionId, System.currentTimeMillis())) { note("settled $sessionId: already announced"); return }
         if (activity.quietHours() && isQuietNow()) { note("settled $sessionId: quiet hours"); return }

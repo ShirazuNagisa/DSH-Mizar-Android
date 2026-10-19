@@ -1245,8 +1245,10 @@ class ConversationTest {
     fun `the earliest start of two copies of a turn is the one kept`() {
         // The start is a fact about the turn, not about the page: a window that
         // lost the `turn/start` must not move the turn's beginning later.
-        val cached = ConversationTurn(1, emptyList(), emptyList(), 1000, 5000, "completed")
-        val fresh = ConversationTurn(1, emptyList(), emptyList(), 2000, 5000, "completed")
+        // A real turn carries a prompt; a silent turn is dropped as an artifact.
+        val prompt = listOf(message("seq-1", "hello", 1))
+        val cached = ConversationTurn(1, prompt, listOf(step("seq-2", "hi", 2)), 1000, 5000, "completed")
+        val fresh = ConversationTurn(1, prompt, listOf(step("seq-2", "hi", 2)), 2000, 5000, "completed")
         val merged = mergeTurns(cached = listOf(cached), fresh = listOf(fresh))
         assertEquals(1000L, merged.first().startedAtMillis)
         assertEquals(4000L, merged.first().durationMillis)
@@ -1591,5 +1593,87 @@ class ConversationTest {
         val finished = running.copy(endedAtMillis = 200, endedReason = "completed")
         assertFalse(finished.isRunning)
         assertFalse(finished.isPending)
+    }
+    /**
+     * The host's summary projection drops `data.turn` from a prompt, and a page can
+     * carry a `turn/end` for a turn whose `turn/start` fell on the previous page. The
+     * ending belongs to a numbered turn, not to "no turn": attaching it to the
+     * prompt-only group is what made a conversation that had moved on show 未完成.
+     */
+    @Test
+    fun `a lone turn end does not settle an unnumbered prompt group`() {
+        val turns = Conversation.turns(
+            page(
+                """
+                {"sessionId":"s1","asOfSeq":11,"hasMore":false,"records":[
+                  {"type":"event","event":{"type":"user/message","seq":10,"time":1792405163573,
+                    "data":{"content":[{"type":"text","text":"next"}],
+                              "source":{"kind":"user"},"role":"user","id":"p10"},"surfaceOp":"append"}},
+                  {"type":"event","event":{"type":"turn/end","seq":11,"time":1792405203947,
+                    "data":{"turn":9,"reason":{"kind":"aborted","reason":{"kind":"user"}}}}}
+                ]}
+                """.trimIndent(),
+            ),
+        )
+
+        val group = turns.single()
+        assertNull(group.turn, "the prompt has no turn number")
+        assertNull(group.endedAtMillis, "a numbered ending is not this group's ending")
+        assertNull(group.endedReason, "and its reason is not this group's reason")
+        assertTrue(group.isPending, "the group is still a prompt waiting for its turn")
+        assertFalse(group.failed, "an aborted turn elsewhere must not mark it failed")
+    }
+    /**
+     * The report was a conversation that finished and a last row saying 未完成. The
+     * host opens a turn, aborts it before it says anything (a new message superseded
+     * it), and the screen drew that abort as a bar under the turn above it -- and
+     * folding the abort into a completed turn handed it the abort's reason.
+     */
+    @Test
+    fun `a turn aborted before it said anything is dropped, not folded into the one above`() {
+        val answered = turn(
+            number = 5,
+            promptSeqs = listOf(5),
+            stepSeqs = listOf(6),
+            ended = "completed",
+            startedAtMillis = 100,
+            endedAtMillis = 200,
+        )
+        val aborted = turn(number = 6, ended = "aborted", startedAtMillis = 300, endedAtMillis = 400)
+
+        val merged = mergeTurns(
+            emptyList(),
+            listOf(answered, aborted),
+        )
+
+        assertEquals(1, merged.size, "the silent abort is not a row of its own")
+        val kept = merged.single()
+        assertEquals(5, kept.turn)
+        assertEquals("completed", kept.endedReason, "the turn above keeps its own end")
+        assertFalse(kept.failed, "an abort that said nothing must not mark the turn above unfinished")
+        assertEquals(100L, kept.durationMillis)
+    }
+
+    @Test
+    fun `an unnumbered group is never failed, whatever a merge hands it`() {
+        val prompt = message("seq-9", "hello", 9)
+        val numbered = turn(number = 7, promptSeqs = listOf(8), ended = "aborted", startedAtMillis = 100, endedAtMillis = 200)
+        val group = ConversationTurn(
+            turn = null,
+            prompts = listOf(prompt),
+            steps = emptyList(),
+            startedAtMillis = null,
+            endedAtMillis = null,
+            endedReason = null,
+        )
+        // Even a copy carrying an end and a reason cannot make an unnumbered group fail.
+        val poisoned = group.copy(endedAtMillis = 200, endedReason = "aborted")
+
+        assertFalse(poisoned.failed, "a group with no turn number has no outcome")
+        val merged = poisoned.merging(group)
+        assertNull(merged.endedAtMillis, "two unnumbered copies still have no end")
+        assertNull(merged.endedReason, "and no reason")
+        assertFalse(merged.failed)
+        assertTrue(merged.isPending, "it is a prompt waiting for its turn")
     }
 }

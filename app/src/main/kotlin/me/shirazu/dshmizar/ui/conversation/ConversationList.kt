@@ -77,6 +77,13 @@ internal fun ConversationList(
     onRetry: (String) -> Unit,
     highlightTurn: Int? = null,
 ) {
+    // What the host says about the session, and how fresh the newest record is: the
+    // pair decides whether a copy of a turn can still be "in flight". A stale copy is
+    // how a finished turn kept its running row until the next message refreshed it.
+    val sessionRunning = state.sessions.firstOrNull { it.sessionId == state.selectedSessionId }?.running == true
+    val newestAt = state.conversation.lastOrNull()?.atMillis
+    val recent = newestAt != null && System.currentTimeMillis() - newestAt < IN_FLIGHT_FRESH_MILLIS
+
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
@@ -99,14 +106,18 @@ internal fun ConversationList(
             itemsIndexed(state.turns, key = { _, turn -> turn.id }) { index, turn ->
                 // Only the newest turn can be in flight: either the host has opened it
                 // (`isRunning`) or it has recorded the prompt and not yet the `turn/start`
-                // (`isPending`). Nothing older is treated as waiting.
+                // (`isPending`). Nothing older is treated as waiting, and a copy that has
+                // outlived the window is not trusted -- a stale "running" row is what made
+                // a finished turn look unfinished until the next message refreshed it.
                 TurnSection(
                     turn = turn,
                     now = now,
                     onCopy = onCopy,
                     onRetry = onRetry,
                     highlighted = index == highlightTurn,
-                    waiting = index == state.turns.lastIndex && (turn.isRunning || turn.isPending),
+                    waiting = index == state.turns.lastIndex &&
+                        (turn.isRunning || turn.isPending) &&
+                        (sessionRunning || recent),
                 )
             }
         }
@@ -303,3 +314,12 @@ private fun RiseOnce(content: @Composable () -> Unit) {
         content()
     }
 }
+
+/**
+ * How long a copy of the transcript is trusted to say "a turn is in flight".
+ *
+ * Same window as the session screen's: the gap between a prompt and its `turn/start`
+ * is milliseconds, so two minutes is generous for it and short enough that a stale
+ * copy cannot keep the row saying "深度求索中~".
+ */
+private const val IN_FLIGHT_FRESH_MILLIS = 120_000L
