@@ -165,6 +165,7 @@ fun HomeView(
                             stringResource(R.string.composer_hint),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 20.dp),
                         )
                     }
                     BasicTextField(
@@ -191,7 +192,7 @@ fun HomeView(
                             .fillMaxWidth()
                             .heightIn(min = 44.dp)
                             .wrapContentHeight(Alignment.CenterVertically)
-                            .padding(start = 14.dp),
+                            .padding(start = 20.dp),
                     )
                 }
                 val canSend = workspace != null && draft.isNotBlank()

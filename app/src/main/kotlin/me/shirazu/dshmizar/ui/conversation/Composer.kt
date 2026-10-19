@@ -141,6 +141,7 @@ internal fun Composer(
                         stringResource(R.string.composer_hint),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 20.dp),
                     )
                 }
                 BasicTextField(
@@ -166,7 +167,7 @@ internal fun Composer(
                             focused = it.isFocused
                             onFocusChanged(it.isFocused)
                         }
-                        .padding(start = 14.dp),
+                        .padding(start = 20.dp),
                 )
             }
             Box(modifier = Modifier.padding(end = 8.dp)) {
