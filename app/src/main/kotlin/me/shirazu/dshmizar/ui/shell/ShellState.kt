@@ -116,26 +116,39 @@ class ShellState(
      */
     fun endDrag(velocity: Float, travelled: Float) {
         isDragging = false
-        // Two rules, both deliberate.
+        // Four numbers, and the asymmetry between them is the point.
+        //
+        // Opening takes a little more travel than closing (OPEN vs CLOSE), because the
+        // surface the finger has to cross is not the same on both sides: while a drawer
+        // is out the conversation is a narrower card, so the same finger distance is a
+        // larger fraction of it and closing feels like less work anyway. Making opening
+        // ask for slightly more keeps the two directions feeling equal, instead of the
+        // return trip feeling like it needs a shove.
+        //
+        // Both are lower than they were: the thresholds are not a safety net, they are
+        // the point where the shell guesses. Guessing early is what makes the drawer
+        // feel soft, and it also keeps the finger away from the screen edge, where the
+        // system's full-screen back gesture would otherwise start claiming swipes.
         //
         // A closed shell opens the drawer the finger actually moved toward -- the sign
         // of `travelled`, not the sign of a velocity that a synthetic swipe can report
-        // backwards. A quick flick counts on its own; a slow drag has to get a third of
-        // the way, not half.
-        //
-        // A drawer that is already out can only close or stay. It cannot be thrown
-        // across into the other one: that was possible while the target was chosen from
-        // velocity alone, and a rightward flick on the index used to open the sidebar
-        // behind it.
-        val flick = 0.7f
+        // backwards. A drawer that is already out can only close or stay: a rightward
+        // flick on the index used to throw the card across into the sidebar behind it.
+        // Read against `travelled`, which starts counting only after the touch slop, so
+        // these are shorter than they look on the glass: measured on the phone, a drag
+        // of N pixels reports (N - 74) / 907. 0.20 is a 255 px pull; 0.15 is 210 px.
+        val openTravel = 0.20f
+        val closeTravel = 0.15f
+        val openFlick = 0.70f
+        val closeFlick = 0.55f
         val target = when {
             dragStartState == 0f -> when {
-                travelled > 0f && (velocity > flick || travelled > 0.34f) -> 1f
-                travelled < 0f && (velocity < -flick || travelled < -0.34f) -> -1f
+                travelled > 0f && (velocity > openFlick || travelled > openTravel) -> 1f
+                travelled < 0f && (velocity < -openFlick || travelled < -openTravel) -> -1f
                 else -> 0f
             }
-            dragStartState > 0f -> if (velocity < -flick || travelled < -0.34f) 0f else 1f
-            else -> if (velocity > flick || travelled > 0.34f) 0f else -1f
+            dragStartState > 0f -> if (velocity < -closeFlick || travelled < -closeTravel) 0f else 1f
+            else -> if (velocity > closeFlick || travelled > closeTravel) 0f else -1f
         }
         settle(target, velocity)
     }

@@ -404,17 +404,20 @@ private fun Modifier.drawerDrag(
         // Closed: either direction, and the sign of the movement picks the drawer.
         // A drawer already out accepts only the way back -- which is what stops a
         // flick that closes the sidebar from carrying the card on into the index.
-        val allowRight = shell.settledAt <= 0f
-        val allowLeft = shell.settledAt >= 0f
+        // A hair of tolerance either way: the gate is about which drawer is out, and
+        // an exact float comparison there is a way to refuse a gesture nobody meant to
+        // refuse.
+        val allowRight = shell.settledAt <= 0.001f
+        val allowLeft = shell.settledAt >= -0.001f
         val down = awaitFirstDown(requireUnconsumed = false)
         val tracker = VelocityTracker()
         var began = false
         var rightward = false
         var width = sidebarWidth
         // `dragBy` takes the translation since the drag began, not the step since the
-        // last event. Passing the step moved the card by one event's worth -- sixteen
-        // pixels for a 500 px swipe -- and the settle put it back, which is what "the
-        // gesture does nothing" looked like.
+        // last event, so the steps are accumulated here. The touch slop that has to be
+        // crossed before the drag is recognised is not part of `travelled`; the
+        // thresholds in `endDrag` are read against this number and account for it.
         var travelled = 0f
         val accepted = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
             rightward = change.positionChange().x > 0f
