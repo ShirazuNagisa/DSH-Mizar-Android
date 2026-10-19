@@ -1,0 +1,1800 @@
+diff --git a/docs/attachment-test-results.md b/docs/attachment-test-results.md
+new file mode 100644
+index 0000000..64242ee
+--- /dev/null
++++ b/docs/attachment-test-results.md
+@@ -0,0 +1,33 @@
++# Host attachment validation — 0.8.3-attachments.1
++
++Validated locally on Windows, 2026-10-18 (Asia/Shanghai). All writes and dependency installation were confined to the plugin workspace; no running DSH profile was installed into or restarted by this task.
++
++## Commands and final outcomes
++
++| Check | Result |
++| --- | --- |
++| `npm run build` | PASS: host TypeScript and browser bundle generated |
++| `npm run typecheck` | PASS: host and client |
++| `npm test -- --maxWorkers=2 --reporter=default --reporter=json --outputFile=attachment-tests.json` | PASS: **587/587 tests, 29/29 files**, 40.64 s |
++| `git -c core.safecrlf=false diff --check -- .` | PASS |
++
++The command above regenerates the machine-readable Vitest output locally. Raw reports are not committed because they can contain machine-specific absolute paths; the reviewed summary is recorded here.
++
++## New coverage (84 tests)
++
++- `attachments.test.ts`: 61 storage/security tests including private Windows ACL setup, path-safe names, exact byte reservations, canonical base64, sequential and duplicate chunk handling, simultaneous calls, streamed/on-disk integrity, MIME signatures, foreign device/session references, resource ceilings, expiry, timer cleanup, abort/read races, shutdown and file tampering.
++- `attachment-bridge.test.ts`: 17 tests for true uploadStream argument shape, returned receipts only, mixed image/file content, attach-only prompts, original text semantics including >100 keyed text prompts, stable replay IDs and content conflict rejection, failed/uncertain/partial admission retry, DSH model rejection, successful staging release, and original Android turn.settled preservation.
++- `attachment-socket.test.ts`: 4 real-loopback-WebSocket tests, using temporary state and a fake DSH service boundary: unauthenticated rejection/no new public HTTP routes; 70 KiB sequential upload with reconnect/duplicate chunk/foreign-device attempt and exactly one prompt submission; inbound frame limit; live revocation.
++- `attachment-composition.test.ts`: 2 actual Cordis 4 Context tests for plugin mounting and optional service lookup, with and without attachment services. This specifically catches the unsupported `{required,optional}` inject shape and undeclared direct property lookup.
++
++## Fixes discovered during validation
++
++1. Existing method-table golden test was updated to include the five additive RPCs.
++2. Windows PowerShell Security module loading was unreliable on this machine; private ACL setup now uses built-in .NET DirectoryInfo APIs directly, without module import or parent-directory changes.
++3. Actual Cordis accepts arrays or service-name maps, not `{required,optional}`. Static injection remains the original array; optional services use documented `ctx.get`.
++4. Ordinary text-only requests bypass the attachment replay quota, retaining old optional-field behavior. Existing attached request IDs still reject text-only content mismatches.
++5. Accepted prompts free local staging and reservations immediately after recording acceptance; failed/uncertain prompts retain both verified uploads and any created DSH receipts. Three consecutive five-file sends plus replay are tested.
++
++## Evidence boundary
++
++The suite proves local storage/bridge/socket behavior, not a model's image understanding. DSH image decoding and model admission are intentionally delegated to DSH. The Team Lead separately runs real DSH + original local relay integration in an isolated profile (including a 20 MiB file and mixed five-attachment payload); those results belong in the Lead's end-to-end report.
+diff --git a/docs/attachments-local.md b/docs/attachments-local.md
+new file mode 100644
+index 0000000..40b97aa
+--- /dev/null
++++ b/docs/attachments-local.md
+@@ -0,0 +1,47 @@
++# Private local attachment build — 0.8.3-attachments.1
++
++This is a local evaluation extension, not an upstream Mizar release. The package name stays `dsh-mizar` for explicit replacement/rollback; do not publish this build. Existing plugin MIT notices are preserved. This does not assign a license to the Android app/mizarkit source.
++
++## Wire and DSH integration
++
++The parent `ATTACHMENT-PROTOCOL.md` is the mobile/host contract. All five `attachment.*` methods use the existing authenticated WebSocket; there are no new HTTP routes. Text-only prompts retain the original DSH text part. Both original Android `turn.settled` notifications (live broadcast and missed-completion replay) are retained.
++
++- `attachment.begin` reserves bytes before opening an exclusive random staging file. It accepts no host path. Display names are safe leaf names of at most 240 UTF-8 bytes; Windows reserved names, separators, control/bidi characters and invalid filename characters are rejected. Android sanitizes names before this call.
++- Chunks use canonical padded base64, max 65,536 decoded bytes, with exact sequential offsets. Retrying only the last acknowledged identical chunk is safe, including simultaneous/reconnected retries. Conflicts and older offsets fail.
++- `finish` verifies declared/actual length, streamed and on-disk SHA-256, and image magic bytes. Ready metadata has a separate random attachment ID. Retried finish returns the same metadata. Ready bytes are hashed again while reading for DSH, detecting on-disk changes.
++- Files stream through the **actual** `ctx.fileUploads.uploadStream({sessionId,data,signal,name})` API. Only its returned receipt enters `{type:'file',receiptId}` prompt parts; receipts and local paths are never accepted from the phone or returned to it.
++- Images enter `{type:'image',mediaType,data,name}` prompt parts. DSH remains responsible for complete decoding, normalization, pixel limits and the selected model's image support. Magic checks do not purport to decode an image. Default image size is 20 MiB and is lowered to the composed DSH attachment service's limit.
++- Cordis 4 static injection retains the original service-name array; optional `fileUploads` / `attachments` are read using Cordis's documented `ctx.get` API. This version of Cordis does not accept `{required,optional}` dependency maps. Tests mount the declaration in a real Cordis Context, both with and without the optional services.
++- DSH errors are propagated; `session/attachment-invalid` becomes `ATTACHMENT_INVALID`. A failed prompt does not delete verified uploads. Once DSH accepts, local staging is released immediately (DSH already owns durable data), so successive five-attachment sends do not fill the ten-upload device quota. Accepted retries are answered from the admission ledger, without needing the deleted staging. The client must keep the draft and stable request ID on failure; it must not infer success from a finished upload alone.
++
++## Resource and authorization boundaries
++
++- Private per-mount random temporary directory. POSIX: mode 0700, files 0600. Windows: an OS Windows PowerShell child (no profile, no shell expansion or downloaded script) sets a protected directory ACL granting only the current user's SID, inherited by its files. It touches only the directory just created, never its parent or global TEMP. If ACL setup fails, startup fails closed before storing any attachment bytes. Administrative/OS control of the user's process is outside this boundary.
++- Random exclusive filenames and retained file handles; a phone-supplied name is never used as a path. Documents are never automatically opened or executed.
++- Maximum 20 MiB/file, 20 MiB/image (or lower DSH image limit), five distinct attachments/prompt, 100 active uploads globally, ten/device, 200 MiB aggregate reserved bytes. Ready uploads count toward these limits too.
++- Upload age is absolute: 30 minutes from begin, not extended by chunks or retries. A minute timer removes expired incomplete and ready files. Abort is serialized and idempotent for unknown IDs; foreign existing IDs cannot be modified. Normal unload cancels streaming and removes this mount's directory. Failed deletion retains the reservation until cleanup succeeds.
++- Uploads and ready references are scoped to the authenticated device and original session, not a client-provided owner. They survive socket reconnect but not process restart. No arbitrary filesystem RPC exists.
++- Per-upload locking covers chunk/finish/abort/read/cleanup. Multiple-file lock order is deterministic. Pending begins and per-upload operations are bounded. The WebSocket limits input to 512 KiB and eight outstanding methods per socket; attachment chunks fit comfortably.
++- Attached prompts require `requestId`. The 30-minute bounded admission ledger binds it to device, session, exact text, attachment order, mode and timezone. Concurrent identical requests share one admission, completed ones reuse acceptance, conflicting content is rejected. Failed/uncertain delivery reuses its cached DSH file receipts and the same request ID. Files are cached per prompt admission, not shared as one bound receipt across different prompt requests. The ledger caps at 1,000 global / 100 per device for attached prompts. Ordinary text prompts bypass it (preserving original optional fields and throughput), but a text retry that removes attachments from an existing attached request ID is rejected.
++- Only two attached admissions globally and one/device execute simultaneously, bounding the base64 materialization required by DSH's image prompt API.
++
++## Lifecycle caveats
++
++The staging directory and admission ledger are intentionally ephemeral. A hard process kill/power loss cannot run cleanup; a private orphan directory may remain in the OS temporary directory. No broad startup deletion of other instances' temporary files is attempted. Graceful plugin unload and TTL cleanup are covered by tests. Restarted clients must upload again rather than retry stale attachment IDs; they must not invent a new prompt request ID after uncertain delivery. DSH's durable prompt idempotency remains the final protection once a request has reached its inbox/history.
++
++The bridge owns local staging, not DSH's durable attachment/receipt lifecycle. `uploadStream` offers no public delete/retire-upload operation; once admitted there, retention is owned by DSH. The plugin never fabricates or manually deletes DSH's storage files.
++
++## Reproduction and evidence
++
++From the plugin directory:
++
++```bash
++npm install --ignore-scripts --no-audit --no-fund --proxy=socks5://127.0.0.1:10808 --https-proxy=socks5://127.0.0.1:10808 --registry=https://registry.npmjs.org/
++npm run build
++npm run typecheck
++npm test -- --maxWorkers=2
++```
++
++The initial install was isolated in this plugin directory; it did not install to or restart any live DSH profile. Build output under `lib/` is intentionally tracked by the upstream repository. Tests use temporary directories and loopback listeners on ephemeral ports, not the running DSH GUI.
++
++New tests cover malformed/unsafe names and metadata, canonical base64, chunk boundaries/retries/concurrency, limits, TTL/cleanup/disposal, complete and incomplete finish, hash failures and tampering, four image signatures/MIME spoofing, ownership, abort/read races, ordered mixed DSH content, attachment-only sends, receipt caching after partial failure, replay/conflict handling, model rejection, old text behavior, authenticated real-socket upload/reconnect, revocation and transport bounds. A real DSH offline-model end-to-end test is separately coordinated by the Team Lead in an isolated profile; the plugin's fake-boundary tests are not claimed as proof of a live model call.
+diff --git a/package-lock.json b/package-lock.json
+index dfe0553..d0187ea 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -1,12 +1,12 @@
+ {
+   "name": "dsh-mizar",
+-  "version": "0.8.3",
++  "version": "0.8.3-attachments.1",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "dsh-mizar",
+-      "version": "0.8.3",
++      "version": "0.8.3-attachments.1",
+       "license": "MIT",
+       "dependencies": {
+         "ws": "^8.18.0"
+@@ -15,7 +15,9 @@
+         "@deepseek-ai/cordis": "^4.0.4",
+         "@deepseek-ai/dsh-api-gateway": "0.2.1-rc.2",
+         "@deepseek-ai/dsh-api-session-controller": "0.2.1-rc.2",
++        "@deepseek-ai/dsh-attachment": "0.2.1-rc.2",
+         "@deepseek-ai/dsh-client-connection": "0.2.1-rc.2",
++        "@deepseek-ai/dsh-client-file-upload": "0.2.1-rc.2",
+         "@deepseek-ai/dsh-client-ui-slots": "0.2.1-rc.2",
+         "@deepseek-ai/dsh-commands": "0.2.1-rc.2",
+         "@deepseek-ai/dsh-host-webserver": "0.2.1-rc.2",
+@@ -49,6 +51,8 @@
+       "peerDependencies": {
+         "@deepseek-ai/cordis": "~4.0.4",
+         "@deepseek-ai/dsh-api-gateway": "0.2.1-rc.2",
++        "@deepseek-ai/dsh-attachment": "0.2.1-rc.2",
++        "@deepseek-ai/dsh-client-file-upload": "0.2.1-rc.2",
+         "@deepseek-ai/dsh-session": "0.2.1-rc.2",
+         "@deepseek-ai/dsh-session-projection": "0.2.1-rc.2",
+         "@deepseek-ai/dsh-typert-registry": "0.2.1-rc.2",
+@@ -323,7 +327,6 @@
+       "integrity": "sha512-VtSSPYq6cOTZ3kLUAHkjIRq6SOjecfZ4p3lzn1dBU1EcUFJ5fOcN1pM2CLVec4ZYrvMxiB5XwtMeFDQPQ7jgpw==",
+       "dev": true,
+       "license": "MIT",
+-      "peer": true,
+       "peerDependencies": {
+         "@deepseek-ai/cordis": "~4.0.5",
+         "@deepseek-ai/dsh-brand": "0.2.1-rc.2"
+@@ -375,7 +378,6 @@
+       "integrity": "sha512-gLrn7EIxv59e/IBcxOv3x/1AMzkoBdjWAIAGnMLQOnPLl1HLddF1X1gLUAJ73XqhyPp4ePWmz/nReNOluTDN9A==",
+       "dev": true,
+       "license": "MIT",
+-      "peer": true,
+       "dependencies": {
+         "@deepseek-ai/dsh-brand": "0.2.1-rc.2",
+         "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.2",
+diff --git a/package.json b/package.json
+index a62b89a..9faf749 100644
+--- a/package.json
++++ b/package.json
+@@ -43,6 +43,8 @@
+   "peerDependencies": {
+     "@deepseek-ai/cordis": "~4.0.4",
+     "@deepseek-ai/dsh-api-gateway": "0.2.1-rc.2",
++    "@deepseek-ai/dsh-client-file-upload": "0.2.1-rc.2",
++    "@deepseek-ai/dsh-attachment": "0.2.1-rc.2",
+     "@deepseek-ai/dsh-session": "0.2.1-rc.2",
+     "@deepseek-ai/dsh-session-projection": "0.2.1-rc.2",
+     "@deepseek-ai/dsh-typert-registry": "0.2.1-rc.2",
+@@ -51,6 +53,8 @@
+   "devDependencies": {
+     "@deepseek-ai/cordis": "^4.0.4",
+     "@deepseek-ai/dsh-api-gateway": "0.2.1-rc.2",
++    "@deepseek-ai/dsh-client-file-upload": "0.2.1-rc.2",
++    "@deepseek-ai/dsh-attachment": "0.2.1-rc.2",
+     "@deepseek-ai/dsh-api-session-controller": "0.2.1-rc.2",
+     "@deepseek-ai/dsh-client-connection": "0.2.1-rc.2",
+     "@deepseek-ai/dsh-client-ui-slots": "0.2.1-rc.2",
+diff --git a/src/attachments/bridge.ts b/src/attachments/bridge.ts
+new file mode 100644
+index 0000000..20ee0dd
+--- /dev/null
++++ b/src/attachments/bridge.ts
+@@ -0,0 +1,174 @@
++/** Attachment RPCs and replay-safe admission into DSH's real prompt/file services. */
++import { createHash } from 'node:crypto'
++import type { Context, SessionId } from '../dsh.js'
++import { MethodError, optionalString, requireObject, requireString } from '../bridge/method-error.js'
++import { promptSession, type PromptResult, type PromptPart } from '../bridge/sessions.js'
++import { boundedId, UploadStore } from './store.js'
++import { optionalService } from './services.js'
++
++interface PromptOptions {
++  sessionId: string
++  text: string
++  mode: 'queue' | 'steer'
++  requestId?: string
++  clientTimeZone?: string
++}
++interface Admission {
++  readonly deviceId: string
++  readonly fingerprint: string
++  readonly expiresAt: number
++  readonly receipts: Map<string, string>
++  pending?: Promise<PromptResult>
++  result?: PromptResult
++}
++
++/** One instance per plugin mount. Reconnection does not discard uploads or request identity. */
++export class AttachmentBridge {
++  readonly #ctx: Context
++  readonly #admissions = new Map<string, Admission>()
++  readonly #busyDevices = new Set<string>()
++  readonly #now: () => number
++  readonly #timer: ReturnType<typeof setInterval>
++  #closed = false
++
++  constructor(ctx: Context, readonly uploads: UploadStore, now = Date.now) {
++    this.#ctx = ctx
++    this.#now = now
++    this.#timer = setInterval(() => this.#prune(), 60_000)
++    this.#timer.unref?.()
++  }
++
++  capabilities(): unknown {
++    this.#available()
++    return this.uploads.capabilities
++  }
++
++  async begin(deviceId: string, payload: unknown): Promise<unknown> {
++    this.#available()
++    return this.uploads.begin(deviceId, payload)
++  }
++
++  #available(): Context['fileUploads'] {
++    if (this.#closed) throw new MethodError('REMOTE_ERROR', 'attachment service is stopping')
++    const service = optionalService(this.#ctx, 'fileUploads')
++    if (typeof service?.uploadStream !== 'function') {
++      throw new MethodError('NOT_IMPLEMENTED', 'this DSH composition has no streamed file-upload service')
++    }
++    return service
++  }
++
++  async prompt(deviceId: string, payload: unknown, mode: 'queue' | 'steer'): Promise<PromptResult> {
++    const record = requireObject(payload, 'session.prompt')
++    const sessionId = requireString(record, 'sessionId', 'session.prompt')
++    const raw = record['attachments']
++    if (raw !== undefined && (!Array.isArray(raw) || raw.length > 5 ||
++        raw.some((id) => typeof id !== 'string' || id.length === 0 || id.length > 256) || new Set(raw).size !== raw.length)) {
++      throw new MethodError('ATTACHMENT_INVALID', 'attachments must be at most five distinct opaque IDs')
++    }
++    const ids = (raw ?? []) as string[]
++    if (this.#closed) throw new MethodError('REMOTE_ERROR', 'attachment service is stopping')
++    this.#prune()
++    if (!ids.length) {
++      // Preserve the original text client's optional-field semantics and throughput.
++      // Only a key already reserved by an attachment admission is ours to police.
++      const text = requireString(record, 'text', 'session.prompt')
++      const requestId = optionalString(record, 'requestId')
++      const existing = requestId ? this.#admissions.get(JSON.stringify([sessionId, requestId])) : undefined
++      if (existing) throw new MethodError('ATTACHMENT_INVALID', 'requestId was already used with attached prompt content')
++      return promptSession(this.#ctx, {
++        sessionId, text, mode, requestId,
++        clientTimeZone: optionalString(record, 'clientTimeZone'),
++      })
++    }
++    boundedId(sessionId, 'sessionId')
++    const text = record['text']
++    if (typeof text !== 'string' || (text === '' && ids.length === 0)) {
++      throw new MethodError('MALFORMED_FRAME', 'session.prompt requires text, or an empty string with attachments')
++    }
++    // Match the listener's frame bound even when a handler is called in process.
++    if (Buffer.byteLength(text, 'utf8') > 512 * 1024) throw new MethodError('MALFORMED_FRAME', 'prompt text is too long')
++    const requestId = record['requestId'] === undefined ? undefined : boundedId(record['requestId'], 'requestId')
++    if (ids.length && !requestId) throw new MethodError('MALFORMED_FRAME', 'attached prompts require a stable requestId')
++    const clientTimeZone = record['clientTimeZone'] === undefined ? undefined : boundedId(record['clientTimeZone'], 'clientTimeZone')
++    const options: PromptOptions = { sessionId, text, mode, requestId, clientTimeZone }
++    // DSH keys requests by session, not device. Never let a different device reuse
++    // an in-memory key and accidentally get the original device's acceptance.
++    const key = JSON.stringify([sessionId, requestId])
++    const fingerprint = createHash('sha256').update(JSON.stringify([deviceId, sessionId, text, mode, clientTimeZone ?? null, ids])).digest('hex')
++    let admission = this.#admissions.get(key)
++    if (admission) {
++      if (admission.deviceId !== deviceId || admission.fingerprint !== fingerprint) {
++        throw new MethodError('ATTACHMENT_INVALID', 'requestId was already used with different prompt content')
++      }
++      if (admission.result) return { ...admission.result }
++      if (admission.pending) return admission.pending
++    } else {
++      if (this.#admissions.size >= 1000 || [...this.#admissions.values()].filter((item) => item.deviceId === deviceId).length >= 100) {
++        throw new MethodError('UPLOAD_LIMIT_REACHED', 'prompt replay ledger is full; wait for expiry')
++      }
++      admission = { deviceId, fingerprint, receipts: new Map(), expiresAt: this.#now() + 30 * 60 * 1000 }
++      this.#admissions.set(key, admission)
++    }
++    const current = admission
++    // Limit simultaneous base64 image admission: staging is streamed, whereas DSH's
++    // image prompt contract necessarily materializes bounded base64 strings.
++    if (ids.length && (this.#busyDevices.has(deviceId) || this.#busyDevices.size >= 2)) {
++      throw new MethodError('UPLOAD_LIMIT_REACHED', 'another attached prompt is being admitted; retry this same requestId')
++    }
++    if (ids.length) this.#busyDevices.add(deviceId)
++    current.pending = (async () => {
++      const fileUploads = this.#available()
++      return this.uploads.withReady(deviceId, sessionId, ids, async (items) => {
++        const parts: PromptPart[] = []
++        for (const item of items) {
++          if (item.info.kind === 'image') {
++            parts.push({ type: 'image', mediaType: item.info.mediaType!, data: await item.imageData(), name: item.info.name })
++          } else {
++            let receiptId = current.receipts.get(item.info.attachmentId)
++            if (!receiptId) {
++              // The phone never supplies a receipt or a host path. Only the receipt
++              // returned by DSH for this exact Session is allowed into the prompt.
++              const signal = AbortSignal.any([this.uploads.signal, AbortSignal.timeout(60_000)])
++              const value = await fileUploads.uploadStream({
++                sessionId: sessionId as SessionId,
++                data: item.stream(signal), signal, name: item.info.name,
++              })
++              if (typeof value?.receiptId !== 'string' || value.receiptId === '') {
++                throw new MethodError('REMOTE_ERROR', 'DSH file upload returned no receipt')
++              }
++              receiptId = value.receiptId
++              current.receipts.set(item.info.attachmentId, receiptId)
++            }
++            parts.push({ type: 'file', receiptId })
++          }
++        }
++        return promptSession(this.#ctx, { ...options, attachmentParts: parts, signal: this.uploads.signal })
++      })
++    })().then(async (result) => {
++      // Record success first: cleanup must never turn a durably accepted prompt
++      // into an apparent failure. Replays return this result without ready files.
++      current.result = result
++      await this.uploads.releaseAccepted(deviceId, sessionId, ids).catch(() => {
++        // The store logs deletion failures and retains failed reservations for TTL cleanup.
++      })
++      return { ...result }
++    }).finally(() => {
++      current.pending = undefined
++      if (ids.length) this.#busyDevices.delete(deviceId)
++    })
++    return current.pending
++  }
++
++  #prune(): void {
++    for (const [key, value] of this.#admissions) {
++      if (!value.pending && value.expiresAt <= this.#now()) this.#admissions.delete(key)
++    }
++  }
++
++  async dispose(): Promise<void> {
++    this.#closed = true
++    clearInterval(this.#timer)
++    await this.uploads.dispose()
++    this.#admissions.clear()
++  }
++}
+diff --git a/src/attachments/private-directory.ts b/src/attachments/private-directory.ts
+new file mode 100644
+index 0000000..026d1d9
+--- /dev/null
++++ b/src/attachments/private-directory.ts
+@@ -0,0 +1,56 @@
++/** Secure only a newly-created staging directory; never change its parent/TEMP ACL. */
++import { spawn } from 'node:child_process'
++import { chmod } from 'node:fs/promises'
++import { join } from 'node:path'
++
++// Current-user SID, not localized account-name parsing. The path is passed as
++// data in the child environment, not interpolated into PowerShell source.
++const WINDOWS_ACL = `
++$ErrorActionPreference = 'Stop'
++$ProgressPreference = 'SilentlyContinue'
++$path = $env:MIZAR_PRIVATE_UPLOAD_DIRECTORY
++$sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
++$acl = New-Object System.Security.AccessControl.DirectorySecurity
++$acl.SetOwner($sid)
++$acl.SetAccessRuleProtection($true, $false)
++$inheritance = [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
++$propagation = [System.Security.AccessControl.PropagationFlags]::None
++$allow = [System.Security.AccessControl.AccessControlType]::Allow
++$rights = [System.Security.AccessControl.FileSystemRights]::FullControl
++$rule = New-Object System.Security.AccessControl.FileSystemAccessRule($sid, $rights, $inheritance, $propagation, $allow)
++$acl.AddAccessRule($rule)
++$directory = [System.IO.DirectoryInfo]::new($path)
++$directory.SetAccessControl($acl)
++$check = $directory.GetAccessControl()
++if (-not $check.AreAccessRulesProtected) { throw 'Private upload ACL was not protected' }
++$rules = $check.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
++if ($rules.Count -ne 1) { throw 'Private upload ACL has an unexpected rule count' }
++foreach ($entry in $rules) {
++  if ($entry.IdentityReference.Value -ne $sid.Value) {
++    throw 'Private upload ACL contains an unexpected principal'
++  }
++}
++`
++
++export async function makePrivateDirectory(path: string): Promise<void> {
++  if (process.platform !== 'win32') {
++    await chmod(path, 0o700)
++    return
++  }
++  // Windows chmod cannot remove inherited ACL grants. Use the OS-supplied
++  // Windows PowerShell, with no profile, no shell interpolation and no pipes.
++  const executable = join(process.env['SystemRoot'] ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
++  await new Promise<void>((resolve, reject) => {
++    const child = spawn(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(WINDOWS_ACL, 'utf16le').toString('base64')], {
++      windowsHide: true, stdio: 'ignore',
++      env: { ...process.env, MIZAR_PRIVATE_UPLOAD_DIRECTORY: path },
++    })
++    const timer = setTimeout(() => { child.kill(); reject(new Error('Private upload ACL setup timed out')) }, 15_000)
++    child.once('error', (error) => { clearTimeout(timer); reject(error) })
++    child.once('exit', (code) => {
++      clearTimeout(timer)
++      if (code === 0) resolve()
++      else reject(new Error('Cannot secure private upload directory ACL'))
++    })
++  })
++}
+diff --git a/src/attachments/services.ts b/src/attachments/services.ts
+new file mode 100644
+index 0000000..e84997d
+--- /dev/null
++++ b/src/attachments/services.ts
+@@ -0,0 +1,9 @@
++import type { Context } from '../dsh.js'
++
++/** Cordis 4 has no required/optional Inject syntax. Read optional services via
++ * its documented ctx.get API, as the existing workspace and connection bridges do.
++ * Direct property access is only a fallback for plain test/SDK context doubles. */
++export function optionalService<K extends 'fileUploads' | 'attachments'>(ctx: Context, name: K): Context[K] | undefined {
++  if (typeof ctx.get === 'function') return ctx.get(name) as Context[K] | undefined
++  return ctx[name]
++}
+diff --git a/src/attachments/store.ts b/src/attachments/store.ts
+new file mode 100644
+index 0000000..5fe41e0
+--- /dev/null
++++ b/src/attachments/store.ts
+@@ -0,0 +1,419 @@
++/** Bounded, private staging for authenticated mobile uploads. No caller path is used. */
++import { createHash, randomUUID, type Hash } from 'node:crypto'
++import { mkdtemp, open, rm, unlink, type FileHandle } from 'node:fs/promises'
++import { makePrivateDirectory } from './private-directory.js'
++import { tmpdir } from 'node:os'
++import { join } from 'node:path'
++import { MethodError, requireObject, requireString } from '../bridge/method-error.js'
++
++export const IMAGE_MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const
++export type ImageMediaType = (typeof IMAGE_MEDIA_TYPES)[number]
++const MAX_BYTES = 20 * 1024 * 1024
++const CHUNK_BYTES = 64 * 1024
++
++export interface AttachmentInfo {
++  readonly attachmentId: string
++  readonly name: string
++  readonly bytes: number
++  readonly kind: 'image' | 'file'
++  readonly mediaType?: ImageMediaType
++}
++
++export interface ReadyAttachment {
++  readonly info: AttachmentInfo
++  /** Only available while withReady's callback holds the upload's lock. */
++  imageData(): Promise<string>
++  stream(signal?: AbortSignal): AsyncIterable<Uint8Array>
++}
++
++interface Upload {
++  readonly uploadId: string
++  readonly deviceId: string
++  readonly sessionId: string
++  readonly path: string
++  readonly name: string
++  readonly bytes: number
++  readonly kind: 'image' | 'file'
++  readonly mediaType?: ImageMediaType
++  readonly sha256: string
++  readonly expiresAt: number
++  readonly hash: Hash
++  handle: FileHandle
++  offset: number
++  prefix: Buffer
++  last?: { offset: number; bytes: number; digest: string }
++  ready?: AttachmentInfo
++  retired: boolean
++  tail: Promise<unknown>
++  queued: number
++}
++
++export interface UploadStoreOptions {
++  /** Trusted host/test configuration, NEVER taken from an RPC payload. */
++  parent?: string
++  maxFileBytes?: number
++  maxImageBytes?: number
++  maxReservedBytes?: number
++  maxUploads?: number
++  maxDeviceUploads?: number
++  ttlMs?: number
++  cleanupIntervalMs?: number
++  now?: () => number
++  log?: (message: string) => void
++}
++
++/** Reject path-bearing names, control/bidi characters and Windows special filenames. */
++export function displayName(value: unknown): string {
++  if (typeof value !== 'string' || value.trim() === '' || Buffer.byteLength(value, 'utf8') > 240 ||
++      /[\\/<>:"|?*\x00-\x1f\x7f\u202a-\u202e\u2066-\u2069]/u.test(value) ||
++      value === '.' || value === '..' || /[. ]$/.test(value) ||
++      /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(value)) {
++    throw new MethodError('MALFORMED_FRAME', 'attachment name must be a bounded, safe leaf display name')
++  }
++  return value
++}
++
++export function boundedId(value: unknown, label: string): string {
++  if (typeof value !== 'string' || value.trim() === '' || value.length > 256 || /[\x00-\x1f\x7f]/.test(value)) {
++    throw new MethodError('MALFORMED_FRAME', `${label} must be a nonempty string of at most 256 characters`)
++  }
++  return value
++}
++
++function positiveLimit(value: number | undefined, fallback: number): number {
++  return value !== undefined && Number.isSafeInteger(value) && value > 0 ? Math.min(value, fallback) : fallback
++}
++
++function matchesSignature(prefix: Buffer, mediaType: ImageMediaType): boolean {
++  switch (mediaType) {
++    case 'image/png': return prefix.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
++    case 'image/jpeg': return prefix.length >= 3 && prefix[0] === 255 && prefix[1] === 216 && prefix[2] === 255
++    case 'image/gif': return ['GIF87a', 'GIF89a'].includes(prefix.subarray(0, 6).toString('latin1'))
++    case 'image/webp': return prefix.length >= 12 && prefix.toString('latin1', 0, 4) === 'RIFF' && prefix.toString('latin1', 8, 12) === 'WEBP'
++  }
++}
++
++export class UploadStore {
++  readonly #root: string
++  readonly #options: Required<Omit<UploadStoreOptions, 'parent'>>
++  readonly #uploads = new Map<string, Upload>()
++  readonly #attachments = new Map<string, Upload>()
++  readonly #controller = new AbortController()
++  #reservedBytes = 0
++  #beginTail: Promise<unknown> = Promise.resolve()
++  #beginQueued = 0
++  #timer?: ReturnType<typeof setInterval>
++  #cleanup?: Promise<void>
++  #dispose?: Promise<void>
++  #closed = false
++
++  private constructor(root: string, options: UploadStoreOptions) {
++    this.#root = root
++    this.#options = {
++      maxFileBytes: positiveLimit(options.maxFileBytes, MAX_BYTES),
++      maxImageBytes: positiveLimit(options.maxImageBytes, MAX_BYTES),
++      maxReservedBytes: positiveLimit(options.maxReservedBytes, 200 * 1024 * 1024),
++      maxUploads: positiveLimit(options.maxUploads, 100),
++      maxDeviceUploads: positiveLimit(options.maxDeviceUploads, 10),
++      ttlMs: positiveLimit(options.ttlMs, 30 * 60 * 1000),
++      cleanupIntervalMs: positiveLimit(options.cleanupIntervalMs, 60_000),
++      now: options.now ?? Date.now,
++      log: options.log ?? (() => {}),
++    }
++    this.#timer = setInterval(() => { void this.cleanup().catch(() => this.#options.log('attachment cleanup failed')) }, this.#options.cleanupIntervalMs)
++    this.#timer.unref?.()
++  }
++
++  static async open(options: UploadStoreOptions = {}): Promise<UploadStore> {
++    const root = await mkdtemp(join(options.parent ?? tmpdir(), 'mizar-attachments-'))
++    try {
++      // POSIX 0700; Windows removes inheritance and grants only the current SID.
++      // No uploaded bytes are created before this succeeds; fail closed otherwise.
++      await makePrivateDirectory(root)
++      return new UploadStore(root, options)
++    } catch (error) {
++      await rm(root, { recursive: true, force: true })
++      throw error
++    }
++  }
++
++  get signal(): AbortSignal { return this.#controller.signal }
++  get capabilities() {
++    return {
++      version: 1, maxFileBytes: this.#options.maxFileBytes, maxImageBytes: this.#options.maxImageBytes,
++      maxAttachments: 5, chunkBytes: CHUNK_BYTES, expiresSeconds: Math.floor(this.#options.ttlMs / 1000),
++      imageMediaTypes: [...IMAGE_MEDIA_TYPES],
++    }
++  }
++
++  async begin(deviceId: string, payload: unknown): Promise<{ uploadId: string; chunkBytes: number; offset: 0 }> {
++    const record = requireObject(payload, 'attachment.begin')
++    const sessionId = boundedId(record['sessionId'], 'sessionId')
++    const name = displayName(record['name'])
++    const bytes = record['bytes']
++    const sha256 = record['sha256']
++    const kind = record['kind']
++    const mediaType = record['mediaType']
++    if (typeof bytes !== 'number' || !Number.isSafeInteger(bytes) || bytes <= 0 ||
++        typeof sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(sha256) ||
++        (kind !== 'image' && kind !== 'file')) {
++      throw new MethodError('MALFORMED_FRAME', 'attachment.begin requires positive integral bytes, lowercase SHA-256 and image/file kind')
++    }
++    if (kind === 'image' && !(IMAGE_MEDIA_TYPES as readonly unknown[]).includes(mediaType)) {
++      throw new MethodError('ATTACHMENT_INVALID', 'unsupported image media type')
++    }
++    if (kind === 'file' && mediaType !== undefined) {
++      throw new MethodError('MALFORMED_FRAME', 'file uploads do not accept mediaType')
++    }
++    if (bytes > (kind === 'image' ? this.#options.maxImageBytes : this.#options.maxFileBytes)) {
++      throw new MethodError('UPLOAD_TOO_LARGE', 'attachment exceeds the advertised byte limit')
++    }
++    if (this.#beginQueued >= 16) throw new MethodError('UPLOAD_LIMIT_REACHED', 'too many pending uploads')
++    this.#beginQueued++
++    const work = this.#beginTail.then(async () => {
++      this.#assertOpen()
++      if (this.#uploads.size >= this.#options.maxUploads ||
++          [...this.#uploads.values()].filter((upload) => upload.deviceId === deviceId).length >= this.#options.maxDeviceUploads ||
++          this.#reservedBytes + bytes > this.#options.maxReservedBytes) {
++        throw new MethodError('UPLOAD_LIMIT_REACHED', 'upload count or reserved byte limit reached; remove drafts or wait for expiry')
++      }
++      const uploadId = randomUUID()
++      // Both directory and filename are host generated; display names are never paths.
++      const path = join(this.#root, randomUUID())
++      let handle: FileHandle
++      try { handle = await open(path, 'wx+', 0o600) } catch (cause) {
++        throw new MethodError('REMOTE_ERROR', 'cannot create private attachment staging file', cause)
++      }
++      this.#uploads.set(uploadId, {
++        uploadId, deviceId, sessionId, path, handle, name, bytes, sha256, kind,
++        ...(kind === 'image' ? { mediaType: mediaType as ImageMediaType } : {}),
++        expiresAt: this.#options.now() + this.#options.ttlMs,
++        hash: createHash('sha256'), offset: 0, prefix: Buffer.alloc(0), retired: false,
++        tail: Promise.resolve(), queued: 0,
++      })
++      this.#reservedBytes += bytes
++      return { uploadId, chunkBytes: CHUNK_BYTES, offset: 0 as const }
++    })
++    this.#beginTail = work.catch(() => {})
++    try { return await work } finally { this.#beginQueued-- }
++  }
++
++  async chunk(deviceId: string, payload: unknown): Promise<{ offset: number }> {
++    const record = requireObject(payload, 'attachment.chunk')
++    const upload = this.#owned(deviceId, requireString(record, 'uploadId', 'attachment.chunk'))
++    const offset = record['offset']
++    const data = record['data']
++    // Bound encoded input BEFORE decoding, and reject Buffer's permissive base64 variants.
++    if (typeof data !== 'string' || data.length === 0 || data.length > Math.ceil(CHUNK_BYTES / 3) * 4 ||
++        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(data) ||
++        typeof offset !== 'number' || !Number.isSafeInteger(offset) || offset < 0) {
++      throw new MethodError('MALFORMED_FRAME', 'chunk requires a valid offset and bounded canonical base64')
++    }
++    return this.#locked(upload, async () => {
++      await this.#live(upload)
++      const buffer = Buffer.from(data, 'base64')
++      if (buffer.length > CHUNK_BYTES || buffer.toString('base64') !== data) {
++        throw new MethodError('MALFORMED_FRAME', 'chunk is not canonical base64 or exceeds chunkBytes')
++      }
++      const digest = createHash('sha256').update(buffer).digest('hex')
++      if (upload.last?.offset === offset && upload.last.bytes === buffer.length && upload.last.digest === digest) {
++        return { offset: upload.offset }
++      }
++      if (upload.ready || offset !== upload.offset) throw new MethodError('UPLOAD_OFFSET_MISMATCH', 'chunk is not the next expected offset')
++      if (offset + buffer.length > upload.bytes) throw new MethodError('UPLOAD_TOO_LARGE', 'chunk exceeds the declared upload size')
++      try {
++        let written = 0
++        while (written < buffer.length) {
++          const result = await upload.handle.write(buffer, written, buffer.length - written, offset + written)
++          if (!result.bytesWritten) throw new Error('short write')
++          written += result.bytesWritten
++        }
++      } catch (cause) {
++        await this.#retire(upload)
++        throw new MethodError('REMOTE_ERROR', 'attachment staging write failed; start a new upload', cause)
++      }
++      upload.hash.update(buffer)
++      if (upload.prefix.length < 16) upload.prefix = Buffer.concat([upload.prefix, buffer.subarray(0, 16 - upload.prefix.length)])
++      upload.last = { offset, bytes: buffer.length, digest }
++      upload.offset += buffer.length
++      return { offset: upload.offset }
++    })
++  }
++
++  async finish(deviceId: string, payload: unknown): Promise<AttachmentInfo> {
++    const upload = this.#owned(deviceId, requireString(payload, 'uploadId', 'attachment.finish'))
++    return this.#locked(upload, async () => {
++      await this.#live(upload)
++      if (upload.ready) return { ...upload.ready }
++      if (upload.offset !== upload.bytes) throw new MethodError('UPLOAD_INTEGRITY', 'upload is incomplete')
++      if ((await upload.handle.stat()).size !== upload.bytes || upload.hash.copy().digest('hex') !== upload.sha256) {
++        await this.#retire(upload)
++        throw new MethodError('UPLOAD_INTEGRITY', 'attachment length or SHA-256 verification failed; start a new upload')
++      }
++      // Re-read the actual stored bytes too, rather than trusting only the hash
++      // accumulated before filesystem writes. Reads remain bounded to chunkBytes.
++      try {
++        for await (const _ of this.#read(upload)) { /* verifies bytes on disk */ }
++      } catch (cause) {
++        await this.#retire(upload)
++        throw new MethodError('UPLOAD_INTEGRITY', 'stored attachment failed integrity verification', cause)
++      }
++      if (upload.kind === 'image' && !matchesSignature(upload.prefix, upload.mediaType!)) {
++        await this.#retire(upload)
++        throw new MethodError('ATTACHMENT_INVALID', 'image bytes do not match the declared media type')
++      }
++      upload.ready = {
++        attachmentId: randomUUID(), name: upload.name, bytes: upload.bytes, kind: upload.kind,
++        ...(upload.mediaType ? { mediaType: upload.mediaType } : {}),
++      }
++      this.#attachments.set(upload.ready.attachmentId, upload)
++      return { ...upload.ready }
++    })
++  }
++
++  async abort(deviceId: string, payload: unknown): Promise<{ aborted: true }> {
++    this.#assertOpen()
++    const id = requireString(payload, 'uploadId', 'attachment.abort')
++    const upload = this.#uploads.get(id)
++    if (!upload) return { aborted: true }
++    if (upload.deviceId !== deviceId) throw new MethodError('UPLOAD_NOT_FOUND', 'upload not found')
++    await this.#locked(upload, () => this.#retire(upload))
++    return { aborted: true }
++  }
++
++  /** Once DSH has durably accepted a prompt, its staging copy is no longer needed.
++   * Keep failed admissions intact; successful replay is owned by the bridge ledger. */
++  async releaseAccepted(deviceId: string, sessionId: string, ids: readonly string[]): Promise<void> {
++    for (const id of ids) {
++      const upload = this.#attachments.get(id)
++      if (upload?.deviceId === deviceId && upload.sessionId === sessionId) {
++        await this.#locked(upload, () => this.#retire(upload), true)
++      }
++    }
++  }
++
++  /** Pin all referenced files until DSH admission finishes; sorted lock order prevents deadlock. */
++  async withReady<T>(deviceId: string, sessionId: string, ids: readonly string[], use: (items: ReadyAttachment[]) => Promise<T>): Promise<T> {
++    this.#assertOpen()
++    if (ids.length === 0 || ids.length > 5 || new Set(ids).size !== ids.length) {
++      throw new MethodError('ATTACHMENT_INVALID', 'prompt requires 1-5 distinct attachment IDs')
++    }
++    const uploads = ids.map((id) => {
++      const upload = this.#attachments.get(id)
++      if (!upload || upload.deviceId !== deviceId || upload.sessionId !== sessionId || upload.retired) {
++        throw new MethodError('ATTACHMENT_INVALID', 'attachment is not ready or does not belong to this device and session')
++      }
++      return upload
++    })
++    const sorted = [...uploads].sort((a, b) => a.uploadId.localeCompare(b.uploadId))
++    const lock = (index: number): Promise<T> => {
++      const upload = sorted[index]
++      if (!upload) return use(uploads.map((item) => this.#reader(item)))
++      return this.#locked(upload, async () => { await this.#live(upload); return lock(index + 1) })
++    }
++    return lock(0)
++  }
++
++  #reader(upload: Upload): ReadyAttachment {
++    const store = this
++    return {
++      info: { ...upload.ready! },
++      async imageData() {
++        if (upload.kind !== 'image') throw new MethodError('ATTACHMENT_INVALID', 'not an image')
++        const parts: Buffer[] = []
++        for await (const chunk of store.#read(upload, store.signal)) parts.push(chunk)
++        return Buffer.concat(parts, upload.bytes).toString('base64')
++      },
++      stream(signal) { return store.#read(upload, signal) },
++    }
++  }
++
++  async *#read(upload: Upload, signal?: AbortSignal): AsyncIterable<Buffer> {
++    if ((await upload.handle.stat()).size !== upload.bytes) throw new MethodError('UPLOAD_INTEGRITY', 'staged attachment length changed')
++    const digest = createHash('sha256')
++    let offset = 0
++    while (offset < upload.bytes) {
++      this.signal.throwIfAborted()
++      signal?.throwIfAborted()
++      const buffer = Buffer.allocUnsafe(Math.min(CHUNK_BYTES, upload.bytes - offset))
++      const { bytesRead } = await upload.handle.read(buffer, 0, buffer.length, offset)
++      if (!bytesRead) throw new MethodError('UPLOAD_INTEGRITY', 'staged attachment was truncated')
++      offset += bytesRead
++      digest.update(buffer.subarray(0, bytesRead))
++      yield buffer.subarray(0, bytesRead)
++    }
++    if (digest.digest('hex') !== upload.sha256) throw new MethodError('UPLOAD_INTEGRITY', 'staged attachment SHA-256 changed')
++  }
++
++  #assertOpen(): void {
++    if (this.#closed) throw new MethodError('REMOTE_ERROR', 'attachment service is stopping')
++  }
++
++  #owned(deviceId: string, id: string): Upload {
++    this.#assertOpen()
++    const upload = this.#uploads.get(id)
++    if (!upload || upload.deviceId !== deviceId || upload.retired) throw new MethodError('UPLOAD_NOT_FOUND', 'upload not found')
++    return upload
++  }
++
++  async #live(upload: Upload): Promise<void> {
++    this.#assertOpen()
++    if (upload.retired) throw new MethodError('UPLOAD_NOT_FOUND', 'upload not found')
++    if (upload.expiresAt <= this.#options.now()) {
++      await this.#retire(upload)
++      throw new MethodError('UPLOAD_EXPIRED', 'attachment expired; select or upload it again')
++    }
++  }
++
++  #locked<T>(upload: Upload, work: () => Promise<T>, maintenance = false): Promise<T> {
++    if (!maintenance && upload.queued >= 8) return Promise.reject(new MethodError('UPLOAD_LIMIT_REACHED', 'too many pending operations for this upload'))
++    upload.queued++
++    const next = upload.tail.then(work)
++    upload.tail = next.catch(() => {})
++    return next.finally(() => { upload.queued-- })
++  }
++
++  async #retire(upload: Upload): Promise<void> {
++    upload.retired = true
++    if (upload.ready) this.#attachments.delete(upload.ready.attachmentId)
++    try {
++      await upload.handle.close()
++      await unlink(upload.path).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error })
++      if (this.#uploads.delete(upload.uploadId)) this.#reservedBytes -= upload.bytes
++    } catch {
++      // Keep the reservation until cleanup can really remove the file; disk errors
++      // must not turn repeated abort/begin into unbounded leaked disk usage.
++      this.#options.log('attachment file cleanup failed; will retry')
++    }
++  }
++
++  cleanup(): Promise<void> {
++    if (this.#cleanup) return this.#cleanup
++    this.#cleanup = (async () => {
++      for (const upload of this.#uploads.values()) {
++        if (upload.retired || upload.expiresAt <= this.#options.now()) {
++          await this.#locked(upload, () => this.#retire(upload), true)
++        }
++      }
++    })().finally(() => { this.#cleanup = undefined })
++    return this.#cleanup
++  }
++
++  dispose(): Promise<void> {
++    if (this.#dispose) return this.#dispose
++    this.#closed = true
++    this.#controller.abort()
++    clearInterval(this.#timer)
++    this.#dispose = (async () => {
++      await this.#beginTail
++      await this.#cleanup
++      for (const upload of this.#uploads.values()) await this.#locked(upload, () => this.#retire(upload), true)
++      // This exact random root was created by us, never received from a client.
++      await rm(this.#root, { recursive: true, force: true })
++      this.#uploads.clear()
++      this.#attachments.clear()
++      this.#reservedBytes = 0
++    })()
++    return this.#dispose
++  }
++}
+diff --git a/src/bridge/errors.ts b/src/bridge/errors.ts
+index 6e48fe8..3916abe 100644
+--- a/src/bridge/errors.ts
++++ b/src/bridge/errors.ts
+@@ -39,6 +39,7 @@ const MAPPED: Readonly<Record<string, ErrorCode>> = {
+   'session/writer-held': 'WRITER_HELD',
+   // The selected provider/model pair is not in the available catalog.
+   'session/model-unavailable': 'MODEL_UNAVAILABLE',
++  'session/attachment-invalid': 'ATTACHMENT_INVALID',
+   // The default model could not be initialised because the provider exposes no
+   // usable model at all.
+   'session/provider-models-unavailable': 'MODEL_UNAVAILABLE',
+diff --git a/src/bridge/index.ts b/src/bridge/index.ts
+index 6d21eac..05c96c8 100644
+--- a/src/bridge/index.ts
++++ b/src/bridge/index.ts
+@@ -12,6 +12,7 @@
+  * @module dsh-mizar/bridge
+  */
+ import type { Context } from '../dsh.js'
++import type { AttachmentBridge } from '../attachments/bridge.js'
+ import { isLiveActivityToken } from '../auth/devices.js'
+ import { deliverQuestionAnswers } from './answerers.js'
+ import type { DeliveryLedger } from './delivery.js'
+@@ -231,7 +232,12 @@ export function createMethodTable(
+   broker: InteractionBroker,
+   push?: PushBinding,
+   delivery?: DeliveryLedger,
++  attachments?: AttachmentBridge,
+ ): Record<string, MethodHandler> {
++  const attachmentService = (): AttachmentBridge => {
++    if (!attachments) throw new MethodError('NOT_IMPLEMENTED', 'install the attachment-enabled host plugin')
++    return attachments
++  }
+   const table: Record<string, MethodHandler> = {
+     /** Host identity and protocol facts. */
+     'host.info': async () => ({
+@@ -325,14 +331,27 @@ export function createMethodTable(
+      * the host treats it as an idempotency key and will not insert the same
+      * message twice.
+      */
+-    'session.prompt': async (payload) =>
+-      promptSession(ctx, {
++    'session.prompt': async (payload, context) => {
++      if (attachments) return attachments.prompt(context.deviceId, payload, readMode(payload))
++      const record = optionalObject(payload, 'session.prompt')
++      // A host without the extension must never silently discard requested files.
++      if (record['attachments'] !== undefined && (!Array.isArray(record['attachments']) || record['attachments'].length > 0)) {
++        return attachmentService().prompt(context.deviceId, payload, readMode(payload))
++      }
++      return promptSession(ctx, {
+         sessionId: requireString(payload, 'sessionId', 'session.prompt'),
+         text: requireString(payload, 'text', 'session.prompt'),
+         mode: readMode(payload),
+         requestId: optionalString(payload, 'requestId'),
+         clientTimeZone: optionalString(payload, 'clientTimeZone'),
+-      }),
++      })
++    },
++
++    'attachment.capabilities': async () => attachmentService().capabilities(),
++    'attachment.begin': async (payload, context) => attachmentService().begin(context.deviceId, payload),
++    'attachment.chunk': async (payload, context) => attachmentService().uploads.chunk(context.deviceId, payload),
++    'attachment.finish': async (payload, context) => attachmentService().uploads.finish(context.deviceId, payload),
++    'attachment.abort': async (payload, context) => attachmentService().uploads.abort(context.deviceId, payload),
+ 
+     /** Interrupt the running turn. */
+     'session.cancel': async (payload) =>
+diff --git a/src/bridge/sessions.ts b/src/bridge/sessions.ts
+index 15985b0..1d84fd2 100644
+--- a/src/bridge/sessions.ts
++++ b/src/bridge/sessions.ts
+@@ -700,6 +700,11 @@ export async function createSession(
+   }
+ }
+ 
++/** Host-generated content only: the mobile wire never accepts these parts directly. */
++export type PromptPart =
++  | { readonly type: 'image'; readonly mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'; readonly data: string; readonly name: string }
++  | { readonly type: 'file'; readonly receiptId: string }
++
+ /** Acceptance of a prompt. */
+ export interface PromptResult {
+   /** Always true when the call succeeds; the host rejects rather than queues silently. */
+@@ -729,6 +734,8 @@ export async function promptSession(
+     mode?: 'queue' | 'steer'
+     requestId?: string
+     clientTimeZone?: string
++    attachmentParts?: readonly PromptPart[]
++    signal?: AbortSignal
+   },
+ ): Promise<PromptResult> {
+   const requestId = options.requestId ?? randomUUID()
+@@ -741,11 +748,16 @@ export async function promptSession(
+         requestId,
+         sessionId: options.sessionId,
+         mode: options.mode ?? 'queue',
+-        content: [{ type: 'text', text: options.text }],
++        content: [
++          ...(options.text !== '' || !options.attachmentParts?.length ? [{ type: 'text', text: options.text }] : []),
++          ...(options.attachmentParts ?? []),
++        ],
+         ...(options.clientTimeZone === undefined ? {} : { clientTimeZone: options.clientTimeZone }),
+       },
+     },
+-    signal: AbortSignal.timeout(60_000),
++    signal: options.signal
++      ? AbortSignal.any([options.signal, AbortSignal.timeout(60_000)])
++      : AbortSignal.timeout(60_000),
+   })
+ 
+   return { accepted: true, requestId }
+diff --git a/src/dsh.ts b/src/dsh.ts
+index d4ba1ce..dd5b8a4 100644
+--- a/src/dsh.ts
++++ b/src/dsh.ts
+@@ -17,6 +17,8 @@
+  */
+ import type {} from '@deepseek-ai/dsh-api-gateway'
+ import type {} from '@deepseek-ai/dsh-client-connection'
++import type {} from '@deepseek-ai/dsh-client-file-upload'
++import type {} from '@deepseek-ai/dsh-attachment'
+ import type {} from '@deepseek-ai/dsh-session'
+ import type {} from '@deepseek-ai/dsh-session-projection'
+ import type {} from '@deepseek-ai/dsh-typert-registry'
+diff --git a/src/index.ts b/src/index.ts
+index 8314893..f5b97a6 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -15,6 +15,9 @@ import { Config } from './config.js'
+ import type { Config as MizarConfig } from './config.js'
+ import { registerAnswerers } from './bridge/answerers.js'
+ import { DeliveryLedger } from './bridge/delivery.js'
++import { UploadStore } from './attachments/store.js'
++import { AttachmentBridge } from './attachments/bridge.js'
++import { optionalService } from './attachments/services.js'
+ import { createMethodTable } from './bridge/index.js'
+ import { InteractionBroker } from './bridge/interactions.js'
+ import { listSessions, sessionStats } from './bridge/sessions.js'
+@@ -89,7 +92,7 @@ const systemLocale = (() => {
+  * code in place and every symptom unchanged. One line at boot turns that from a
+  * guess into a fact.
+  */
+-const MIZAR_VERSION = '0.8.3'
++const MIZAR_VERSION = '0.8.3-attachments.1'
+ 
+ /**
+  * Services this plugin must observe before it activates.
+@@ -300,6 +303,20 @@ async function startListener(
+   // authority when they send one, and this answers the requests that do not.
+   const delivery = new DeliveryLedger()
+ 
++  const uploads = await UploadStore.open({
++    maxImageBytes: optionalService(ctx, 'attachments')?.imageLimits.maxImageBytes,
++    log: report,
++  })
++  const attachments = new AttachmentBridge(ctx, uploads)
++  const stopAttachments = (): void => {
++    void attachments.dispose().catch(() => report('attachment shutdown cleanup failed'))
++  }
++  signal.addEventListener('abort', stopAttachments, { once: true })
++  if (signal.aborted) {
++    await attachments.dispose()
++    signal.throwIfAborted()
++  }
++
+   const methods = createMethodTable(
+     ctx,
+     {
+@@ -311,6 +328,7 @@ async function startListener(
+     broker,
+     push,
+     delivery,
++    attachments,
+   )
+ 
+   // A stable handle the rest of the plugin reads through, so a rebind can swap
+@@ -623,6 +641,8 @@ export function apply(ctx: Context, config: MizarConfig): void {
+           `ready — pair with the code shown in the DSH Web panel, or reach ${listener.authorities.join(' / ')}`,
+         )
+       } catch (error) {
++        // Tear down attachment staging even when the listener never bound a port.
++        controller.abort()
+         report(`listener failed to start — ${describe(error)}`)
+       }
+     })()
+diff --git a/src/protocol/frames.ts b/src/protocol/frames.ts
+index 834c8c7..2669640 100644
+--- a/src/protocol/frames.ts
++++ b/src/protocol/frames.ts
+@@ -70,6 +70,13 @@ export const ERROR_CODES = [
+   // original code is preserved in the message.
+   'REMOTE_ERROR',
+   'NOT_IMPLEMENTED',
++  'UPLOAD_NOT_FOUND',
++  'UPLOAD_EXPIRED',
++  'UPLOAD_TOO_LARGE',
++  'UPLOAD_LIMIT_REACHED',
++  'UPLOAD_OFFSET_MISMATCH',
++  'UPLOAD_INTEGRITY',
++  'ATTACHMENT_INVALID',
+   'INTERNAL',
+   /**
+    * The answer exists but is too large to deliver.
+diff --git a/src/server/listener.ts b/src/server/listener.ts
+index 0269a37..7e9c7b4 100644
+--- a/src/server/listener.ts
++++ b/src/server/listener.ts
+@@ -330,7 +330,7 @@ export class MizarListener {
+    * @param port - the port to bind.
+    */
+   async #bindAll(addresses: readonly string[], port: number): Promise<void> {
+-    this.#wss = new WebSocketServer({ noServer: true })
++    this.#wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES })
+     for (const address of addresses) {
+       const server = createServer((request, response) => {
+         void this.#handleHttp(request, response)
+@@ -575,6 +575,7 @@ export class MizarListener {
+   #acceptSocket(socket: WebSocket, remote: string): void {
+     this.#sockets.add(socket)
+     let session: ClientSession | undefined
++    let inFlight = 0
+ 
+     const tracked = socket as WebSocket & { __mizarAlive?: boolean }
+     tracked.__mizarAlive = true
+@@ -739,12 +740,17 @@ export class MizarListener {
+           return
+         }
+ 
++        if (inFlight >= 8) {
++          send(errorFrame('RATE_LIMITED', 'too many in-flight requests on this connection', frame.id, true))
++          return
++        }
+         const handler = this.#options.methods?.[frame.type]
+         if (handler === undefined) {
+           send(errorFrame('NOT_IMPLEMENTED', `method "${frame.type}" is not implemented`, frame.id))
+           return
+         }
+ 
++        inFlight++
+         try {
+           const result = await handler(frame.payload, session)
+           // Recorded only after the answer is on the wire. A write that never
+@@ -761,6 +767,8 @@ export class MizarListener {
+           } else {
+             send(errorFrame('INTERNAL', describe(error), frame.id))
+           }
++        } finally {
++          inFlight--
+         }
+       })().catch((error: unknown) => {
+         send(errorFrame('INTERNAL', describe(error), currentId))
+diff --git a/test/attachment-bridge.test.ts b/test/attachment-bridge.test.ts
+new file mode 100644
+index 0000000..a9bcd19
+--- /dev/null
++++ b/test/attachment-bridge.test.ts
+@@ -0,0 +1,216 @@
++import { createHash } from 'node:crypto'
++import { mkdtemp, readFile, rm } from 'node:fs/promises'
++import { tmpdir } from 'node:os'
++import { join } from 'node:path'
++import { afterEach, beforeEach, expect, it } from 'vitest'
++import type { Context } from '../src/dsh.js'
++import { AttachmentBridge } from '../src/attachments/bridge.js'
++import { UploadStore } from '../src/attachments/store.js'
++import { createMethodTable } from '../src/bridge/index.js'
++import { InteractionBroker } from '../src/bridge/interactions.js'
++
++let parent: string
++let uploads: UploadStore
++let bridge: AttachmentBridge
++let ctx: Context
++let calls: any[]
++let fileCalls: any[]
++let remote: (request: any) => Promise<unknown>
++const caller = { deviceId: 'phone', deviceName: 'Phone', remote: '127.0.0.1' }
++const facts = { hostId: 'host', hostName: 'Host', home: 'private', protocolVersion: 1 }
++const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=', 'base64')
++
++beforeEach(async () => {
++  parent = await mkdtemp(join(tmpdir(), 'mizar-bridge-test-'))
++  uploads = await UploadStore.open({ parent })
++  calls = []
++  fileCalls = []
++  remote = async () => ({ accepted: true })
++  ctx = {
++    typertGateway: { invoke: async (request: any) => { calls.push(request); return remote(request) } },
++    fileUploads: { uploadStream: async (request: any) => {
++      const chunks: Buffer[] = []
++      for await (const chunk of request.data) chunks.push(Buffer.from(chunk))
++      fileCalls.push({ sessionId: request.sessionId, name: request.name, signal: request.signal, bytes: Buffer.concat(chunks) })
++      return { receiptId: `receipt-${fileCalls.length}`, file: { attachmentId: 'durable-dsh-file' } }
++    } },
++    effect: () => () => {},
++  } as unknown as Context
++  bridge = new AttachmentBridge(ctx, uploads)
++})
++afterEach(async () => {
++  await bridge?.dispose()
++  await rm(parent, { recursive: true, force: true })
++})
++async function ready(kind = 'file', bytes = Buffer.from('document'), sessionId = 'session', deviceId = 'phone') {
++  const begin = await uploads.begin(deviceId, { sessionId, name: kind === 'image' ? 'photo.png' : 'notes.txt', kind,
++    bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), ...(kind === 'image' ? { mediaType: 'image/png' } : {}) })
++  await uploads.chunk(deviceId, { ...begin, data: bytes.toString('base64') })
++  return uploads.finish(deviceId, begin)
++}
++function table() { return createMethodTable(ctx, facts, new InteractionBroker(), undefined, undefined, bridge) }
++function prompt(ids: string[], extra: Record<string, unknown> = {}) {
++  return { sessionId: 'session', requestId: 'request', text: '', attachments: ids, ...extra }
++}
++
++it('streams files through uploadStream and sends only the returned receipt to session/prompt', async () => {
++  const file = await ready()
++  const reply = await table()['session.prompt']!(prompt([file.attachmentId]), caller)
++  expect(reply).toEqual({ accepted: true, requestId: 'request' })
++  expect(fileCalls).toEqual([{ sessionId: 'session', name: 'notes.txt', signal: expect.any(AbortSignal), bytes: Buffer.from('document') }])
++  expect(calls[0]).toMatchObject({ namespace: 'session', method: 'prompt', args: { request: {
++    requestId: 'request', sessionId: 'session', mode: 'queue', content: [{ type: 'file', receiptId: 'receipt-1' }],
++  } } })
++  expect(JSON.stringify(reply)).not.toContain('receipt')
++})
++it('sends image bytes and display name to DSH normalization/model admission with mixed ordered parts', async () => {
++  const image = await ready('image', png), file = await ready()
++  await table()['session.prompt']!(prompt([image.attachmentId, file.attachmentId], { text: 'inspect', mode: 'steer', clientTimeZone: 'Asia/Shanghai' }), caller)
++  expect(calls[0].args.request).toEqual({ sessionId: 'session', requestId: 'request', mode: 'steer', clientTimeZone: 'Asia/Shanghai', content: [
++    { type: 'text', text: 'inspect' }, { type: 'image', mediaType: 'image/png', data: png.toString('base64'), name: 'photo.png' },
++    { type: 'file', receiptId: 'receipt-1' },
++  ] })
++  expect(fileCalls).toHaveLength(1)
++})
++it('keeps the old text-only wire shape and host-minted request IDs', async () => {
++  const response = await table()['session.prompt']!({ sessionId: 'session', text: 'original text' }, caller)
++  expect(response).toMatchObject({ accepted: true, requestId: expect.any(String) })
++  expect(calls[0].args.request).toMatchObject({ mode: 'queue', content: [{ type: 'text', text: 'original text' }] })
++  expect(fileCalls).toEqual([])
++})
++it('does not silently drop attachments when extension is absent', async () => {
++  const old = createMethodTable(ctx, facts, new InteractionBroker())
++  await expect(old['attachment.capabilities']!({}, caller)).rejects.toMatchObject({ code: 'NOT_IMPLEMENTED' })
++  await expect(old['session.prompt']!(prompt(['anything'], { text: 'hello' }), caller)).rejects.toMatchObject({ code: 'NOT_IMPLEMENTED' })
++  expect(calls).toEqual([])
++})
++it('requires stable request identity and validates IDs/text/mode before any DSH side effect', async () => {
++  const file = await ready()
++  for (const extra of [ { requestId: undefined }, { requestId: '' }, { text: null }, { requestId: 7 } ]) {
++    await expect(table()['session.prompt']!(prompt([file.attachmentId], extra), caller)).rejects.toMatchObject({ code: 'MALFORMED_FRAME' })
++  }
++  for (const ids of [[file.attachmentId, file.attachmentId], ['bad'], ['receipt-1'], ['C:/secret'], Array(6).fill('x'), [1], 'bad', null]) {
++    await expect(table()['session.prompt']!(prompt([], { attachments: ids }), caller)).rejects.toMatchObject({ code: 'ATTACHMENT_INVALID' })
++  }
++  await expect(table()['session.prompt']!(prompt([file.attachmentId], { mode: 'anything' }), caller)).rejects.toMatchObject({ code: 'MALFORMED_FRAME' })
++  await expect(table()['session.prompt']!(prompt([]), caller)).rejects.toMatchObject({ code: 'MALFORMED_FRAME' })
++  expect(fileCalls).toEqual([])
++  expect(calls).toEqual([])
++})
++it('refuses foreign session/device ownership before streaming any file', async () => {
++  const foreign = await ready('file', Buffer.from('secret'), 'other-session')
++  await expect(bridge.prompt('phone', prompt([foreign.attachmentId]), 'queue')).rejects.toMatchObject({ code: 'ATTACHMENT_INVALID' })
++  const another = await ready('file', Buffer.from('secret'), 'session', 'another-phone')
++  await expect(bridge.prompt('phone', prompt([another.attachmentId], { requestId: 'two' }), 'queue')).rejects.toMatchObject({ code: 'ATTACHMENT_INVALID' })
++  expect(fileCalls).toEqual([])
++})
++it('coalesces simultaneous retries and returns cached acceptance after lost replies', async () => {
++  const file = await ready()
++  let release!: () => void
++  let entered!: () => void
++  const arrived = new Promise<void>((resolve) => { entered = resolve })
++  remote = async () => { entered(); await new Promise<void>((resolve) => { release = resolve }); return { accepted: true } }
++  const first = bridge.prompt('phone', prompt([file.attachmentId]), 'queue')
++  const second = bridge.prompt('phone', prompt([file.attachmentId]), 'queue')
++  await arrived
++  release()
++  expect(await Promise.all([first, second])).toEqual([{ accepted: true, requestId: 'request' }, { accepted: true, requestId: 'request' }])
++  expect(await bridge.prompt('phone', prompt([file.attachmentId]), 'queue')).toEqual({ accepted: true, requestId: 'request' })
++  expect(fileCalls).toHaveLength(1)
++  expect(calls).toHaveLength(1)
++})
++it('retries rejected or uncertain DSH prompts with exactly the same receipt and requestId', async () => {
++  const file = await ready()
++  remote = async () => { throw new Error('response lost') }
++  await expect(bridge.prompt('phone', prompt([file.attachmentId]), 'queue')).rejects.toThrow('response lost')
++  remote = async () => ({ accepted: true })
++  await bridge.prompt('phone', prompt([file.attachmentId]), 'queue')
++  expect(fileCalls).toHaveLength(1)
++  expect(calls).toHaveLength(2)
++  expect(calls[0].args).toEqual(calls[1].args)
++})
++it('rejects changed text, attachments, mode, timezone, and device under one requestId', async () => {
++  const file = await ready(), other = await ready()
++  await bridge.prompt('phone', prompt([file.attachmentId]), 'queue')
++  for (const [device, value, mode] of [
++    ['phone', prompt([file.attachmentId], { text: 'changed' }), 'queue'],
++    ['phone', prompt([other.attachmentId]), 'queue'],
++    ['phone', prompt([file.attachmentId]), 'steer'],
++    ['phone', prompt([file.attachmentId], { clientTimeZone: 'UTC' }), 'queue'],
++    ['foreign', prompt([file.attachmentId]), 'queue'],
++    ['phone', prompt([], { text: 'silently removed attachment' }), 'queue'],
++  ] as const) {
++    await expect(bridge.prompt(device, value, mode)).rejects.toMatchObject({ code: 'ATTACHMENT_INVALID' })
++  }
++  expect(calls).toHaveLength(1)
++})
++it('keeps verified uploads after model rejection and maps DSH attachment errors', async () => {
++  const image = await ready('image', png)
++  remote = async () => { throw { code: 'session/attachment-invalid', message: 'Model does not support image input' } }
++  await expect(table()['session.prompt']!(prompt([image.attachmentId]), caller)).rejects.toMatchObject({ code: 'ATTACHMENT_INVALID' })
++  remote = async () => ({ accepted: true })
++  await expect(table()['session.prompt']!(prompt([image.attachmentId]), caller)).resolves.toEqual({ accepted: true, requestId: 'request' })
++})
++it('retains partial file admission so failed multi-file preparation does not re-upload successful files', async () => {
++  const first = await ready(), second = await ready()
++  const original = ctx.fileUploads.uploadStream.bind(ctx.fileUploads)
++  let fail = true
++  ctx.fileUploads.uploadStream = async (request) => {
++    if (fileCalls.length === 1 && fail) { fail = false; throw new Error('storage unavailable') }
++    return original(request)
++  }
++  await expect(bridge.prompt('phone', prompt([first.attachmentId, second.attachmentId]), 'queue')).rejects.toThrow('storage unavailable')
++  expect(calls).toHaveLength(0)
++  await bridge.prompt('phone', prompt([first.attachmentId, second.attachmentId]), 'queue')
++  expect(fileCalls).toHaveLength(2)
++  expect(calls[0].args.request.content).toEqual([{ type: 'file', receiptId: 'receipt-1' }, { type: 'file', receiptId: 'receipt-2' }])
++})
++it('refuses attached prompts when file service is unavailable but keeps old text working', async () => {
++  ;(ctx as any).fileUploads = undefined
++  expect(() => bridge.capabilities()).toThrow()
++  await expect(bridge.begin('phone', {})).rejects.toMatchObject({ code: 'NOT_IMPLEMENTED' })
++  await expect(bridge.prompt('phone', { sessionId: 'session', text: 'old client' }, 'queue')).resolves.toHaveProperty('accepted', true)
++})
++it('bounds concurrent admissions and leaves retry identity intact', async () => {
++  const file = await ready(), other = await ready()
++  let release!: () => void, entered!: () => void
++  const arrived = new Promise<void>((resolve) => { entered = resolve })
++  remote = async () => { entered(); await new Promise<void>((resolve) => { release = resolve }); return { accepted: true } }
++  const first = bridge.prompt('phone', prompt([file.attachmentId]), 'queue')
++  await arrived
++  await expect(bridge.prompt('phone', prompt([other.attachmentId], { requestId: 'second' }), 'queue')).rejects.toMatchObject({ code: 'UPLOAD_LIMIT_REACHED' })
++  release()
++  await first
++  remote = async () => ({ accepted: true })
++  await expect(bridge.prompt('phone', prompt([other.attachmentId], { requestId: 'second' }), 'queue')).resolves.toHaveProperty('accepted', true)
++})
++it('reclaims successfully admitted staging so repeated five-file sends never fill the ten-upload device quota', async () => {
++  for (let index = 0; index < 3; index++) {
++    const ids: string[] = []
++    for (let item = 0; item < 5; item++) ids.push((await ready()).attachmentId)
++    const value = prompt(ids, { requestId: `batch-${index}` })
++    await bridge.prompt('phone', value, 'queue')
++    await expect(uploads.withReady('phone', 'session', ids, async () => true)).rejects.toMatchObject({ code: 'ATTACHMENT_INVALID' })
++    await expect(bridge.prompt('phone', value, 'queue')).resolves.toEqual({ accepted: true, requestId: `batch-${index}` })
++  }
++  expect(fileCalls).toHaveLength(15)
++  expect(calls).toHaveLength(3)
++})
++it('keeps more than 100 keyed text-only prompts compatible with the original client', async () => {
++  for (let index = 0; index < 120; index++) {
++    await expect(bridge.prompt('phone', { sessionId: 'session', text: `text ${index}`, requestId: `text-${index}` }, 'queue')).resolves.toHaveProperty('accepted', true)
++  }
++  expect(calls).toHaveLength(120)
++  expect(fileCalls).toHaveLength(0)
++})
++it('preserves legacy optional empty/wrong-type requestId and timezone handling for text-only prompts', async () => {
++  await bridge.prompt('phone', { sessionId: 'session', text: 'old text', requestId: '', clientTimeZone: null }, 'queue')
++  expect(calls[0].args.request.requestId).toEqual(expect.any(String))
++  expect(calls[0].args.request.requestId).not.toBe('')
++  expect(calls[0].args.request.clientTimeZone).toBeUndefined()
++})
++it('keeps Android turn.settled broadcast and missed completion replay', async () => {
++  const source = await readFile(new URL('../src/index.ts', import.meta.url), 'utf8')
++  expect(source.match(/event: 'turn\.settled'/g)).toHaveLength(2)
++  expect(source).toContain('missed.take()')
++})
+diff --git a/test/attachment-composition.test.ts b/test/attachment-composition.test.ts
+new file mode 100644
+index 0000000..269d379
+--- /dev/null
++++ b/test/attachment-composition.test.ts
+@@ -0,0 +1,49 @@
++/** Exercise the actual Cordis 4 dependency resolver, not just plain context doubles. */
++import { Context, Inject } from '@deepseek-ai/cordis'
++import { expect, it } from 'vitest'
++import { inject } from '../src/index.js'
++import { optionalService } from '../src/attachments/services.js'
++
++it('declares only actual required services and starts without optional attachment services', async () => {
++  expect(Object.keys(Inject.resolve(inject)).sort()).toEqual(['sessionProjections', 'sessions', 'typert', 'typertGateway'])
++  const root = new Context()
++  const providers = inject.map((name) => root.provide(name, {}))
++  let mounted = false
++  const fiber = root.plugin({ inject, apply(ctx) {
++    mounted = true
++    expect(optionalService(ctx, 'fileUploads')).toBeUndefined()
++    expect(optionalService(ctx, 'attachments')).toBeUndefined()
++  } })
++  try {
++    await fiber
++    expect(mounted).toBe(true)
++    expect(fiber.state).toBe(2) // Cordis const enum FiberState.ACTIVE (erased at runtime)
++  } finally {
++    await fiber.dispose()
++    for (const dispose of providers) await dispose()
++    await root.fiber.dispose()
++  }
++})
++it('reads optional services via Cordis get without a direct undeclared service access', async () => {
++  const root = new Context()
++  const providers = inject.map((name) => root.provide(name, {}))
++  const uploadStream = async () => ({ receiptId: 'test', file: {} })
++  const fileProvider = root.provide('fileUploads', { uploadStream })
++  const attachmentProvider = root.provide('attachments', { imageLimits: { maxImageBytes: 1234 } })
++  let mounted = false
++  const fiber = root.plugin({ inject, apply(ctx) {
++    mounted = true
++    expect(optionalService(ctx, 'fileUploads')?.uploadStream).toBeTypeOf('function')
++    expect(optionalService(ctx, 'attachments')?.imageLimits.maxImageBytes).toBe(1234)
++  } })
++  try {
++    await fiber
++    expect(mounted).toBe(true)
++    expect(fiber.state).toBe(2) // Cordis const enum FiberState.ACTIVE (erased at runtime)
++  } finally {
++    await fiber.dispose()
++    await fileProvider(); await attachmentProvider()
++    for (const dispose of providers) await dispose()
++    await root.fiber.dispose()
++  }
++})
+diff --git a/test/attachment-socket.test.ts b/test/attachment-socket.test.ts
+new file mode 100644
+index 0000000..1e0cafb
+--- /dev/null
++++ b/test/attachment-socket.test.ts
+@@ -0,0 +1,129 @@
++/** Real authenticated WebSocket transport with an isolated fake DSH boundary; no live profile. */
++import { createHash, randomUUID } from 'node:crypto'
++import { mkdtemp, rm } from 'node:fs/promises'
++import { tmpdir } from 'node:os'
++import { join } from 'node:path'
++import WebSocket from 'ws'
++import { afterEach, beforeEach, expect, it } from 'vitest'
++import type { Context } from '../src/dsh.js'
++import { MizarStore } from '../src/auth/store.js'
++import { AttachmentBridge } from '../src/attachments/bridge.js'
++import { UploadStore } from '../src/attachments/store.js'
++import { createMethodTable } from '../src/bridge/index.js'
++import { InteractionBroker } from '../src/bridge/interactions.js'
++import { MizarListener } from '../src/server/listener.js'
++
++let root: string, listener: MizarListener, bridge: AttachmentBridge
++let prompts: any[], files: Buffer[]
++const sockets = new Set<WebSocket>()
++
++beforeEach(async () => {
++  root = await mkdtemp(join(tmpdir(), 'mizar-attachment-socket-'))
++  const store = await MizarStore.open(join(root, 'state'))
++  prompts = []; files = []
++  const ctx = {
++    effect: () => () => {},
++    typertGateway: { invoke: async (request: any) => { prompts.push(request.args.request); return { accepted: true } } },
++    fileUploads: { uploadStream: async (request: any) => {
++      const chunks: Buffer[] = []
++      for await (const chunk of request.data) chunks.push(Buffer.from(chunk))
++      files.push(Buffer.concat(chunks))
++      return { receiptId: 'internal-receipt', file: { attachmentId: 'durable-file' } }
++    } },
++  } as unknown as Context
++  bridge = new AttachmentBridge(ctx, await UploadStore.open({ parent: root }))
++  const methods = createMethodTable(ctx, { hostId: 'isolated', hostName: 'isolated', home: root, protocolVersion: 1 }, new InteractionBroker(), undefined, undefined, bridge)
++  listener = await MizarListener.start({
++    plan: { addresses: ['127.0.0.1'], mode: 'addresses', fellBack: false, reason: 'isolated test' },
++    port: 0, portFallback: false, store, pairingTtlSeconds: 300, maxAttemptsPerMinute: 30,
++    heartbeatMs: 15000, pongTimeoutMs: 20000, log: () => {}, methods,
++  })
++})
++afterEach(async () => {
++  for (const socket of sockets) socket.terminate()
++  sockets.clear()
++  await listener?.stop()
++  await bridge?.dispose()
++  await rm(root, { recursive: true, force: true })
++})
++async function pair() {
++  const code = await listener.issuePairingCode()
++  const response = await fetch(`http://127.0.0.1:${listener.port}/mizar/v1/pair`, {
++    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: code.display, deviceName: 'Attachment test' }),
++  })
++  return (await response.json()) as { deviceToken: string; deviceId: string }
++}
++async function connect(token?: string) {
++  const socket = new WebSocket(`ws://127.0.0.1:${listener.port}/mizar/v1/ws`)
++  sockets.add(socket)
++  await new Promise<void>((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject) })
++  if (token) {
++    const response = exchange(socket, { v: 1, type: 'hello', token })
++    expect((await response).type).toBe('welcome')
++  }
++  return socket
++}
++function exchange(socket: WebSocket, request: unknown): Promise<any> {
++  return new Promise((resolve, reject) => {
++    const timer = setTimeout(() => { cleanup(); reject(new Error('socket response timeout')) }, 5000)
++    const cleanup = () => { clearTimeout(timer); socket.off('message', got); socket.off('error', failed) }
++    const got = (bytes: WebSocket.RawData) => { cleanup(); resolve(JSON.parse(bytes.toString())) }
++    const failed = (error: Error) => { cleanup(); reject(error) }
++    socket.once('message', got); socket.once('error', failed)
++    socket.send(JSON.stringify(request))
++  })
++}
++function call(socket: WebSocket, type: string, payload: unknown = {}) { return exchange(socket, { v: 1, id: randomUUID(), type, payload }) }
++
++it('refuses all attachment calls before hello and introduces no public upload HTTP route', async () => {
++  const socket = await connect()
++  for (const method of ['attachment.capabilities', 'attachment.begin', 'attachment.chunk', 'attachment.finish', 'attachment.abort']) {
++    expect(await call(socket, method)).toMatchObject({ type: 'error', code: 'UNAUTHENTICATED' })
++  }
++  const http = await fetch(`http://127.0.0.1:${listener.port}/mizar/v1/attachment`, { method: 'POST', body: 'anything' })
++  expect(http.status).toBe(404)
++  expect(files).toEqual([])
++})
++it('uploads over real authenticated sockets, survives reconnect, submits once and isolates devices', async () => {
++  const first = await pair(), foreign = await pair()
++  const socket = await connect(first.deviceToken), stranger = await connect(foreign.deviceToken)
++  expect(await call(socket, 'attachment.capabilities')).toMatchObject({ type: 'ok', result: { chunkBytes: 65536, maxAttachments: 5 } })
++  const data = Buffer.alloc(70 * 1024, 79)
++  const begun = await call(socket, 'attachment.begin', { sessionId: 'target', kind: 'file', name: 'report.txt', bytes: data.length, sha256: createHash('sha256').update(data).digest('hex') })
++  expect(begun.type).toBe('ok')
++  const uploadId = begun.result.uploadId
++  const firstChunk = { uploadId, offset: 0, data: data.subarray(0, 65536).toString('base64') }
++  expect(await call(socket, 'attachment.chunk', firstChunk)).toMatchObject({ type: 'ok', result: { offset: 65536 } })
++  socket.terminate()
++  const reconnected = await connect(first.deviceToken)
++  expect(await call(reconnected, 'attachment.chunk', firstChunk)).toMatchObject({ type: 'ok', result: { offset: 65536 } })
++  expect(await call(stranger, 'attachment.abort', { uploadId })).toMatchObject({ type: 'error', code: 'UPLOAD_NOT_FOUND' })
++  expect(await call(reconnected, 'attachment.chunk', { uploadId, offset: 65536, data: data.subarray(65536).toString('base64') })).toMatchObject({ type: 'ok', result: { offset: data.length } })
++  const finished = await call(reconnected, 'attachment.finish', { uploadId })
++  expect(finished).toMatchObject({ type: 'ok', result: { name: 'report.txt', kind: 'file', bytes: data.length } })
++  const attachmentId = finished.result.attachmentId
++  expect((await call(reconnected, 'attachment.finish', { uploadId })).result.attachmentId).toBe(attachmentId)
++  const attached = { sessionId: 'target', text: '', requestId: 'stable', attachments: [attachmentId] }
++  expect(await call(stranger, 'session.prompt', { ...attached, requestId: 'foreign' })).toMatchObject({ type: 'error', code: 'ATTACHMENT_INVALID' })
++  expect(await call(reconnected, 'session.prompt', attached)).toMatchObject({ type: 'ok', result: { accepted: true, requestId: 'stable' } })
++  expect(await call(reconnected, 'session.prompt', attached)).toMatchObject({ type: 'ok', result: { accepted: true, requestId: 'stable' } })
++  expect(files).toEqual([data])
++  expect(prompts).toEqual([{ sessionId: 'target', requestId: 'stable', mode: 'queue', content: [{ type: 'file', receiptId: 'internal-receipt' }] }])
++  expect(await call(reconnected, 'session.prompt', { ...attached, text: 'changed' })).toMatchObject({ type: 'error', code: 'ATTACHMENT_INVALID' })
++  expect(await call(reconnected, 'attachment.abort', { uploadId })).toMatchObject({ type: 'ok', result: { aborted: true } })
++})
++it('enforces inbound frame bound before untrusted JSON/base64 can allocate an unbounded buffer', async () => {
++  const { deviceToken } = await pair()
++  const socket = await connect(deviceToken)
++  const closed = new Promise<number>((resolve) => { socket.once('close', resolve) })
++  socket.send('x'.repeat(600 * 1024))
++  expect(await closed).toBe(1009)
++  expect(files).toEqual([])
++})
++it('revocation disconnects the attached device before more chunks can be sent', async () => {
++  const { deviceToken, deviceId } = await pair()
++  const socket = await connect(deviceToken)
++  const closed = new Promise<number>((resolve) => { socket.once('close', resolve) })
++  await listener.revokeDevice(deviceId)
++  expect(await closed).toBe(4401)
++})
+diff --git a/test/attachments.test.ts b/test/attachments.test.ts
+new file mode 100644
+index 0000000..079f90e
+--- /dev/null
++++ b/test/attachments.test.ts
+@@ -0,0 +1,264 @@
++import { createHash } from 'node:crypto'
++import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
++import { tmpdir } from 'node:os'
++import { join } from 'node:path'
++import { afterEach, beforeEach, expect, it, vi } from 'vitest'
++import { displayName, UploadStore, type UploadStoreOptions } from '../src/attachments/store.js'
++
++let parent: string
++let store: UploadStore
++const device = 'device-a'
++const sessionId = 'session-a'
++const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex')
++const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=', 'base64')
++
++beforeEach(async () => {
++  parent = await mkdtemp(join(tmpdir(), 'mizar-upload-test-'))
++  store = await UploadStore.open({ parent })
++})
++afterEach(async () => {
++  await store?.dispose()
++  await rm(parent, { recursive: true, force: true })
++})
++async function replace(options: UploadStoreOptions) {
++  await store.dispose()
++  store = await UploadStore.open({ parent, ...options })
++}
++function metadata(bytes = Buffer.from('hello'), extra: Record<string, unknown> = {}) {
++  return { sessionId, name: 'notes.txt', bytes: bytes.length, sha256: hash(bytes), kind: 'file', ...extra }
++}
++async function upload(bytes = Buffer.from('hello'), extra: Record<string, unknown> = {}) {
++  const begun = await store.begin(device, metadata(bytes, extra))
++  for (let offset = 0; offset < bytes.length; offset += begun.chunkBytes) {
++    await store.chunk(device, { uploadId: begun.uploadId, offset, data: bytes.subarray(offset, offset + begun.chunkBytes).toString('base64') })
++  }
++  return { ...begun, ready: await store.finish(device, begun) }
++}
++
++it('advertises bounded v1 limits and uses 64KiB chunks', () => {
++  expect(store.capabilities).toEqual({ version: 1, maxFileBytes: 20971520, maxImageBytes: 20971520, maxAttachments: 5,
++    chunkBytes: 65536, expiresSeconds: 1800, imageMediaTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] })
++})
++it('lowers image limit when DSH advertises a smaller bound', async () => {
++  await replace({ maxImageBytes: 32 })
++  expect(store.capabilities.maxImageBytes).toBe(32)
++  await expect(store.begin(device, metadata(png, { kind: 'image', mediaType: 'image/png' }))).rejects.toMatchObject({ code: 'UPLOAD_TOO_LARGE' })
++})
++it('stages private server-named files and streams their exact bytes', async () => {
++  const bytes = Buffer.alloc(65536 * 2 + 9, 42)
++  const result = await upload(bytes)
++  const [root] = await readdir(parent)
++  const [filename] = await readdir(join(parent, root!))
++  expect(filename).not.toBe('notes.txt')
++  expect(filename).not.toBe(result.uploadId)
++  expect(await readFile(join(parent, root!, filename!))).toEqual(bytes)
++  if (process.platform !== 'win32') {
++    expect((await stat(join(parent, root!))).mode & 0o777).toBe(0o700)
++    expect((await stat(join(parent, root!, filename!))).mode & 0o777).toBe(0o600)
++  }
++  const seen = await store.withReady(device, sessionId, [result.ready.attachmentId], async ([item]) => {
++    const chunks: Buffer[] = []
++    for await (const chunk of item!.stream()) { expect(chunk.byteLength).toBeLessThanOrEqual(65536); chunks.push(Buffer.from(chunk)) }
++    return Buffer.concat(chunks)
++  })
++  expect(seen).toEqual(bytes)
++  expect(JSON.stringify(result)).not.toContain(parent)
++})
++it.each(['../file', '..\\file', 'C:\\secret', '/etc/passwd', 'x:y', '\u0000bad', 'a\nb', '.', '..', 'CON', 'nul.txt', 'foo.', 'foo ', '\u202esecret', 'x'.repeat(241), ''])('rejects unsafe display name %j', (name) => {
++  expect(() => displayName(name)).toThrow()
++})
++it.each([
++  { bytes: 0 }, { bytes: -1 }, { bytes: 1.5 }, { bytes: Number.MAX_SAFE_INTEGER + 1 }, { bytes: '5' },
++  { sha256: 'A'.repeat(64) }, { sha256: '../x' }, { kind: 'script' }, { sessionId: '' }, { sessionId: null },
++])('rejects malformed begin metadata %j', async (extra) => {
++  await expect(store.begin(device, metadata(undefined, extra))).rejects.toMatchObject({ code: 'MALFORMED_FRAME' })
++  expect(await readdir(parent)).toHaveLength(1)
++})
++it('rejects SVG, fake MIME, file MIME and oversized reservations', async () => {
++  await expect(store.begin(device, metadata(png, { kind: 'image', mediaType: 'image/svg+xml' }))).rejects.toMatchObject({ code: 'ATTACHMENT_INVALID' })
++  await expect(store.begin(device, metadata(png, { kind: 'image' }))).rejects.toMatchObject({ code: 'ATTACHMENT_INVALID' })
++  await expect(store.begin(device, metadata(undefined, { mediaType: 'text/plain' }))).rejects.toMatchObject({ code: 'MALFORMED_FRAME' })
++  await expect(store.begin(device, metadata(undefined, { bytes: 20971521 }))).rejects.toMatchObject({ code: 'UPLOAD_TOO_LARGE' })
++})
++it.each(['aA', 'aA=','aA===', 'a A==', 'aA==\n', 'a_==', 'a-==', 'aB==', '', '===='])('rejects noncanonical base64 %j', async (data) => {
++  const begun = await store.begin(device, metadata())
++  await expect(store.chunk(device, { ...begun, offset: 0, data })).rejects.toMatchObject({ code: 'MALFORMED_FRAME' })
++})
++it('bounds chunk size before decoding and enforces actual reserved bytes', async () => {
++  const begun = await store.begin(device, metadata())
++  await expect(store.chunk(device, { ...begun, offset: 0, data: Buffer.alloc(65537).toString('base64') })).rejects.toMatchObject({ code: 'MALFORMED_FRAME' })
++  await expect(store.chunk(device, { ...begun, offset: 0, data: Buffer.from('too-long').toString('base64') })).rejects.toMatchObject({ code: 'UPLOAD_TOO_LARGE' })
++})
++it('permits only exact most-recent chunk retries, including concurrent retries', async () => {
++  const begun = await store.begin(device, metadata(Buffer.from('abcdef')))
++  const first = { ...begun, offset: 0, data: Buffer.from('abc').toString('base64') }
++  expect(await Promise.all([store.chunk(device, first), store.chunk(device, first)])).toEqual([{ offset: 3 }, { offset: 3 }])
++  await expect(store.chunk(device, { ...first, data: Buffer.from('xyz').toString('base64') })).rejects.toMatchObject({ code: 'UPLOAD_OFFSET_MISMATCH' })
++  await expect(store.chunk(device, { ...first, offset: 4 })).rejects.toMatchObject({ code: 'UPLOAD_OFFSET_MISMATCH' })
++  expect(await store.chunk(device, { ...first, offset: 3, data: Buffer.from('def').toString('base64') })).toEqual({ offset: 6 })
++  await expect(store.chunk(device, first)).rejects.toMatchObject({ code: 'UPLOAD_OFFSET_MISMATCH' })
++})
++it('finish is retryable while incomplete, then immutable and idempotent', async () => {
++  const begun = await store.begin(device, metadata())
++  await expect(store.finish(device, begun)).rejects.toMatchObject({ code: 'UPLOAD_INTEGRITY' })
++  await store.chunk(device, { ...begun, data: Buffer.from('hello').toString('base64') })
++  const [a, b] = await Promise.all([store.finish(device, begun), store.finish(device, begun)])
++  expect(a).toEqual(b)
++  expect(a).toEqual({ attachmentId: expect.any(String), name: 'notes.txt', bytes: 5, kind: 'file' })
++  ;(a as { name: string }).name = 'changed' // the returned object is a copy, never mutable store state
++  expect((await store.finish(device, begun)).name).toBe('notes.txt')
++})
++it('destroys bad hashes and releases their reservations', async () => {
++  await replace({ maxReservedBytes: 5 })
++  const begun = await store.begin(device, metadata(undefined, { sha256: '0'.repeat(64) }))
++  await store.chunk(device, { ...begun, data: Buffer.from('hello').toString('base64') })
++  await expect(store.finish(device, begun)).rejects.toMatchObject({ code: 'UPLOAD_INTEGRITY' })
++  await expect(store.finish(device, begun)).rejects.toMatchObject({ code: 'UPLOAD_NOT_FOUND' })
++  await expect(store.begin(device, metadata())).resolves.toHaveProperty('uploadId')
++})
++it.each([
++  ['image/png', png], ['image/jpeg', Buffer.from([255, 216, 255, 0])],
++  ['image/gif', Buffer.from('GIF89a1234')], ['image/webp', Buffer.from('RIFF1234WEBP1234')],
++])('verifies %s signatures, leaving full image decoding to DSH', async (mediaType, bytes) => {
++  const { ready } = await upload(bytes, { kind: 'image', mediaType, name: 'photo.bin' })
++  expect(ready.mediaType).toBe(mediaType)
++  await store.withReady(device, sessionId, [ready.attachmentId], async ([item]) => {
++    expect(await item!.imageData()).toBe(bytes.toString('base64'))
++  })
++})
++it('rejects MIME spoofing and never marks it ready', async () => {
++  const begun = await store.begin(device, metadata(Buffer.from('<script>'), { kind: 'image', mediaType: 'image/png' }))
++  await store.chunk(device, { ...begun, data: Buffer.from('<script>').toString('base64') })
++  await expect(store.finish(device, begun)).rejects.toMatchObject({ code: 'ATTACHMENT_INVALID' })
++})
++it('prevents foreign device chunks, finish and abort; binds ready objects to session and device', async () => {
++  const result = await upload()
++  for (const action of [() => store.chunk('foreign', { ...result, data: 'aA==' }), () => store.finish('foreign', result), () => store.abort('foreign', result)]) {
++    await expect(action()).rejects.toMatchObject({ code: 'UPLOAD_NOT_FOUND' })
++  }
++  for (const [owner, target, ids] of [
++    ['foreign', sessionId, [result.ready.attachmentId]], [device, 'different', [result.ready.attachmentId]],
++    [device, sessionId, [result.uploadId]], [device, sessionId, [result.ready.attachmentId, result.ready.attachmentId]],
++  ] as const) {
++    await expect(store.withReady(owner, target, ids, async () => true)).rejects.toMatchObject({ code: 'ATTACHMENT_INVALID' })
++  }
++  expect(await store.finish(device, result)).toEqual(result.ready)
++})
++it('enforces per-device, global-count and aggregate-byte limits under concurrent begins', async () => {
++  await replace({ maxDeviceUploads: 2, maxUploads: 3, maxReservedBytes: 15 })
++  const results = await Promise.allSettled(Array.from({ length: 5 }, () => store.begin(device, metadata())))
++  expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(2)
++  await store.begin('other', metadata())
++  await expect(store.begin('third', metadata())).rejects.toMatchObject({ code: 'UPLOAD_LIMIT_REACHED' })
++  const first = results.find((result) => result.status === 'fulfilled') as PromiseFulfilledResult<{ uploadId: string }>
++  await store.abort(device, first.value)
++  await expect(store.begin('third', metadata())).resolves.toHaveProperty('uploadId')
++})
++it('enforces reserved bytes even with spare upload slots', async () => {
++  await replace({ maxReservedBytes: 9 })
++  await store.begin(device, metadata())
++  await expect(store.begin('other', metadata())).rejects.toMatchObject({ code: 'UPLOAD_LIMIT_REACHED' })
++})
++it('abort is idempotent for unknown uploads and removes ready files', async () => {
++  const result = await upload()
++  expect(await store.abort(device, result)).toEqual({ aborted: true })
++  expect(await store.abort(device, result)).toEqual({ aborted: true })
++  await expect(store.withReady(device, sessionId, [result.ready.attachmentId], async () => true)).rejects.toMatchObject({ code: 'ATTACHMENT_INVALID' })
++  const [root] = await readdir(parent)
++  expect(await readdir(join(parent, root!))).toEqual([])
++})
++it('expires incomplete and ready uploads, without extending TTL on retries', async () => {
++  let now = 10
++  await replace({ now: () => now, ttlMs: 1000 })
++  const incomplete = await store.begin(device, metadata())
++  const ready = await upload()
++  now += 1001
++  await expect(store.finish(device, ready)).rejects.toMatchObject({ code: 'UPLOAD_EXPIRED' })
++  await store.cleanup()
++  await expect(store.finish(device, incomplete)).rejects.toMatchObject({ code: 'UPLOAD_NOT_FOUND' })
++  const [root] = await readdir(parent)
++  expect(await readdir(join(parent, root!))).toEqual([])
++})
++it('serializes abort against streaming admission and does not deadlock opposite ID orders', async () => {
++  const a = await upload(), b = await upload()
++  let release!: () => void
++  const held = new Promise<void>((resolve) => { release = resolve })
++  let entered!: () => void
++  const started = new Promise<void>((resolve) => { entered = resolve })
++  const read = store.withReady(device, sessionId, [a.ready.attachmentId, b.ready.attachmentId], async () => { entered(); await held; return 1 })
++  await started
++  const reversed = store.withReady(device, sessionId, [b.ready.attachmentId, a.ready.attachmentId], async () => 2)
++  const abort = store.abort(device, a)
++  release()
++  expect(await read).toBe(1)
++  // Abort may win one lock before the second prompt; either result is safe.
++  const result = await Promise.allSettled([reversed, abort])
++  expect(result[1]!.status).toBe('fulfilled')
++})
++it('shutdown cancels readers, closes files, removes its own root and rejects further use', async () => {
++  const result = await upload()
++  await writeFile(join(parent, 'unrelated.txt'), 'keep')
++  await store.dispose()
++  await store.dispose()
++  expect(store.signal.aborted).toBe(true)
++  expect(await readdir(parent)).toEqual(['unrelated.txt'])
++  await expect(store.begin(device, metadata())).rejects.toMatchObject({ code: 'REMOTE_ERROR' })
++  await expect(store.finish(device, result)).rejects.toMatchObject({ code: 'REMOTE_ERROR' })
++})
++it('detects same-length filesystem tampering at finish and again before DSH consumes ready bytes', async () => {
++  const begun = await store.begin(device, metadata())
++  await store.chunk(device, { ...begun, data: Buffer.from('hello').toString('base64') })
++  const [root] = await readdir(parent)
++  let names = await readdir(join(parent, root!))
++  await writeFile(join(parent, root!, names[0]!), 'evil!')
++  await expect(store.finish(device, begun)).rejects.toMatchObject({ code: 'UPLOAD_INTEGRITY' })
++  const next = await upload()
++  names = await readdir(join(parent, root!))
++  await writeFile(join(parent, root!, names[0]!), 'evil!')
++  await expect(store.withReady(device, sessionId, [next.ready.attachmentId], async ([item]) => {
++    for await (const _ of item!.stream()) { /* DSH stream must reject rather than commit */ }
++  })).rejects.toMatchObject({ code: 'UPLOAD_INTEGRITY' })
++})
++it('does not mistake high-bit bytes for ASCII image signatures', async () => {
++  const bytes = Buffer.from('GIF89a').map((value) => value | 0x80)
++  const begun = await store.begin(device, metadata(bytes, { kind: 'image', mediaType: 'image/gif' }))
++  await store.chunk(device, { ...begun, data: bytes.toString('base64') })
++  await expect(store.finish(device, begun)).rejects.toMatchObject({ code: 'ATTACHMENT_INVALID' })
++})
++it('runs regular cleanup, then stops its timer on disposal', async () => {
++  await store.dispose()
++  vi.useFakeTimers()
++  try {
++    store = await UploadStore.open({ parent, ttlMs: 1000, cleanupIntervalMs: 100 })
++    const cleanup = vi.spyOn(store, 'cleanup')
++    const begun = await store.begin(device, metadata())
++    await vi.advanceTimersByTimeAsync(1100)
++    await store.cleanup()
++    expect(cleanup).toHaveBeenCalled()
++    await expect(store.finish(device, begun)).rejects.toMatchObject({ code: 'UPLOAD_NOT_FOUND' })
++    await store.dispose()
++    const count = cleanup.mock.calls.length
++    await vi.advanceTimersByTimeAsync(10000)
++    expect(cleanup).toHaveBeenCalledTimes(count)
++  } finally { vi.useRealTimers() }
++})
++it('caps per-upload queued operations while an admission pins the file', async () => {
++  const result = await upload()
++  let release!: () => void, entered!: () => void
++  const started = new Promise<void>((resolve) => { entered = resolve })
++  const held = new Promise<void>((resolve) => { release = resolve })
++  const use = store.withReady(device, sessionId, [result.ready.attachmentId], async () => { entered(); await held })
++  await started
++  const pending = Array.from({ length: 12 }, () => store.finish(device, result))
++  const all = Promise.allSettled(pending)
++  release()
++  await use
++  const statuses = await all
++  expect(statuses.some((item) => item.status === 'rejected' && item.reason.code === 'UPLOAD_LIMIT_REACHED')).toBe(true)
++})
++it('cancels a streamed read with the supplied signal', async () => {
++  const result = await upload()
++  await expect(store.withReady(device, sessionId, [result.ready.attachmentId], async ([item]) => {
++    for await (const _ of item!.stream(AbortSignal.abort())) { /* cannot reach */ }
++  })).rejects.toThrow()
++})
+diff --git a/test/bridge.test.ts b/test/bridge.test.ts
+index 3bf563e..1d0231e 100644
+--- a/test/bridge.test.ts
++++ b/test/bridge.test.ts
+@@ -560,6 +560,11 @@ describe('method table', () => {
+     expect(Object.keys(createMethodTable(ctx, facts, new InteractionBroker())).sort()).toEqual(
+       [
+         'approval.answer',
++        'attachment.abort',
++        'attachment.begin',
++        'attachment.capabilities',
++        'attachment.chunk',
++        'attachment.finish',
+         'host.info',
+         'interactions.pending',
+         'model.catalog',
