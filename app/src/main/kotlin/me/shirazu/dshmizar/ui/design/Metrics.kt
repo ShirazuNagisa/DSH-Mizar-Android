@@ -1,38 +1,108 @@
 package me.shirazu.dshmizar.ui.design
 
+import android.os.Build
+import android.view.RoundedCorner
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * The few numbers the whole app is drawn with. The console look is small
- * corners and flat surfaces: three radii cover everything, and the 4-pt
- * spacing grid carries over.
+ * The few numbers the whole app is drawn with.
+ *
+ * The radii are the iOS app's ladder (`Design/Theme.swift`), and every one of them is
+ * cut as a continuous corner ([ContinuousCornerShape]) through [Corner]. The 4-pt
+ * spacing grid carries over unchanged: the corners got softer, the console did not
+ * get roomier.
  */
 object Radius {
-    /** Chips, small buttons. */
-    val xs = 4.dp
+    /** Small inner pieces. */
+    val xs = 8.dp
 
-    /** Rows, code blocks, inner surfaces. */
-    val sm = 6.dp
+    /** Rows, code blocks, the sent bubble, text fields. */
+    val sm = 12.dp
 
-    /** Cards, sheets, the composer. */
-    val md = 10.dp
+    /** Buttons, popovers, the failure card, grouped fields. */
+    val md = 16.dp
 
-    /** The one large corner: a sheet-sized card's top. */
-    val lg = 14.dp
+    /** Chips and pills: on a 32 dp chip this resolves to a capsule, as on iOS. */
+    val lg = 20.dp
 
-    /** Kept for call sites that sized a big sheet. */
-    val xl = 18.dp
+    /** The pending-request cards. */
+    val card = 22.dp
 
-    /** A sheet-sized card. */
-    val card = 10.dp
+    /** The composer slabs. */
+    val xl = 26.dp
 
-    /** The conversation card pushed aside to reveal a drawer. */
-    val cardPushed = 20.dp
+    /**
+     * The conversation card pushed aside to reveal a drawer, when the screen's own
+     * corner is unknown or too tight to follow (see [rememberPushedCardRadius]).
+     */
+    val cardPushed = 26.dp
+
+    /** The sent bubble's tightened corner, nearest the answer. */
+    val tail = 4.dp
+
+    /** A checkbox mark. */
+    val mark = 6.dp
 }
 
 /** The radius of a surface nested inside another, so their curves stay parallel. */
 fun concentric(outer: Dp, inset: Dp): Dp = (outer - inset).coerceAtLeast(0.dp)
+
+/** The ladder, cut continuous, allocated once. */
+object Corner {
+    val xs = ContinuousCornerShape(Radius.xs)
+    val sm = ContinuousCornerShape(Radius.sm)
+    val md = ContinuousCornerShape(Radius.md)
+    val lg = ContinuousCornerShape(Radius.lg)
+    val card = ContinuousCornerShape(Radius.card)
+    val xl = ContinuousCornerShape(Radius.xl)
+}
+
+/**
+ * Buttons take their shape from their role, not their width.
+ *
+ *   Primary  a screen's own call to action -- Pair, Scan, Retry, Pair again, Start
+ *            session, Save: a continuous 16 dp rectangle, tool-like.
+ *   Inline   an action inside a card or a window -- Allow once, Reject, Next,
+ *            Submit, Allow full access: a capsule, even when it spans the card.
+ *
+ * Icon-only controls are round ([GlassCircleLabel]). Material's own buttons already
+ * default to a capsule, so only Primary needs passing at a call site. Shape is never
+ * the only cue for emphasis: fill and colour still carry it.
+ */
+object ButtonShape {
+    val Primary: Shape = Corner.md
+    val Inline: Shape = CircleShape
+}
+
+/**
+ * The pushed card's corner: the phone's own screen corner, so the card's curve
+ * continues the glass it sits behind -- the iOS app's reason for its 39 pt.
+ *
+ * Read from the window on API 31+, then held to 26–34 dp: emulators and some phones
+ * report a corner far tighter than the glass (10.7 dp on the AVD), and a card that
+ * rounds less than it used to reads as flat.
+ */
+@Composable
+fun rememberPushedCardRadius(): Dp {
+    val view = LocalView.current
+    val density = LocalDensity.current
+    return remember(view, density) {
+        val px = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            view.rootWindowInsets?.getRoundedCorner(RoundedCorner.POSITION_TOP_LEFT)?.radius ?: 0
+        } else {
+            0
+        }
+        val dp = with(density) { px.toDp() }
+        if (dp < Radius.cardPushed) Radius.cardPushed else dp.coerceAtMost(34.dp)
+    }
+}
 
 object Space {
     val xxs = 2.dp

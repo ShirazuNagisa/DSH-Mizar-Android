@@ -4,11 +4,18 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import me.shirazu.dshmizar.ui.design.Corner
 
 /**
  * The console palette.
@@ -33,6 +40,22 @@ private val Light = lightColorScheme(
     onPrimary = Color.White,
     primaryContainer = Color(0xFFD7EEF1),
     onPrimaryContainer = Color(0xFF062024),
+    inversePrimary = AccentDark,
+    // Material reaches for these roles on its own (a selected chip, a snackbar, a
+    // field in error); left unset they fall back to Material's baseline purple. They
+    // are the accent's container tones, the question blue and the failure red.
+    secondary = AccentLight,
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFD7EEF1),
+    onSecondaryContainer = Color(0xFF062024),
+    tertiary = Color(0xFF2F6FED),
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFDCE6FD),
+    onTertiaryContainer = Color(0xFF0B2A66),
+    error = Color(0xFFE5484D),
+    onError = Color.White,
+    errorContainer = Color(0xFFFCE4E4),
+    onErrorContainer = Color(0xFF5C0D10),
     background = Color(0xFFF6F7F9),
     surface = Color(0xFFFFFFFF),
     surfaceVariant = Color(0xFFEDF0F4),
@@ -52,6 +75,19 @@ private val Dark = darkColorScheme(
     onPrimary = Color(0xFF062024),
     primaryContainer = Color(0xFF14343B),
     onPrimaryContainer = Color(0xFFCDEFF4),
+    inversePrimary = AccentLight,
+    secondary = AccentDark,
+    onSecondary = Color(0xFF062024),
+    secondaryContainer = Color(0xFF14343B),
+    onSecondaryContainer = Color(0xFFCDEFF4),
+    tertiary = Color(0xFF6EA2FF),
+    onTertiary = Color(0xFF0A1F45),
+    tertiaryContainer = Color(0xFF1A2C4F),
+    onTertiaryContainer = Color(0xFFD6E3FF),
+    error = Color(0xFFE5484D),
+    onError = Color.White,
+    errorContainer = Color(0xFF3A1416),
+    onErrorContainer = Color(0xFFFFDAD9),
     background = Color(0xFF0C111B),
     surface = Color(0xFF101623),
     surfaceVariant = Color(0xFF161D2C),
@@ -97,7 +133,7 @@ fun MizarTheme(mode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -> Un
         ThemeMode.LIGHT -> false
     }
     val reduceMotion = rememberReduceMotion()
-    MaterialTheme(colorScheme = if (dark) Dark else Light) {
+    MaterialTheme(colorScheme = if (dark) Dark else Light, shapes = MizarShapes) {
         CompositionLocalProvider(
             LocalTextSelectionColors provides if (dark) SelectionDark else SelectionLight,
             LocalMizarDark provides dark,
@@ -108,19 +144,51 @@ fun MizarTheme(mode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -> Un
 }
 
 /**
+ * Material's shape slots, on the continuous ladder: text fields and menus
+ * (extraSmall), chips (small), cards (medium), sheets (large) and dialogs
+ * (extraLarge) take the app's corners without every call site naming one.
+ * Buttons are not here -- Material gives them a capsule of their own, and the
+ * app's primary ones name theirs (`ButtonShape`).
+ */
+private val MizarShapes = Shapes(
+    extraSmall = Corner.sm,
+    small = Corner.sm,
+    medium = Corner.md,
+    large = Corner.lg,
+    extraLarge = Corner.card,
+)
+
+/**
  * The operator's Reduce Motion setting, the Android way: the animator duration
- * scale set to zero (accessibility → remove animations).
+ * scale set to zero (accessibility → remove animations). Watched, not read once:
+ * the switch is flipped from Settings while the app is open, and the next
+ * animation should already honour it.
  */
 @Composable
 private fun rememberReduceMotion(): Boolean {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    return androidx.compose.runtime.remember {
-        android.provider.Settings.Global.getFloat(
-            context.contentResolver,
-            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,
-            1f,
-        ) == 0f
+    val resolver = androidx.compose.ui.platform.LocalContext.current.contentResolver
+    fun read() = android.provider.Settings.Global.getFloat(
+        resolver,
+        android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,
+        1f,
+    ) == 0f
+    var reduce by remember(resolver) { mutableStateOf(read()) }
+    DisposableEffect(resolver) {
+        val observer = object : android.database.ContentObserver(
+            android.os.Handler(android.os.Looper.getMainLooper()),
+        ) {
+            override fun onChange(selfChange: Boolean) {
+                reduce = read()
+            }
+        }
+        resolver.registerContentObserver(
+            android.provider.Settings.Global.getUriFor(android.provider.Settings.Global.ANIMATOR_DURATION_SCALE),
+            false,
+            observer,
+        )
+        onDispose { resolver.unregisterContentObserver(observer) }
     }
+    return reduce
 }
 
 /** Whether the current [MizarTheme] is dark, for the semantic colours below. */
