@@ -34,3 +34,16 @@ DSH-Mizar 的 Android 客户端：在手机上查看 DSH agent 的会话、读�
 协议本身由主机插件实现，见 [DSH-Mizar](https://github.com/ShirazuNagisa/DSH-Mizar)；
 中继见 [DSH-Mizar-Relay](https://github.com/ShirazuNagisa/DSH-Mizar-Relay)；iOS 客户端见
 [DSH-Mizar-iOS](https://github.com/ShirazuNagisa/DSH-Mizar-iOS)。
+
+## 许可
+
+本项目以 **GNU General Public License v3.0**（GPLv3，SPDX：`GPL-3.0-only`）发布。
+许可证全文见 [LICENSE](LICENSE)。
+
+- `mizarkit/`、`app/` 随本仓库同许。
+- `plugin/` 是主机插件 **dsh-mizar** 的镜像，**保持上游 MIT 许可**（见 `plugin/LICENSE`）；
+  MIT 与 GPLv3 兼容，分发时两者各自有效。
+- iOS 客户端另附一条 App Store 额外许可（GPLv3 第 7 条），因为 Apple 商店条款要求那一条；
+  Android 直接分发 APK，不需要该例外。
+
+本程序不提供任何担保，详见 GPLv3 第 15、16 条。
