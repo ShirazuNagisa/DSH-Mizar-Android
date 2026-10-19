@@ -89,11 +89,18 @@ class ConnectionService : Service() {
             context.stopService(Intent(context, ConnectionService::class.java))
         }
 
-        /** Create the channel once; a second call is a no-op. */
+        /**
+         * Create the channel, or bring its name and description up to date.
+         *
+         * Deliberately not "create once and return early": the channel outlives the
+         * app's version, and a build that renames it in another language would keep
+         * the English name it was first created with forever. Android updates a
+         * channel's name and description on every call, and refuses to raise its
+         * importance — which is the only part a user owns.
+         */
         fun ensureChannel(context: Context) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
             val manager = context.getSystemService(NotificationManager::class.java) ?: return
-            if (manager.getNotificationChannel(CHANNEL_ID) != null) return
             manager.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL_ID,

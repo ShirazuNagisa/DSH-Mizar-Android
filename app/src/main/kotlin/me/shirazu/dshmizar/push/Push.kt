@@ -16,6 +16,7 @@ import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.shirazu.dshmizar.MainActivity
+import me.shirazu.dshmizar.R
 import java.util.concurrent.TimeUnit
 
 /**
@@ -81,20 +82,26 @@ const val EXTRA_SESSION_ID = "me.shirazu.dshmizar.sessionId"
 /** Notifications, and the channel Android 8+ requires before any can be posted. */
 object Notifications {
 
-    /** Create the channel. Idempotent, and safe to call on every launch. */
+    /**
+     * Create the alerts channel, or bring its name and description up to date.
+     *
+     * Same reason as the connection channel: the name is a localized resource now,
+     * and an early return would pin whatever language the channel was first created
+     * in. Importance is the one field Android will not let the app raise afterwards,
+     * and it is already HIGH.
+     */
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
-        if (manager.getNotificationChannel(MIZAR_CHANNEL_ID) != null) return
         manager.createNotificationChannel(
             NotificationChannel(
                 MIZAR_CHANNEL_ID,
-                "Agent alerts",
+                context.getString(R.string.alert_channel),
                 // High: an approval is a blocked agent, and a notification that waits
                 // for the next idle moment is a notification that arrives too late.
                 NotificationManager.IMPORTANCE_HIGH,
             ).apply {
-                description = "Approvals, questions and finished turns"
+                description = context.getString(R.string.alert_channel_description)
             },
         )
     }
