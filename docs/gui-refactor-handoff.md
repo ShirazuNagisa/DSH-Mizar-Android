@@ -199,3 +199,29 @@ adb reverse tcp:19390 tcp:19390
 | 通知栏常驻 | 只有 id=1（前台服务）；完成通知随点即消 |
 
 网络路径基线：手机先走公网中继（`connected to Relay(...)`），USB 插上并 `adb reverse` 后不会自动切换 —— 这是正常的，App 的 endpoint 就是中继。
+
+---
+
+## 十一、契约增补记录
+
+重构期间对 `UiState` / `AppViewModel` 的改动都记在这里，方便后来的人按新契约阅读。
+
+| 增补 | 说明 |
+|---|---|
+| `UiState.quietHours` + `setQuietHours(on)` | 静音时段开关，设置页持有；通知判定直接读存储，不读这个字段 |
+| `createSessionWithPrompt(cwd, prompt)` | 新建会话并立刻发出第一条消息（首页空状态用），等价于 `createSession` + `sendPrompt` |
+
+以上都是**新增**，没有删除或改变既有语义。
+
+## 十二、通知文案（两语言）
+
+| 项 | 英文 | 中文 |
+|---|---|---|
+| 常驻连接 | Connected to the computer — this notice keeps the connection alive in the background. | 已连接到电脑 · 这条常驻通知让 App 在后台保持连接 |
+| 常驻渠道 | Background connection | 后台连接 |
+| 告警渠道 | Agent alerts | Agent 提醒 |
+| 待办标题 | The agent is waiting | Agent 正在等你回复 |
+| 待办正文 | — open DSH-Mizar to answer. | — 打开 DSH-Mizar 回答。 |
+| 失败诊断 | `diagnosis_*` 七条 | 同名七条 |
+
+两个 `ensureChannel()` 现在每次启动都会写一遍渠道名与描述。**不要改回"存在就 return"**：那样渠道名会永远停在第一次创建时的语言，装过旧版本的手机改不过来（Android 允许更新名字/描述，只拒绝提高重要性）。
