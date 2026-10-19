@@ -225,3 +225,32 @@ adb reverse tcp:19390 tcp:19390
 | 失败诊断 | `diagnosis_*` 七条 | 同名七条 |
 
 两个 `ensureChannel()` 现在每次启动都会写一遍渠道名与描述。**不要改回"存在就 return"**：那样渠道名会永远停在第一次创建时的语言，装过旧版本的手机改不过来（Android 允许更新名字/描述，只拒绝提高重要性）。
+
+## 十三、iOS 0.9.1 移植（进行中）
+
+参照 iOS `2751d17`（0.9.1 / build 23）。进度按"已移植 / 待移植"分开记，接手的人不必重新读一遍 Swift。
+
+### 已移植
+
+| iOS | Android | 说明 |
+|---|---|---|
+| `ShellState` 0..1 → **-1..1** | `ShellState.progress` | -1 轮次索引、0 对话、1 侧边栏。一个数管两个抽屉，互斥且不会"关一个推进另一个" |
+| 手势按点数而非宽度 | `drawerDrag` | 两个抽屉不等宽，位移按各自宽度换算；方向在每次手势开始时由 `settledAt` 决定 |
+| 卡片朝开的那一侧偏移 | `ConversationCard` | `translationX` 按 `progress` 的符号取宽度 |
+| 右侧轮次索引 | `ui/shell/TurnIndex.kt` | 一行一轮：序号、提示首行、耗时、状态点 |
+| 点行 → 收起 + 滚到该轮 + 闪一次 | `MizarShell` + `ConversationList` | 列表 state 提到 shell，按 session 记忆；高亮是 600ms 渐隐的洗色 |
+| 按时长画的下划线 | `TurnIndexRow` | 宽度 = 该轮耗时 / 屏幕上最长的一轮 |
+| 只看未完成 | `TurnIndex` 的 `FilterChip` | 筛选只影响显示，点击仍映射回原始下标 |
+| 标题点击打开索引 | `SessionScreen.onOpenIndex` | 菜单按钮开侧边栏，标题开索引 |
+| 索引里标出屏幕上的轮次 | `onScreen: Set<Int>` | 从 `LazyListState.layoutInfo` 读，两个视图不会各说各的 |
+
+### 待移植 / 替代方案
+
+| iOS | 计划 |
+|---|---|
+| **所有弹层 → 锚定 popover**（`Popover.swift`） | Compose 没有 SwiftUI 的 popover 定位，替代方案是用 `DropdownMenu`/`Popup` 挂在触发它的 chip 的 Box 里，而不是整屏 sheet。涉及 `Sheets.kt` 的四个 chip 菜单 + 侧边栏三个对话框；改动是"把 sheet 内容搬进锚点"，不动数据 |
+| iPad 独立列 + 刻度轨 | 手机上没有对应形态；宽屏（≥600dp）时索引可作为常驻列，暂缓 |
+| 连接面板 `ConnectionPanel.swift` | 侧边栏底部现在只有连接状态一行；面板要展示地址/中继/延迟，属于新面板，未做 |
+| 弹出命名提示 | 未做 |
+
+**注意**：`TurnIndex` 的等宽假设与 `Space` 尺度都来自 0.9.0 的设计语言，改它时要连着 `MizarShell` 的抽屉宽度一起看（`min(320.dp, maxWidth * 0.84f)`）。
