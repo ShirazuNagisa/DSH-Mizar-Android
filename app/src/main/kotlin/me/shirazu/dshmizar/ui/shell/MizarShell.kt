@@ -122,9 +122,13 @@ fun MizarShell(model: AppViewModel, state: UiState) {
             modifier = Modifier
                 .width(sidebarWidth)
                 .fillMaxSize()
-                .offset { IntOffset((-with(density) { 44.dp.toPx() } * (1f - reveal)).toInt(), 0) }
-                .alpha(0.35f + 0.65f * reveal)
-                .sidebarDrag(shell, sidebarWidthPx, opening = false, enabled = true),
+                // The list itself travels. It used to peek 44 dp from the left and be
+                // revealed by the card leaving, which reads as "a strip appeared behind
+                // the card" rather than as a sidebar sliding in. At rest it now sits a
+                // full width out, so opening is the list arriving.
+                .offset { IntOffset((-sidebarWidthPx * (1f - reveal)).toInt(), 0) }
+                .alpha(0.55f + 0.45f * reveal)
+                .sidebarDrag(shell, sidebarWidthPx),
         ) {
             Sidebar(
                 model = model,
@@ -153,7 +157,7 @@ fun MizarShell(model: AppViewModel, state: UiState) {
                 modifier = Modifier
                     .fillMaxSize()
                     .offset { IntOffset((sidebarWidthPx * p).toInt().coerceAtLeast(0), 0) }
-                    .sidebarDrag(shell, sidebarWidthPx, opening = false, enabled = true)
+                    .sidebarDrag(shell, sidebarWidthPx)
                     .then(
                         if (reveal > 0.5f) {
                             Modifier.clickable(
@@ -241,12 +245,7 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
             )
             .clip(shape)
             .background(MaterialTheme.colorScheme.background)
-            .sidebarDrag(
-                shell,
-                sidebarWidthPx,
-                opening = true,
-                enabled = !shell.settledOpen || shell.isDragging,
-            ),
+            .sidebarDrag(shell, sidebarWidthPx),
     ) {
         // Keyed on the session, which is what makes every piece of state inside
         // belong to the session it was filled from: the draft, the scroll anchor,
@@ -301,20 +300,23 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
 private fun Modifier.sidebarDrag(
     shell: ShellState,
     widthPx: Float,
-    opening: Boolean,
-    enabled: Boolean,
-): Modifier = this.pointerInput(widthPx, opening, enabled) {
-    if (!enabled) return@pointerInput
+): Modifier = this.pointerInput(widthPx) {
     val width = widthPx.coerceAtLeast(1f)
     awaitEachGesture {
+        // Which way this gesture is allowed to go is decided once, from where the
+        // sidebar is now: closed means a right drag opens it, open means a left drag
+        // closes it. Passing that in as a constant was the reason the card could not
+        // close the sidebar it had opened -- the same finger had to find the strip
+        // under the overlay instead.
+        val wantsOpen = !shell.settledOpen
         val down = awaitFirstDown(requireUnconsumed = false)
         val tracker = VelocityTracker()
         var began = false
         awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
             val directionRight = change.positionChange().x > 0
             // Sideways means sideways, and in this recognizer's own direction: an
-            // opening drag on the card goes right, a closing drag goes left.
-            if (directionRight != opening && !began) return@awaitHorizontalTouchSlopOrCancellation
+            // opening drag goes right, a closing drag goes left.
+            if (directionRight != wantsOpen && !began) return@awaitHorizontalTouchSlopOrCancellation
             if (!began) {
                 shell.beginDrag()
                 began = true
