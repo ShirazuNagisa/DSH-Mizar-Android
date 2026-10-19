@@ -3,8 +3,6 @@ package me.shirazu.dshmizar.ui.design
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.EaseOut
 import androidx.compose.foundation.IndicationNodeFactory
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -116,9 +114,12 @@ fun Modifier.shapedClickable(
 )
 
 /**
- * The press feel: on touch-down the control snaps to its pressed scale in 80 ms
- * (easeOut), on release it springs back with the bouncy spring. Ported from iOS
- * `Design/PressableStyle.swift`.
+ * The press feel, ported from iOS `Design/PressableStyle.swift`: on touch-down the
+ * control sinks to its pressed scale on a stiff spring (90% there in ~78 ms, inside
+ * the 80 ms press budget); on release it springs back on the bouncy one. Both are
+ * springs, so a release mid-press carries the motion it has instead of restarting.
+ * The dim, when asked for, never overshoots: opacity rides a critically damped
+ * spring both ways. Under Reduce Motion nothing scales; the dim cross-fades.
  */
 fun Modifier.pressable(
     scale: Float = 0.94f,
@@ -128,12 +129,16 @@ fun Modifier.pressable(
     val reduceMotion = LocalReduceMotion.current
     val animatedScale by animateFloatAsState(
         targetValue = if (pressed) scale else 1f,
-        animationSpec = if (pressed) tween(80, easing = EaseOut) else Motion.bouncy(),
+        animationSpec = if (pressed) PressDown else Motion.bouncy(),
         label = "pressableScale",
     )
     val alpha by animateFloatAsState(
         targetValue = if (pressed && dims) 0.7f else 1f,
-        animationSpec = if (pressed) tween(80, easing = EaseOut) else Motion.bouncy(),
+        animationSpec = when {
+            reduceMotion -> Motion.fade()
+            pressed -> PressDown
+            else -> Motion.smooth()
+        },
         label = "pressableAlpha",
     )
     this
@@ -150,6 +155,9 @@ fun Modifier.pressable(
                 scaleX = animatedScale
                 scaleY = animatedScale
             }
-            this.alpha = alpha
+            this.alpha = alpha.coerceIn(0f, 1f)
         }
 }
+
+/** The touch-down: critically damped and stiff -- 90% of the way in ~78 ms. */
+private val PressDown = spring<Float>(dampingRatio = 1f, stiffness = 2500f)
