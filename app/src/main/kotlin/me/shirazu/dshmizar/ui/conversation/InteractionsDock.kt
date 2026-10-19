@@ -64,6 +64,7 @@ import me.shirazu.dshmizar.ui.design.ButtonShape
 import me.shirazu.dshmizar.ui.design.ContinuousCornerShape
 import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.Motion
+import me.shirazu.dshmizar.ui.design.NumericText
 import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.glassCapsule
@@ -208,10 +209,15 @@ private fun TuckedPill(count: Int, onExpand: () -> Unit) {
         ) {
             Text("✋", style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.width(8.dp))
-            Text(
-                stringResource(R.string.requests_waiting, count),
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-            )
+            NumericText(count) { waiting ->
+                Text(
+                    stringResource(R.string.requests_waiting, waiting),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontFeatureSettings = "tnum",
+                    ),
+                )
+            }
             Spacer(Modifier.width(8.dp))
             Icon(
                 Icons.Default.KeyboardArrowUp,

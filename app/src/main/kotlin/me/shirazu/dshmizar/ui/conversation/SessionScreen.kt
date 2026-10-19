@@ -62,6 +62,7 @@ import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.AnchoredPopover
+import me.shirazu.dshmizar.ui.design.NumericText
 import me.shirazu.dshmizar.ui.design.PopoverSize
 import me.shirazu.dshmizar.ui.design.Transitions
 import me.shirazu.dshmizar.ui.design.glassCapsule
@@ -349,14 +350,19 @@ fun SessionScreen(
                                 modifier = Modifier.size(16.dp),
                             )
                             Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = if (waitingNew > 0) {
-                                    stringResource(R.string.new_messages, waitingNew)
-                                } else {
-                                    stringResource(R.string.jump_to_latest)
-                                },
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
-                            )
+                            NumericText(waitingNew) { count ->
+                                Text(
+                                    text = if (count > 0) {
+                                        stringResource(R.string.new_messages, count)
+                                    } else {
+                                        stringResource(R.string.jump_to_latest)
+                                    },
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontWeight = FontWeight.Medium,
+                                        fontFeatureSettings = "tnum",
+                                    ),
+                                )
+                            }
                         }
                     }
                 }

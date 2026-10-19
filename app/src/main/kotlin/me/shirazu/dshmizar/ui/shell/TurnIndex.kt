@@ -38,6 +38,7 @@ import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.Format
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.Corner
+import me.shirazu.dshmizar.ui.design.NumericText
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.shapedClickable
 import me.shirazu.mizar.kit.ConversationItem
@@ -77,13 +78,15 @@ fun TurnIndex(
                 style = MaterialTheme.typography.headlineSmall,
                 modifier = Modifier.weight(1f),
             )
-            Text(
-                text = stringResource(R.string.turn_count, turns.size),
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontFeatureSettings = "tnum",
-                ),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            NumericText(turns.size) { count ->
+                Text(
+                    text = stringResource(R.string.turn_count, count),
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontFeatureSettings = "tnum",
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         if (turns.isEmpty()) {
