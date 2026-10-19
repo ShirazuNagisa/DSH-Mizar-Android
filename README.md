@@ -12,8 +12,6 @@ DSH-Mizar 的 Android 客户端：在手机上查看 DSH agent 的会话、读�
   [docs/plugin.md](docs/plugin.md)。
 
 构建环境、对真实宿主跑通链路、与 iOS 客户端的差异，见 [docs/android.md](docs/android.md)。
-界面重构（换人重写 `app/` 的 Compose 层）的边界、契约与验收清单，见
-[docs/gui-refactor-handoff.md](docs/gui-refactor-handoff.md)。
 
 ## 构建
 
