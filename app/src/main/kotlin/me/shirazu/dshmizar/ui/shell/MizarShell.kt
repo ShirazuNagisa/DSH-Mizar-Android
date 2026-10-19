@@ -303,7 +303,10 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
                 val s = 1f - 0.06f * reveal
                 scaleX = s
                 scaleY = s
-                transformOrigin = TransformOrigin(0f, 0.5f)
+                // The card shrinks away from the drawer that is out, not always from
+                // the left: pushed by the sidebar it recedes toward the right, pushed
+                // by the index it recedes toward the left.
+                transformOrigin = TransformOrigin(if (progress >= 0f) 0f else 1f, 0.5f)
             }
             .shadow(
                 elevation = 30.dp * reveal,
@@ -340,9 +343,15 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
             )
         }
 
-        // A shade, and a faint rim of the accent on the edge that faces the sidebar:
-        // the card catching the light of the list behind it.
+        // A shade, and a faint rim of the accent on the edge that faces the drawer: the
+        // card catching the light of whatever is behind it. The rim is on the right when
+        // the index is out, which is the same statement said backwards.
         if (reveal > 0f) {
+            val rim = listOf(
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.45f * reveal),
+                Color.White.copy(alpha = 0.06f * reveal),
+                Color.Transparent,
+            )
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -350,13 +359,7 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
                     .background(Color.Black.copy(alpha = (if (dark) 0.32f else 0.05f) * reveal))
                     .border(
                         width = 1.dp,
-                        brush = Brush.horizontalGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.45f * reveal),
-                                Color.White.copy(alpha = 0.06f * reveal),
-                                Color.Transparent,
-                            ),
-                        ),
+                        brush = Brush.horizontalGradient(if (progress >= 0f) rim else rim.reversed()),
                         shape = shape,
                     ),
             )
