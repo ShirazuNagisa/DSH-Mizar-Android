@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -98,7 +99,11 @@ fun RootScreen(model: AppViewModel, incomingPairUri: String?, onPairUriHandled: 
  */
 @Composable
 private fun ReconnectingBanner(reason: String?) {
-    Surface(color = MaterialTheme.colorScheme.secondaryContainer, tonalElevation = 3.dp) {
+    Surface(
+        modifier = Modifier.statusBarsPadding(),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        tonalElevation = 3.dp,
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
