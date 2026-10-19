@@ -18,10 +18,23 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.rememberTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,16 +85,105 @@ fun AnchoredPopover(
     offset: DpOffset = DpOffset(0.dp, (-4).dp),
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    if (!expanded) return
+    // The popup outlives `expanded` by its exit, and only by its exit: it is mounted
+    // while open or while the fade out runs, and a reopen during that fade takes the
+    // same popup back rather than stacking a second one.
+    val visibility = remember { MutableTransitionState(false) }
+    visibility.targetState = expanded
+    if (!visibility.currentState && !visibility.targetState && visibility.isIdle) return
+
     val density = LocalDensity.current
-    val placement = remember(offset, density) { AnchoredPlacement(offset, density) }
+    // Which corner of the window faces the control, so the window grows out of it.
+    var origin by remember { mutableStateOf(TransformOrigin(0f, 0f)) }
+    val placement = remember(offset, density) {
+        AnchoredPlacement(offset, density) { anchor, window ->
+            origin = growthOrigin(anchor, window)
+        }
+    }
     Popup(
+        // Dismissal is the caller's at once; the fade that follows is decoration and
+        // never holds the decision up.
         onDismissRequest = onDismiss,
         popupPositionProvider = placement,
-        properties = PopupProperties(focusable = true),
+        // A window on its way out gives up focus at once: Back and the next tap
+        // belong to the screen again, not to a window that is already leaving.
+        properties = PopupProperties(focusable = expanded),
     ) {
-        PopoverSurface(modifier = modifier, width = width, maxHeight = maxHeight, title = title, content = content)
+        val reduceMotion = LocalReduceMotion.current
+        val rise = with(density) { GrowthTravel.toPx() }
+        val transition = rememberTransition(visibility, label = "popover")
+        val progress by transition.animateFloat(
+            transitionSpec = {
+                when {
+                    !targetState -> tween(ExitMillis, easing = FastOutLinearInEasing)
+                    reduceMotion -> Motion.fade()
+                    else -> Motion.bouncy()
+                }
+            },
+            label = "popoverGrowth",
+        ) { open -> if (open) 1f else 0f }
+        val alpha by transition.animateFloat(
+            transitionSpec = {
+                when {
+                    !targetState -> tween(ExitMillis, easing = FastOutLinearInEasing)
+                    reduceMotion -> Motion.fade()
+                    else -> Motion.smooth()
+                }
+            },
+            label = "popoverAlpha",
+        ) { open -> if (open) 1f else 0f }
+        PopoverSurface(
+            modifier = modifier,
+            width = width,
+            maxHeight = maxHeight,
+            title = title,
+            layer = Modifier
+                // Nor can a leaving window be chosen from: its rows stop answering.
+                .then(if (expanded) Modifier else Modifier.pointerInput(Unit) { swallowTouches() })
+                .graphicsLayer {
+                this.alpha = alpha.coerceIn(0f, 1f)
+                if (!reduceMotion) {
+                    transformOrigin = origin
+                    val s = GrowthFrom + (1f - GrowthFrom) * progress
+                    scaleX = s
+                    scaleY = s
+                    // Out of the control: a window below it drops from above, one
+                    // above it rises from below.
+                    translationY = (1f - progress) * rise * (if (origin.pivotFractionY < 0.5f) -1f else 1f)
+                }
+            },
+            content = content,
+        )
     }
+}
+
+/** Takes every touch before the content sees it. */
+private suspend fun PointerInputScope.swallowTouches() {
+    awaitPointerEventScope {
+        while (true) {
+            awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+        }
+    }
+}
+
+/** How small the window starts, and how far it travels, growing out of its control. */
+private const val GrowthFrom = 0.92f
+private val GrowthTravel = 7.dp
+
+/** The exit: quick and plain, so a dismissed window is gone, not leaving -- the same
+ *  under Reduce Motion, where it is already only a fade. */
+private const val ExitMillis = 140
+
+/**
+ * The window corner nearest the control: a window below its control grows from its
+ * top edge, one above it from its bottom; across, from whichever side it shares
+ * with the control.
+ */
+private fun growthOrigin(anchor: IntRect, window: IntRect): TransformOrigin {
+    val y = if (window.top >= anchor.center.y) 0f else 1f
+    val anchorX = anchor.center.x.coerceIn(window.left, window.right)
+    val x = if (window.width == 0) 0.5f else (anchorX - window.left).toFloat() / window.width
+    return TransformOrigin(x.coerceIn(0f, 1f), y)
 }
 
 /** The window itself: what a dropdown menu draws, in the console's clothes. */
@@ -91,9 +193,11 @@ private fun PopoverSurface(
     width: Dp,
     maxHeight: Dp,
     title: String?,
+    layer: Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(
+        modifier = layer,
         shape = Corner.md,
         // Translucent, but only just: the work behind shows as a breath, not as
         // words competing with the window's own.
