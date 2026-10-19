@@ -2,6 +2,9 @@
 
 `plugin/` 是一份 `dsh-mizar` 的镜像：`DSH-Mizar` 仓库某个提交的完整源码树，加上 Android 需要的少量增量。
 
+当前基准：**`02d4cc5`**（2026-10-19，上游此时已把插件改为 GPL-3.0-only，镜像随之）。
+上游再动之后跑一次 `scripts/sync-plugin.mjs`，把这一行的哈希更新成新的 HEAD。
+
 ## 为什么不直接改 DSH-Mizar
 
 `DSH-Mizar` 同时是 iOS 客户端的宿主插件。为 Android 加一个事件，会让 iOS 那侧多一条它不认识的

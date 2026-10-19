@@ -174,7 +174,7 @@ async function startListener(
 
   // With a tunnel up, the phone never needs to reach this machine directly, so
   // the listener goes to loopback and stops exporting itself onto whatever
-  // network the Mac happens to be on. The tunnel still connects out normally --
+  // network the computer happens to be on. The tunnel still connects out normally --
   // it talks to the listener over loopback, which is always reachable.
   const bindMode: BindMode =
     config.relay.enabled && config.relay.preferLoopback ? 'loopback' : config.bind.mode
@@ -277,7 +277,7 @@ async function startListener(
     },
     locale: () => {
       // The newest phone that asked, because that is the one most likely to be
-      // carried. Falls back to this Mac's own locale, which is right when the
+      // carried. Falls back to this computer's own locale, which is right when the
       // operator reads the same language in both places.
       for (let index = store.state.devices.length - 1; index >= 0; index -= 1) {
         const push = store.state.devices[index]?.push
@@ -412,7 +412,7 @@ const MISSED_FLUSH_DELAY_MS = 2_000
             // Every reconnect, not only the first. The relay holds push
             // registrations in memory, so a relay restarted under a live tunnel
             // comes back knowing about nobody -- and the tunnel reconnecting is
-            // exactly how this Mac finds out. The roster is the durable copy.
+            // exactly how this computer finds out. The roster is the durable copy.
             if (!wasConnected) {
               void push
                 .republish()
@@ -465,7 +465,7 @@ const MISSED_FLUSH_DELAY_MS = 2_000
         //     presence for a phone that is not on the roster; and
         //   - a registration at the relay, which pushes to that phone's token
         //     until the relay restarts. A device the operator has just removed
-        //     should stop being woken about this Mac's work immediately, not at
+        //     should stop being woken about this computer's work immediately, not at
         //     the next deploy.
         //
         // Both happen before the revocation is attempted, so a revocation that
