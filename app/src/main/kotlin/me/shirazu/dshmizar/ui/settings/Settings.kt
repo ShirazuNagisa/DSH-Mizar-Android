@@ -38,12 +38,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.ThemeMode
@@ -80,15 +80,15 @@ fun SettingsDialog(
             Box(
                 modifier = Modifier
                     .size(64.dp)
-                    .shadow(10.dp, RoundedCornerShape(15.dp))
-                    .clip(RoundedCornerShape(15.dp))
-                    .background(Brush.verticalGradient(listOf(MizarColors.Navy, MizarColors.NavyDeep))),
+                    .clip(RoundedCornerShape(Radius.md))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.md)),
                 contentAlignment = Alignment.Center,
             ) {
                 MizarMarkConnecting(
                     modifier = Modifier.width(36.dp),
-                    accent = Color(0xFF3CCBF4),
-                    ink = Color.White,
+                    accent = MaterialTheme.colorScheme.primary,
+                    ink = MaterialTheme.colorScheme.onSurface,
                 )
             }
             Spacer(Modifier.width(16.dp))
@@ -114,8 +114,9 @@ fun SettingsDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
-                .clip(CircleShape)
+                .clip(RoundedCornerShape(Radius.sm))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.sm))
                 .padding(3.dp),
             horizontalArrangement = Arrangement4,
         ) {
@@ -174,7 +175,7 @@ private val Arrangement4 = Arrangement.spacedBy(4.dp)
 private fun ThemeSegment(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     Box(
         modifier = modifier
-            .clip(CircleShape)
+            .clip(RoundedCornerShape(Radius.xs))
             .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
             .pressable(scale = 0.95f)
             .clickable(onClick = onClick)
@@ -192,8 +193,11 @@ private fun ThemeSegment(label: String, selected: Boolean, modifier: Modifier, o
 @Composable
 private fun SectionLabel(text: String) {
     Text(
-        text = text,
-        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+        text = text.uppercase(),
+        style = MaterialTheme.typography.labelSmall.copy(
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.5.sp,
+        ),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 16.dp).padding(top = 14.dp, bottom = 6.dp),
     )
@@ -261,6 +265,7 @@ fun NewSessionDialog(state: UiState, onDismiss: () -> Unit, onCreate: (String) -
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
+            shape = RoundedCornerShape(Radius.md),
         ) {
             Text(stringResource(R.string.start_session))
         }

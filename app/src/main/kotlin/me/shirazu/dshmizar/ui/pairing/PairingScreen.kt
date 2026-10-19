@@ -8,6 +8,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -151,7 +152,7 @@ fun UnpairedScreen(model: AppViewModel) {
         Row(
             modifier = Modifier
                 .padding(top = 10.dp)
-                .clip(CircleShape)
+                .clip(RoundedCornerShape(Radius.sm))
                 .pressable(scale = 0.97f)
                 .clickable { showManual = !showManual }
                 .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -215,7 +216,8 @@ private fun ManualForm(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(Radius.md))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.md)),
         ) {
             ManualField(
                 value = authority,
@@ -251,7 +253,8 @@ private fun ManualForm(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(Radius.md))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.md)),
             ) {
                 ManualField(
                     value = deviceName,

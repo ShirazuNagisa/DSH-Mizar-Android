@@ -319,14 +319,10 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
                 // by the index it recedes toward the left.
                 transformOrigin = TransformOrigin(if (progress >= 0f) 0f else 1f, 0.5f)
             }
-            .shadow(
-                elevation = 30.dp * reveal,
-                shape = shape,
-                ambientColor = Color.Black.copy(alpha = (if (dark) 0.5f else 0.16f) * reveal),
-                spotColor = Color.Black.copy(alpha = (if (dark) 0.5f else 0.16f) * reveal),
-            )
             .clip(shape)
             .background(MaterialTheme.colorScheme.background)
+            // A console card does not cast a shadow; it is outlined.
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .drawerDrag(shell, sidebarWidthPx, indexWidthPx),
     ) {
         // Keyed on the session, which is what makes every piece of state inside
@@ -355,15 +351,8 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
             )
         }
 
-        // A shade, and a faint rim of the accent on the edge that faces the drawer: the
-        // card catching the light of whatever is behind it. The rim is on the right when
-        // the index is out, which is the same statement said backwards.
+        // A shade, and a faint rim of the accent on the edge that faces the drawer.
         if (reveal > 0f) {
-            val rim = listOf(
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.45f * reveal),
-                Color.White.copy(alpha = 0.06f * reveal),
-                Color.Transparent,
-            )
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -371,7 +360,7 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
                     .background(Color.Black.copy(alpha = (if (dark) 0.32f else 0.05f) * reveal))
                     .border(
                         width = 1.dp,
-                        brush = Brush.horizontalGradient(if (progress >= 0f) rim else rim.reversed()),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f * reveal),
                         shape = shape,
                     ),
             )

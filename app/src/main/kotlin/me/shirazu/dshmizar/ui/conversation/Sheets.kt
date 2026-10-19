@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
@@ -33,6 +34,7 @@ import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.Format
 import me.shirazu.dshmizar.ui.MizarColors
+import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.mizar.kit.ModelSelection
 
 /**
@@ -145,6 +147,7 @@ internal fun PermissionSheet(state: UiState, onDismiss: () -> Unit, onChoose: (S
             Button(
                 onClick = { onChoose(preset) },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(Radius.md),
             ) {
                 Text(stringResource(R.string.allow_full_access))
             }
@@ -191,7 +194,13 @@ internal fun ContextSheet(state: UiState, onDismiss: () -> Unit) {
 private fun Labelled(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        Text(value, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontFamily = FontFamily.Monospace,
+                fontFeatureSettings = "tnum",
+            ),
+        )
     }
 }
 

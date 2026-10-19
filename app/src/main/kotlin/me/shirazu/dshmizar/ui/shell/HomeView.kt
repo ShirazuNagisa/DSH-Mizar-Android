@@ -1,6 +1,7 @@
 package me.shirazu.dshmizar.ui.shell
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -127,7 +129,7 @@ fun HomeView(
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp)
                 .padding(bottom = 6.dp)
-                .glassCard(radius = Radius.xl),
+                .glassCard(radius = Radius.md),
         ) {
             TextField(
                 value = draft,
@@ -174,7 +176,7 @@ fun HomeView(
                     modifier = Modifier
                         .size(34.dp)
                         .scale(scale)
-                        .clip(CircleShape)
+                        .clip(RoundedCornerShape(Radius.sm))
                         .background(
                             if (canSend) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
@@ -218,8 +220,9 @@ private fun WorkspaceMenu(
         Row(
             modifier = Modifier
                 .height(32.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f))
+                .clip(RoundedCornerShape(Radius.sm))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.sm))
                 .pressable()
                 .clickable { open = true }
                 .padding(horizontal = 11.dp),
