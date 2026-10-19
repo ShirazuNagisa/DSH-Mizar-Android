@@ -80,6 +80,7 @@ fun Sidebar(
     onNewSession: () -> Unit,
     onPickHost: () -> Unit,
     onSettings: () -> Unit,
+    onOpenConnection: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     val hostId = state.host?.hostId
@@ -257,13 +258,13 @@ fun Sidebar(
 
         // The pending cards dock in the conversation, above the composer, as on
         // iOS; the list says which rows are waiting with a raised hand instead.
-        ConnectionFooter(state = state, onSettings = onSettings)
+        ConnectionFooter(state = state, onSettings = onSettings, onOpen = onOpenConnection)
     }
 }
 
 /** The capsule at the bottom: a breathing dot, the route, and settings. */
 @Composable
-private fun ConnectionFooter(state: UiState, onSettings: () -> Unit) {
+private fun ConnectionFooter(state: UiState, onSettings: () -> Unit, onOpen: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -276,6 +277,7 @@ private fun ConnectionFooter(state: UiState, onSettings: () -> Unit) {
                 .weight(1f)
                 .height(54.dp)
                 .glassCapsule()
+                .clickable(onClick = onOpen)
                 .padding(horizontal = Space.lg),
             verticalAlignment = Alignment.CenterVertically,
         ) {

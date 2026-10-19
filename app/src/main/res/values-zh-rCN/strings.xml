@@ -167,5 +167,12 @@
     <string name="diagnosis_repair_no_address">这台电脑已不认识这台手机。请在 DSH-Mizar 面板上重新配对。</string>
     <string name="diagnosis_repair">%1$s 有响应，但已不认识这台手机。请重新配对：扫描面板上的二维码，或输入配对码。</string>
     <string name="diagnosis_unknown_host">无法解析 %1$s。请检查配对码里的地址。</string>
+    <string name="connection_details">连接</string>
+    <string name="connection_status">状态</string>
+    <string name="connection_address">地址</string>
+    <string name="connection_route">路径</string>
+    <string name="connection_problem">最近的错误</string>
+    <string name="connection_failed">未连接</string>
+    <string name="retry_connection">重试</string>
 </resources>
 

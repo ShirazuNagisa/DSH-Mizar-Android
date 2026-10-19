@@ -180,4 +180,11 @@
     <string name="turn_index_untitled">(no prompt)</string>
     <string name="turn_index_unfinished">Unfinished only</string>
     <string name="turn_index_all_finished">Every turn here finished. Untick the filter to see them all.</string>
+    <string name="connection_details">Connection</string>
+    <string name="connection_status">Status</string>
+    <string name="connection_address">Address</string>
+    <string name="connection_route">Route</string>
+    <string name="connection_problem">Last problem</string>
+    <string name="connection_failed">Not connected</string>
+    <string name="retry_connection">Retry</string>
 </resources>

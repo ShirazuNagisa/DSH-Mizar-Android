@@ -104,6 +104,7 @@ fun MizarShell(model: AppViewModel, state: UiState) {
     var showingSettings by remember { mutableStateOf(false) }
     var showingNewSession by remember { mutableStateOf(false) }
     var showingPicker by remember { mutableStateOf(false) }
+    var showingConnection by remember { mutableStateOf(false) }
 
     // Open on a launch with nothing selected: the list is the only useful thing to
     // look at. Placed without animating; the first frame is a state, not a change.
@@ -167,6 +168,7 @@ fun MizarShell(model: AppViewModel, state: UiState) {
                 onNewSession = { showingNewSession = true },
                 onPickHost = { showingPicker = true },
                 onSettings = { showingSettings = true },
+                onOpenConnection = { showingConnection = true },
             )
         }
 
@@ -251,6 +253,14 @@ fun MizarShell(model: AppViewModel, state: UiState) {
             },
             onTheme = { mode -> model.setTheme(mode) },
             onQuietHours = { on -> model.setQuietHours(on) },
+        )
+    }
+    if (showingConnection) {
+        ConnectionPanel(
+            model = model,
+            state = state,
+            onDismiss = { showingConnection = false },
+            onSettings = { showingSettings = true },
         )
     }
     if (showingNewSession) {
