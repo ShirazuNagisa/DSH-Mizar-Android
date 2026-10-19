@@ -1,5 +1,7 @@
 package me.shirazu.dshmizar.push
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -8,6 +10,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
@@ -113,13 +116,34 @@ object Notifications {
     /** A finished turn gets its own range, so it cannot replace a waiting card. */
     const val FINISHED_NOTIFICATION_BASE = 2000
 
+    /**
+     * Post one notice.
+     *
+     * Returns whether it was actually posted, so a caller can claim it announced
+     * something only when the phone agreed. `POST_NOTIFICATIONS` can be off, the
+     * channel can be blocked, and on some ROMs a negative id is dropped silently --
+     * all three are "not announced", and reporting them as posted made the
+     * announcer believe a turn had been delivered when nobody would ever see it.
+     *
+     * Adopted from PR #1 (`XEPX2`), including its fix for the id: `abs(hashCode())`
+     * overflows at `Int.MIN_VALUE` and stays negative, so the abs is taken on a Long.
+     */
     fun show(
         context: Context,
         title: String,
         body: String,
         sessionId: String?,
         baseId: Int = PENDING_NOTIFICATION_BASE,
-    ) {
+    ): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return false
+        }
+        val manager = NotificationManagerCompat.from(context)
+        if (!manager.areNotificationsEnabled()) return false
+
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             if (sessionId != null) putExtra(EXTRA_SESSION_ID, sessionId)
@@ -140,16 +164,20 @@ object Notifications {
             .setContentIntent(pending)
             .build()
 
-        // Permission may be refused; a refused notification is not an error worth
-        // crashing over, and the in-app cards still show the same information.
         // Never id 1: that is the foreground service's ongoing notice, and the two
         // would replace each other -- which is exactly what hid a pending approval
         // behind "Connected to the computer" on a real phone.
         // Positive and bounded: a negative id is silently dropped on some ROMs, and
         // 1 is the foreground service's own notice.
-        val seed = kotlin.math.abs(sessionId?.hashCode() ?: 0)
-        val id = baseId + (seed % 900)
-        runCatching { NotificationManagerCompat.from(context).notify(id, notification) }
+        val seed = kotlin.math.abs((sessionId?.hashCode() ?: 0).toLong())
+        val id = baseId + (seed % 900L).toInt()
+        return try {
+            manager.notify(id, notification)
+            true
+        } catch (_: SecurityException) {
+            // Revoked between the check and the call.
+            false
+        }
     }
 }
 

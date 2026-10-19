@@ -446,9 +446,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     // Its own range: a completion must not replace a waiting card.
                     baseId = me.shirazu.dshmizar.push.Notifications.FINISHED_NOTIFICATION_BASE,
                 )
-            }
-            if (posted.isSuccess) announcer.record(row.sessionId, System.currentTimeMillis())
-            note("list: ${row.sessionId} posted=${posted.isSuccess} body=$body")
+            }.getOrDefault(false)
+            if (posted) announcer.record(row.sessionId, System.currentTimeMillis())
+            note("list: ${row.sessionId} posted=$posted body=$body")
         }
         // Forget the memory once a session is seen running again, so the next completion
         // is announced too.
@@ -1359,9 +1359,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 sessionId,
                 baseId = me.shirazu.dshmizar.push.Notifications.FINISHED_NOTIFICATION_BASE,
             )
-        }
-        if (posted.isSuccess) announcer.record(sessionId, System.currentTimeMillis())
-        note("settled $sessionId: posted=${posted.isSuccess} failed=${detail.failed} body=$body")
+        }.getOrDefault(false)
+        if (posted) announcer.record(sessionId, System.currentTimeMillis())
+        note("settled $sessionId: posted=$posted failed=${detail.failed} body=$body")
     }
 
     private fun applyIndex(index: SessionIndex) {
