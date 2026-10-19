@@ -56,6 +56,9 @@ fun ConnectionPanel(
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
             )
+            state.latencyMillis?.let { rtt ->
+                RowValue(stringResource(R.string.connection_latency), "$rtt ms")
+            }
             state.host?.let { host ->
                 RowValue(stringResource(R.string.connection_address), addressText(host))
                 RowValue(stringResource(R.string.connection_route), routeText(host))

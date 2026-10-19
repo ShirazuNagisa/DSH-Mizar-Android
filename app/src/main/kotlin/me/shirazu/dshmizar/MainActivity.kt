@@ -69,7 +69,7 @@ class MainActivity : ComponentActivity() {
     /** Foreground, so the host stops notifying this device about what it is looking at. */
     override fun onStart() {
         super.onStart()
-        model.setPresence(true); me.shirazu.dshmizar.push.ConnectionService.start(this)
+        model.setPresence(true); me.shirazu.dshmizar.push.ConnectionService.start(this, getString(R.string.link_connecting))
     }
 
     override fun onStop() {

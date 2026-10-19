@@ -174,5 +174,14 @@
     <string name="connection_problem">最近的错误</string>
     <string name="connection_failed">未连接</string>
     <string name="retry_connection">重试</string>
+    <!-- 常驻通知：连上时是谁、多远；断了是哪一段。 -->
+    <string name="link_connecting">正在连接…</string>
+    <string name="link_reconnecting">正在重新连接…</string>
+    <string name="link_connected">已连接到 %1$s</string>
+    <string name="link_connected_latency">已连接到 %1$s · %2$d ms</string>
+    <string name="link_host_offline">宿主机离线 · 正在重试</string>
+    <string name="link_server_unresponsive">服务器未响应 · 正在重试</string>
+    <string name="link_no_host">未连接主机</string>
+    <string name="connection_latency">延迟</string>
 </resources>
 

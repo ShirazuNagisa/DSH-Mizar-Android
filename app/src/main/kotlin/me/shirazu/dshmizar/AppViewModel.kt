@@ -21,6 +21,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import me.shirazu.dshmizar.push.PushTokens
+import me.shirazu.dshmizar.push.ConnectionService
 import me.shirazu.dshmizar.push.Notifications
 import me.shirazu.dshmizar.store.ActivityStore
 import me.shirazu.dshmizar.ui.ThemeMode
@@ -98,6 +99,8 @@ data class UiState(
     val reconnecting: Boolean = false,
     /** Why the last connection ended, shown beside the reconnect notice. */
     val disconnectReason: String? = null,
+    /** Round trip to the host, from the last poll that got an answer. */
+    val latencyMillis: Long? = null,
     /**
      * The host refused this phone's credential: only pairing again can help, so the
      * screen must offer that instead of a retry that cannot work.
@@ -188,6 +191,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var lastNotified: String? = null
     private var watchers: Job? = null
 
+    /** Why the last dial failed, and where it was dialling: the notice classifies from these. */
+    private var lastConnectFailure: Throwable? = null
+    private var lastConnectEndpoint: MizarConnection.Endpoint? = null
+
+    /** The sentence the permanent notice currently shows, so it is only rewritten on change. */
+    private var lastLinkNotice: String? = null
+
     /** Guards the load, and remembers a request that arrived during one. */
     private var loading = false
     private var reloadWanted = false
@@ -205,9 +215,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val host = hosts.lastOrNull()
             if (host == null) {
                 _state.update { it.copy(phase = Phase.UNPAIRED, hosts = emptyList()) }
+                publishLinkNotice(getApplication<Application>().getString(R.string.link_no_host))
                 return@launch
             }
             _state.update { it.copy(phase = Phase.CONNECTING, hosts = hosts, host = host) }
+            publishLinkNotice(getApplication<Application>().getString(R.string.link_connecting))
             connect(host)
         }
     }
@@ -258,6 +270,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         seenAt = activity.seenAt(host.hostId),
                     )
                 }
+                // The notice says who we are talking to and how far away it is; the
+                // distance arrives with the first poll, a second from now.
+                publishLinkNotice(linkConnectedText(host, _state.value.latencyMillis))
                 startWatchers(candidate)
                 watchConnection(candidate, host)
                 note("connected to $endpoint")
@@ -272,12 +287,78 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val address = host.authority ?: host.baseUrl
+        lastConnectFailure = failure
+        lastConnectEndpoint = host.endpoints.lastOrNull()
         _state.update {
             it.copy(
                 phase = Phase.FAILED,
                 problem = messageOf(failure ?: IOException("no address answered"), address),
                 needsPairing = failure?.isRepairNeeded() == true,
             )
+        }
+        publishLinkFailure()
+    }
+
+    /**
+     * What the notice says while the link is up: who, and how far away.
+     *
+     * The latency is omitted rather than guessed on the first frame; a "0 ms" that is
+     * really "not measured yet" is the kind of detail that makes a monitor untrustworthy.
+     */
+    private fun linkConnectedText(host: PairedHost, latencyMillis: Long?): String {
+        val context = getApplication<Application>()
+        val name = host.displayName
+        return if (latencyMillis == null) {
+            context.getString(R.string.link_connected, name)
+        } else {
+            context.getString(R.string.link_connected_latency, name, latencyMillis)
+        }
+    }
+
+    /**
+     * Which half of the link is down.
+     *
+     * The relay answers with a status when it is up and something behind it is not:
+     * 404/410 is "that room has no tunnel", which is the computer being offline rather
+     * than the server. Everything else -- a timeout, a refused connection, 429 or a
+     * 5xx from the relay itself -- is the server's side of the trip not answering. A
+     * direct endpoint has no server in the middle: if it fails, the host is offline.
+     */
+    private fun publishLinkFailure() {
+        val context = getApplication<Application>()
+        val endpoint = lastConnectEndpoint
+        val status = Regex("""was '?(\d{3})""").find(lastConnectFailure?.message.orEmpty())
+            ?.groupValues?.get(1)?.toIntOrNull()
+        val text = when {
+            endpoint is MizarConnection.Endpoint.Direct -> context.getString(R.string.link_host_offline)
+            status == 404 || status == 410 -> context.getString(R.string.link_host_offline)
+            else -> context.getString(R.string.link_server_unresponsive)
+        }
+        publishLinkNotice(text)
+    }
+
+    /** Write the notice once; the same sentence twice in a row is not news. */
+    private fun publishLinkNotice(text: String) {
+        if (text == lastLinkNotice) return
+        lastLinkNotice = text
+        ConnectionService.update(getApplication(), text)
+        note("link notice: $text")
+    }
+
+    /**
+     * Remember the round trip, and say it in the notice when it is news.
+     *
+     * A few milliseconds of jitter is not news: the notice is a monitor, not a
+     * speedometer, so it is rewritten only when the number has moved by something a
+     * person would notice, or when it was never measured before.
+     */
+    private fun recordLatency(millis: Long) {
+        val rounded = millis.coerceIn(1, 9_999)
+        val previous = _state.value.latencyMillis
+        _state.update { it.copy(latencyMillis = rounded) }
+        val host = _state.value.host ?: return
+        if (previous == null || kotlin.math.abs(rounded - previous) >= LATENCY_NOTICE_STEP_MILLIS) {
+            publishLinkNotice(linkConnectedText(host, rounded))
         }
     }
 
@@ -333,6 +414,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // "connecting" in front of the operator several times a minute, which reads
             // as a broken app when the connection was never actually missed.
             _state.update { it.copy(disconnectReason = reason) }
+            // The reason is known but not its owner; until an attempt comes back with
+            // something to classify, the notice says only that it is trying.
+            publishLinkNotice(getApplication<Application>().getString(R.string.link_reconnecting))
             launch {
                 delay(BANNER_DELAY_MILLIS)
                 if (_state.value.phase != Phase.READY || connection == null) {
@@ -1259,7 +1343,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 while (true) {
                     delay(INTERACTION_POLL_MILLIS)
-                    if (!refreshInteractionsNow() && isActive) {
+                    // The poll is a round trip, so it is also the clock: timing the one
+                    // request the app already makes is how the notice learns the distance
+                    // without a second protocol message invented for it.
+                    val askedAt = System.nanoTime()
+                    val answered = refreshInteractionsNow()
+                    if (answered) recordLatency((System.nanoTime() - askedAt) / 1_000_000)
+                    if (!answered && isActive) {
                         // The poll is also the heartbeat. A websocket through a relay can
                         // be dead while both read loops stay happy -- the tunnel drops the
                         // mapping and the relay goes on answering websocket pings -- so an
@@ -1501,7 +1591,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         /** How stale the screen may get before returning to it triggers a refresh. */
         const val STALE_MILLIS = 15_000L
 
-        /** How long a posted completion counts as "the same turn" for the other path. */
+        /** How much the round trip has to move before the notice is worth rewriting. */
+    private const val LATENCY_NOTICE_STEP_MILLIS = 20L
+
+    /** How long a posted completion counts as "the same turn" for the other path. */
         const val ANNOUNCE_DEDUPE_MILLIS = 5_000L
 
         /** How long a drop must last before the banner appears: one second is a blip. */
