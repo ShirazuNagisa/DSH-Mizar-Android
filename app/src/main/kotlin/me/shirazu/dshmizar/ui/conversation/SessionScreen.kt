@@ -211,17 +211,9 @@ fun SessionScreen(
         if (!following || itemCount == 0) return@LaunchedEffect
         list.scrollToItem(itemCount - 1)
     }
-    // Say when a refresh finished. A spinner that merely stops is ambiguous: success and
-    // a silently failed request look the same.
-    var wasRefreshing by remember { mutableStateOf(false) }
-    val refreshedMessage = stringResource(R.string.refreshed)
-    LaunchedEffect(state.refreshing) {
-        if (wasRefreshing && !state.refreshing) {
-            snackbar.showSnackbar(state.conversationError ?: refreshedMessage)
-        }
-        wasRefreshing = state.refreshing
-    }
-
+    // Say when a refresh finished by simply stopping: the spinner halting and
+    // the list settling is statement enough -- a black toast on top of the
+    // conversation was noise.
     val running = state.sessions.firstOrNull { it.sessionId == state.selectedSessionId }?.running == true
     val hasPending = state.pending?.isEmpty == false
     val lastTurnFailed = state.turns.lastOrNull()?.steps?.any { it is ConversationItem.Failure } == true
