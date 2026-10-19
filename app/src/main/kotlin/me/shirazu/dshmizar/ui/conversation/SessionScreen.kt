@@ -213,7 +213,12 @@ fun SessionScreen(
     // Say when a refresh finished by simply stopping: the spinner halting and
     // the list settling is statement enough -- a black toast on top of the
     // conversation was noise.
-    val running = state.sessions.firstOrNull { it.sessionId == state.selectedSessionId }?.running == true
+    // The session row is the host's word, and it lags a message by a round trip: a
+    // conversation whose newest turn is in flight is running whatever the list said
+    // a second ago. `isPending` covers the window between the prompt being recorded
+    // and the host opening its turn.
+    val pendingTurn = state.turns.lastOrNull()?.let { it.isRunning || it.isPending } == true
+    val running = state.sessions.firstOrNull { it.sessionId == state.selectedSessionId }?.running == true || pendingTurn
     val hasPending = state.pending?.isEmpty == false
     val lastTurnFailed = state.turns.lastOrNull()?.steps?.any { it is ConversationItem.Failure } == true
 

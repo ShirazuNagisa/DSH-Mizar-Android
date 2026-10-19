@@ -1532,4 +1532,64 @@ class ConversationTest {
         assertEquals(8, message("seq-8", "x").seq)
         assertNull(message("unknown-user/message", "x").seq)
     }
+    // MARK: - A turn the host has recorded but not opened yet
+
+    /**
+     * The window between the host writing the message and writing the `turn/start`
+     * that opens its turn. The screen reads in between; treating that read as a
+     * finished turn is how "Completed" appeared the instant a message was sent.
+     */
+    private fun pendingPage(): SessionMessagesResult = page(
+        """
+        {"sessionId":"s1","asOfSeq":9,"hasMore":false,"records":[
+          {"type":"event","event":{"type":"user/message","seq":9,"time":1791984791224,
+            "data":{"content":[{"type":"text","text":"hello"}],
+                      "source":{"kind":"user"},"role":"user","id":"p9"},"surfaceOp":"append"}}
+        ]}
+        """.trimIndent(),
+    )
+
+    @Test
+    fun `a prompt whose turn has not opened yet is pending, not finished`() {
+        val turns = Conversation.turns(pendingPage())
+
+        assertEquals(1, turns.size)
+        val pending = turns.single()
+        assertTrue(pending.isPending, "a recorded prompt with no turn/start is in flight")
+        assertFalse(pending.isRunning, "nothing has said the turn started")
+        assertNull(pending.endedAtMillis, "a pending turn has no end to report")
+        assertNull(pending.durationMillis, "and therefore no duration to print")
+    }
+
+    @Test
+    fun `a prompt that already has an answer in its group is not pending`() {
+        val turns = Conversation.turns(
+            page(
+                """
+                {"sessionId":"s1","asOfSeq":10,"hasMore":false,"records":[
+                  {"type":"event","event":{"type":"user/message","seq":9,"time":1791984791224,
+                    "data":{"content":[{"type":"text","text":"hello"}],
+                              "source":{"kind":"user"},"role":"user","id":"p9"},"surfaceOp":"append"}},
+                  {"type":"event","event":{"type":"assistant/message","seq":10,"time":1791984795224,
+                    "data":{"content":[{"type":"text","text":"hi"}],"role":"assistant","id":"a10"},
+                    "surfaceOp":"append"}}
+                ]}
+                """.trimIndent(),
+            ),
+        )
+
+        val grouped = turns.single()
+        assertFalse(grouped.isPending, "an answer in the group means the turn is not merely recorded")
+    }
+
+    @Test
+    fun `a turn the host opened is running, and a finished one is neither`() {
+        val running = turn(number = 3, promptSeqs = listOf(3), stepSeqs = listOf(4), startedAtMillis = 100)
+        assertTrue(running.isRunning)
+        assertFalse(running.isPending)
+
+        val finished = running.copy(endedAtMillis = 200, endedReason = "completed")
+        assertFalse(finished.isRunning)
+        assertFalse(finished.isPending)
+    }
 }

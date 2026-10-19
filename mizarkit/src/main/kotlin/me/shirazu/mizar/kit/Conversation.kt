@@ -172,6 +172,19 @@ data class ConversationTurn(
     /** An unnumbered group is never "running": nothing said it started. */
     val isRunning: Boolean get() = turn != null && endedAtMillis == null
 
+    /**
+     * A prompt the host has recorded but not yet opened a turn for.
+     *
+     * The host writes the operator's message first and the `turn/start` that opens
+     * its turn after, so there is a window in which the screen holds a message and
+     * nothing has happened to it yet. Reading that window as a finished turn is how
+     * "Completed" appeared the instant a message was sent.
+     *
+     * Only the newest turn can be in this state; an unnumbered group further up the
+     * log is a page-edge artifact rather than something in flight.
+     */
+    val isPending: Boolean get() = turn == null && endedAtMillis == null && steps.isEmpty()
+
     /** When the turn began: the host's `turn/start`, or the oldest item in it. */
     val beganAtMillis: Long? get() = startedAtMillis ?: items.mapNotNull { it.atMillis }.minOrNull()
 

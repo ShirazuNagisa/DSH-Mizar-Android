@@ -97,7 +97,17 @@ internal fun ConversationList(
             }
         } else {
             itemsIndexed(state.turns, key = { _, turn -> turn.id }) { index, turn ->
-                TurnSection(turn, now, onCopy, onRetry, highlighted = index == highlightTurn)
+                // Only the newest turn can be in flight: either the host has opened it
+                // (`isRunning`) or it has recorded the prompt and not yet the `turn/start`
+                // (`isPending`). Nothing older is treated as waiting.
+                TurnSection(
+                    turn = turn,
+                    now = now,
+                    onCopy = onCopy,
+                    onRetry = onRetry,
+                    highlighted = index == highlightTurn,
+                    waiting = index == state.turns.lastIndex && (turn.isRunning || turn.isPending),
+                )
             }
         }
 
@@ -147,6 +157,8 @@ private fun TurnSection(
     onCopy: (String) -> Unit,
     onRetry: (String) -> Unit,
     highlighted: Boolean = false,
+    /** The turn is in flight: opened by the host, or its prompt just recorded. */
+    waiting: Boolean = false,
 ) {
     // The glow the turn index leaves behind: a wash that fades on its own, because the
     // point is to find the turn once, not to mark it. `animateFloatAsState` drives it,
@@ -169,7 +181,7 @@ private fun TurnSection(
         }
 
         // Prompt, row, answer -- and the row does not move.
-        TurnSummary(turn, now, onRetry)
+        TurnSummary(turn, now, onRetry, waiting = waiting)
 
         turn.steps.forEach { step ->
             RiseOnce {
@@ -180,27 +192,35 @@ private fun TurnSection(
 }
 
 /**
- * "DeepSeeking for 2 min 14 s", "Completed in 2 min 14 s", or why it did not.
+ * "深度求索中~", "Completed in 2 min 14 s", or why it did not.
  *
  * The state is a glyph that changes rather than appears: the twin star while it
- * works, settling into a tick when it is done. The clock is ticked locally --
- * the host already said when the turn started -- and it shimmers while it runs.
+ * works, settling into a tick when it is done. While a turn is in flight the row
+ * says what the agent is doing rather than how long it is taking -- a stopwatch
+ * counting up reads like a loading indicator, and the duration only means something
+ * once there is an end to measure against.
+ *
+ * `waiting` is passed in rather than derived here: only the caller knows whether
+ * this is the newest turn, and an unnumbered group further up the log is a page-edge
+ * artifact, not something in flight.
  */
 @Composable
 private fun TurnSummary(
     turn: ConversationTurn,
     now: Long,
     onRetry: (String) -> Unit,
+    waiting: Boolean = false,
 ) {
     // One small tap when a turn the operator is watching finishes. Only on the
     // change, never on the first draw of a finished turn.
     val haptics = LocalHapticFeedback.current
-    var wasRunning by remember(turn.id) { mutableStateOf<Boolean?>(null) }
-    LaunchedEffect(turn.isRunning) {
-        if (wasRunning == true && !turn.isRunning && !turn.failed) {
+    val active = waiting || turn.isRunning
+    var wasActive by remember(turn.id) { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(active) {
+        if (wasActive == true && !active && !turn.failed) {
             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         }
-        wasRunning = turn.isRunning
+        wasActive = active
     }
 
     Row(
@@ -208,7 +228,7 @@ private fun TurnSummary(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(modifier = Modifier.size(16.dp), contentAlignment = Alignment.Center) {
-            if (turn.isRunning) {
+            if (active) {
                 TwinStar(size = 13.dp)
             } else {
                 Icon(
@@ -221,9 +241,8 @@ private fun TurnSummary(
         }
         Spacer(Modifier.width(7.dp))
 
-        val elapsed = turn.elapsedMillis(now)
         val headline = when {
-            turn.isRunning -> stringResource(R.string.running_for, Format.duration(elapsed) ?: "0 s")
+            active -> stringResource(R.string.turn_deep_seeking)
             turn.failed -> Format.duration(turn.durationMillis)?.let { stringResource(R.string.unfinished_after, it) }
                 ?: stringResource(R.string.unfinished)
 
@@ -237,7 +256,7 @@ private fun TurnSummary(
                 fontFeatureSettings = "tnum",
             ),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.shimmering(active = turn.isRunning),
+            modifier = Modifier.shimmering(active = active),
         )
 
         Spacer(Modifier.weight(1f))

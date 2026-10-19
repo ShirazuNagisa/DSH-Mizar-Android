@@ -56,7 +56,7 @@
     <string name="conversation_failed">无法加载对话</string>
     <string name="load_earlier">加载更早的消息</string>
     <string name="step_count">%1$d 个步骤</string>
-    <string name="running_for">正在处理，已用时 %1$s</string>
+    <string name="turn_deep_seeking">深度求索中~</string>
     <string name="completed_in">已完成，用时 %1$s</string>
     <string name="completed">已完成</string>
     <string name="unfinished_after">未完成，已用时 %1$s</string>
@@ -97,7 +97,7 @@
     <string name="messages">消息</string>
     <string name="unavailable">不可用</string>
     <string name="cancel">取消</string>
-    <string name="status_thinking">正在思考…</string>
+    <string name="status_thinking">深度求索中~</string>
     <string name="status_idle">空闲</string>
     <string name="status_waiting">等待你的回答</string>
     <string name="status_failed">上一轮失败</string>

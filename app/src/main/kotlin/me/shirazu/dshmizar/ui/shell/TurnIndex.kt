@@ -111,7 +111,7 @@ fun TurnIndex(
         }
 
         val visible = if (onlyUnfinished) {
-            turns.withIndex().filter { (_, turn) -> turn.failed || turn.isRunning }
+            turns.withIndex().filter { (_, turn) -> turn.failed || turn.isRunning || turn.isPending }
         } else {
             turns.withIndex().toList()
         }
@@ -182,7 +182,7 @@ private fun SessionStrip(
                     .clip(RoundedCornerShape(2.dp))
                     .background(
                         if (turn.failed) failedTint
-                        else if (turn.isRunning) runningTint
+                        else if (turn.isRunning || turn.isPending) runningTint
                         else doneTint,
                     )
                     .clickable { onPick(index) },
@@ -203,7 +203,7 @@ private fun TurnIndexRow(
     val prompt = (turn.prompts.firstOrNull() as? ConversationItem.Message)?.text?.trim().orEmpty()
     val elapsed = turn.elapsedMillis(now) ?: 0L
     val failed = turn.failed
-    val running = turn.isRunning
+    val running = turn.isRunning || turn.isPending
 
     Row(
         modifier = Modifier
