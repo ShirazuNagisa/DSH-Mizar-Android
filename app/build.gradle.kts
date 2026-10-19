@@ -38,8 +38,8 @@ android {
         targetSdk = 35
         // Kept in step with the iOS target's MARKETING_VERSION/CURRENT_PROJECT_VERSION
         // (0.8.0 / 15) so a build can be identified from either platform's report.
-        versionCode = 38
-        versionName = "0.9.0"
+        versionCode = 39
+        versionName = "0.9.1"
     }
 
     buildFeatures {
