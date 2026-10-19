@@ -227,7 +227,7 @@ adb reverse tcp:19390 tcp:19390
 
 两个 `ensureChannel()` 现在每次启动都会写一遍渠道名与描述。**不要改回"存在就 return"**：那样渠道名会永远停在第一次创建时的语言，装过旧版本的手机改不过来（Android 允许更新名字/描述，只拒绝提高重要性）。
 
-## 十三、iOS 0.9.1 移植（进行中）
+## 十三、iOS 0.9.1 → 0.9.2 移植
 
 参照 iOS `2751d17`（0.9.1 / build 23）。进度按"已移植 / 待移植"分开记，接手的人不必重新读一遍 Swift。
 
@@ -253,6 +253,16 @@ adb reverse tcp:19390 tcp:19390
 | ~~弹出命名提示~~ | ✅ 0.9.2 完成：配对成功弹居中 `NamingDialog`（无触发控件可锚定，同 iOS 的例外规则）；设置页主机行有「重命名」 |
 | iPad 独立列 + 刻度轨 | 手机上没有对应形态；宽屏（≥600dp）时索引可作为常驻列，暂缓 |
 | iOS `fe28359` 轮次裁决（`endInferred` / "Ended" 灰色空心勾） | 属协议层移植（MizarKit `Conversation.swift` + `ConversationCache.swift` + SettlingRunsTests），UI 侧需新增第三种终态显示。**待做，工作量与风险单列** |
+
+### 0.9.2 这一批（2026-10-19 发版）
+
+| 项 | 落地 | 说明 |
+|---|---|---|
+| 轮次等待态 | `ConversationTurn.isPending` + `深度求索中~` | 宿主先写消息再写 `turn/start`，中间窗口过去被读成"已完成"；现在只有最新一轮算 in-flight，waiting 文案统一 |
+| 轮次结束后的重读 | `refreshConversationQuietly` | `turn.settled` 前台也重读 tail；列表由运行转空闲也触发，陈旧副本不再让状态行卡在"深度求索中~" |
+| 幻影"未完成"行 | `withoutSilentTurns` + 无编号组归一 | 中止的空轮（无提示、无步骤）不再折进上一轮；无编号组永远没有结束/原因/失败 |
+| 模型强度选择 | `ModelPickerContent` + `EffortChooser` | 选中模型后在行下展开推理强度（Off/Low/High/Max），点档位才提交；无档位的模型一点即提交 |
+| 底部两个窗口 | `ConnectionFooter` 重构 | 都锚在 footer 行：贴近按钮、在侧边栏内；设置窗右对齐、行高压缩、整窗可滚动（有界高度） |
 
 **注意**：`TurnIndex` 的等宽假设与 `Space` 尺度都来自 0.9.0 的设计语言，改它时要连着 `MizarShell` 的抽屉宽度一起看（`min(320.dp, maxWidth * 0.84f)`）。
 
