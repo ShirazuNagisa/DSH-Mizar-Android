@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -45,10 +46,13 @@ import me.shirazu.mizar.kit.PairingUri
 fun RootScreen(model: AppViewModel, incomingPairUri: String?, onPairUriHandled: () -> Unit) {
     val state by model.state.collectAsState()
 
-    // A scanned or deep-linked URI is handled once, then cleared, so a rotation does
-    // not pair a second time with a single-use code.
-    if (incomingPairUri != null) {
-        PairingUri.parse(incomingPairUri)?.let { target -> model.pair(target, "Android") }
+    // An effect, not an `if` in the composition. Pairing is a side effect that spends
+    // a single-use code, and running it inline meant every recomposition between the
+    // scan and the state update could spend it again. Keyed on the URI so a second
+    // scan of the same code is still one pairing.
+    LaunchedEffect(incomingPairUri) {
+        val uri = incomingPairUri ?: return@LaunchedEffect
+        PairingUri.parse(uri)?.let { target -> model.pair(target, "Android") }
         onPairUriHandled()
     }
 
