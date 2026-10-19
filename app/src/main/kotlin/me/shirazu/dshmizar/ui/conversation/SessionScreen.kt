@@ -66,6 +66,7 @@ import me.shirazu.dshmizar.ui.design.PopoverSize
 import me.shirazu.dshmizar.ui.design.Transitions
 import me.shirazu.dshmizar.ui.design.glassCapsule
 import me.shirazu.dshmizar.ui.design.pressable
+import me.shirazu.dshmizar.ui.design.shapedClickable
 import me.shirazu.mizar.kit.ConversationItem
 
 /**
@@ -333,7 +334,7 @@ fun SessionScreen(
                                 .height(34.dp)
                                 .glassCapsule()
                                 .pressable(scale = 0.94f)
-                                .clickable {
+                                .shapedClickable(androidx.compose.foundation.shape.CircleShape) {
                                     scope.launch {
                                         scrollToEnd()
                                         waitingNew = 0

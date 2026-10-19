@@ -64,6 +64,7 @@ import me.shirazu.dshmizar.ui.CameraScanner
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.ButtonShape
 import me.shirazu.dshmizar.ui.design.Corner
+import me.shirazu.dshmizar.ui.design.Glass
 import me.shirazu.dshmizar.ui.design.GlassCircleLabel
 import me.shirazu.dshmizar.ui.design.MizarMarkSearching
 import me.shirazu.dshmizar.ui.design.Motion
@@ -373,7 +374,7 @@ internal fun ScannerScreen(onCode: (String) -> Unit, onCancel: () -> Unit) {
                 .align(Alignment.TopEnd)
                 .padding(20.dp),
         ) {
-            GlassCircleLabel(size = 44.dp, onClick = onCancel) {
+            GlassCircleLabel(size = 44.dp, onClick = onCancel, fill = Glass.camera) {
                 Icon(
                     Icons.Default.Close,
                     contentDescription = stringResource(R.string.cancel),
@@ -387,7 +388,7 @@ internal fun ScannerScreen(onCode: (String) -> Unit, onCancel: () -> Unit) {
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 40.dp)
-                .glassCapsule()
+                .glassCapsule(fill = Glass.camera)
                 .padding(horizontal = 20.dp, vertical = 12.dp),
         ) {
             Text(

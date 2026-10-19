@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -54,6 +55,7 @@ import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.TwinStar
 import me.shirazu.dshmizar.ui.design.glassCapsule
 import me.shirazu.dshmizar.ui.design.pressable
+import me.shirazu.dshmizar.ui.design.shapedClickable
 import me.shirazu.mizar.kit.ConversationItem
 import me.shirazu.mizar.kit.ConversationTurn
 
@@ -135,7 +137,7 @@ private fun LoadOlderRow(loading: Boolean, onLoadOlder: () -> Unit) {
                 .height(30.dp)
                 .glassCapsule()
                 .pressable(scale = 0.96f)
-                .clickable(enabled = !loading, onClick = onLoadOlder)
+                .shapedClickable(CircleShape, enabled = !loading, onClick = onLoadOlder)
                 .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

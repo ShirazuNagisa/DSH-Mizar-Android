@@ -200,8 +200,8 @@ private fun PopoverSurface(
         modifier = layer,
         shape = Corner.md,
         // Translucent, but only just: the work behind shows as a breath, not as
-        // words competing with the window's own.
-        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+        // words competing with the window's own (the overlay strength, see Glass).
+        color = Glass.overlayFill(),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),

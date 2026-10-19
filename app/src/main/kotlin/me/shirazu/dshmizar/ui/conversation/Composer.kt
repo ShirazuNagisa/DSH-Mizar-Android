@@ -71,6 +71,7 @@ import me.shirazu.dshmizar.ui.design.LocalReduceMotion
 import me.shirazu.dshmizar.ui.design.Motion
 import me.shirazu.dshmizar.ui.design.AnchoredPopover
 import me.shirazu.dshmizar.ui.design.Corner
+import me.shirazu.dshmizar.ui.design.Glass
 import me.shirazu.dshmizar.ui.design.PopoverSize
 import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.Space
@@ -128,7 +129,7 @@ internal fun Composer(
             modifier = Modifier
                 .fillMaxWidth()
                 .onGloballyPositioned { ComposerGeometry.slabTop = it.boundsInRoot().top }
-                .glassCard(radius = Radius.xl, translucent = true)
+                .glassCard(radius = Radius.xl)
                 // A tap anywhere on the slab is a tap on the field.
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -281,8 +282,8 @@ private fun CommandButton(open: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(32.dp)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f), Corner.lg)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Corner.lg)
+            .background(Glass.fill(), Corner.lg)
+            .border(Glass.Hairline, MaterialTheme.colorScheme.outlineVariant, Corner.lg)
             .pressable(scale = 0.9f)
             .shapedClickable(Corner.lg, onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -327,8 +328,8 @@ private fun ModelPill(
         modifier = modifier
             .height(32.dp)
             .animateContentSize(Motion.smooth())
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f), Corner.lg)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Corner.lg)
+            .background(Glass.fill(), Corner.lg)
+            .border(Glass.Hairline, MaterialTheme.colorScheme.outlineVariant, Corner.lg)
             .pressable()
             .shapedClickable(Corner.lg, onClick = onClick)
             .padding(horizontal = if (focused) 0.dp else 11.dp)
@@ -362,8 +363,8 @@ private fun ContextPill(state: UiState, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .height(32.dp)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f), Corner.lg)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Corner.lg)
+            .background(Glass.fill(), Corner.lg)
+            .border(Glass.Hairline, MaterialTheme.colorScheme.outlineVariant, Corner.lg)
             .then(if (context != null) Modifier.pressable().shapedClickable(Corner.lg, onClick = onClick) else Modifier)
             .padding(horizontal = 9.dp),
         verticalAlignment = Alignment.CenterVertically,

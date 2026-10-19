@@ -202,7 +202,7 @@ private fun TuckedPill(count: Int, onExpand: () -> Unit) {
                 .height(38.dp)
                 .glassCapsule()
                 .pressable(scale = 0.94f)
-                .clickable(onClick = onExpand)
+                .shapedClickable(CircleShape, onClick = onExpand)
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

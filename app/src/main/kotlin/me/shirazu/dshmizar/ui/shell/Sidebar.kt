@@ -390,7 +390,7 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
                     .fillMaxWidth()
                     .height(54.dp)
                     .glassCapsule()
-                    .clickable { showingConnection = true }
+                    .shapedClickable(CircleShape) { showingConnection = true }
                     .padding(horizontal = Space.lg),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

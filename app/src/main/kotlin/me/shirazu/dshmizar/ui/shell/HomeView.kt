@@ -57,6 +57,7 @@ import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.AnchoredPopover
 import me.shirazu.dshmizar.ui.design.Corner
+import me.shirazu.dshmizar.ui.design.Glass
 import me.shirazu.dshmizar.ui.design.MizarMarkConnecting
 import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.glassCard
@@ -158,7 +159,7 @@ fun HomeView(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .glassCard(radius = Radius.xl, translucent = true),
+                    .glassCard(radius = Radius.xl),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
@@ -264,8 +265,8 @@ private fun WorkspaceMenu(
         Row(
             modifier = Modifier
                 .height(32.dp)
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f), Corner.lg)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Corner.lg)
+                .background(Glass.fill(), Corner.lg)
+                .border(Glass.Hairline, MaterialTheme.colorScheme.outlineVariant, Corner.lg)
                 .pressable()
                 .shapedClickable(Corner.lg) { open = true }
                 .padding(horizontal = 11.dp),
