@@ -51,6 +51,7 @@ import me.shirazu.dshmizar.ui.design.MizarMarkConnecting
 import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.pressable
+import me.shirazu.dshmizar.ui.pairing.NamingDialog
 import me.shirazu.mizar.kit.SessionGrouping
 
 /**
@@ -69,6 +70,7 @@ fun SettingsDialog(
     onAddHost: () -> Unit,
     onTheme: (ThemeMode) -> Unit,
     onQuietHours: (Boolean) -> Unit,
+    onRename: (String, String?) -> Unit = { _, _ -> },
 ) {
     DialogShell(title = stringResource(R.string.settings), onDismiss = onDismiss) {
         // What this is, before what it does: the icon, the name, the pairing.
@@ -143,14 +145,28 @@ fun SettingsDialog(
         }
 
         SectionLabel(stringResource(R.string.hosts_section))
+        var renaming by remember { mutableStateOf<me.shirazu.mizar.kit.PairedHost?>(null) }
         for (host in state.hosts) {
             ListItem(
                 headlineContent = { Text(host.displayName) },
                 supportingContent = { Text(host.authority ?: host.baseUrl.orEmpty()) },
                 leadingContent = { Icon(Icons.Default.Computer, contentDescription = null) },
                 trailingContent = {
-                    TextButton(onClick = { onForget(host.hostId) }) { Text(stringResource(R.string.forget)) }
+                    Row {
+                        TextButton(onClick = { renaming = host }) { Text(stringResource(R.string.rename)) }
+                        TextButton(onClick = { onForget(host.hostId) }) { Text(stringResource(R.string.forget)) }
+                    }
                 },
+            )
+        }
+        renaming?.let { host ->
+            NamingDialog(
+                machineName = host.hostName ?: host.displayName,
+                onSave = { label ->
+                    renaming = null
+                    onRename(host.hostId, label)
+                },
+                onSkip = { renaming = null },
             )
         }
         TextButton(onClick = onAddHost, modifier = Modifier.padding(horizontal = 8.dp)) {

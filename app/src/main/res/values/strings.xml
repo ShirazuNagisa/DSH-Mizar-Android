@@ -41,6 +41,10 @@
     <string name="host_label">Host, for example 192.168.1.20:19390</string>
     <string name="pairing_code">Pairing code</string>
     <string name="device_name">This device</string>
+    <string name="naming_title">Name this computer?</string>
+    <string name="naming_body">A label of your own shows here instead of the machine\'s name. You can change it later in Settings.</string>
+    <string name="naming_save">Save</string>
+    <string name="naming_skip">Skip</string>
     <string name="pair">Pair</string>
     <string name="camera_needed">The camera is needed to scan the pairing code.</string>
     <string name="allow_camera">Allow camera</string>
@@ -69,6 +73,7 @@
     <!-- Settings -->
     <string name="settings">Settings</string>
     <string name="settings_note">Pairings and stored history live here. Notification settings are on Android\'s own app screen.</string>
+    <string name="rename">Rename</string>
     <string name="forget">Forget</string>
     <string name="add_mac">Add a computer</string>
 

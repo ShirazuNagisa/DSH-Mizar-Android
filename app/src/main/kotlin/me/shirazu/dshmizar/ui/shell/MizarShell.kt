@@ -50,6 +50,7 @@ import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.LocalMizarDark
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.conversation.SessionScreen
+import me.shirazu.dshmizar.ui.pairing.NamingDialog
 import me.shirazu.dshmizar.ui.design.LocalReduceMotion
 import me.shirazu.dshmizar.ui.design.Radius
 import kotlin.math.min
@@ -102,6 +103,18 @@ fun MizarShell(model: AppViewModel, state: UiState) {
     // Every window grows out of the control that opens it, anchored where the
     // tap happened: the sidebar and the home view mount their own popovers, and
     // nothing floats free at the shell's level.
+    // The one exception is the question a pairing asks: nothing on screen opened
+    // it, so it stands alone.
+    state.pendingNameHostId?.let { namingHostId ->
+        val namingHost = state.hosts.firstOrNull { it.hostId == namingHostId }
+        if (namingHost != null) {
+            NamingDialog(
+                machineName = namingHost.hostName ?: namingHost.displayName,
+                onSave = { label -> model.renameHost(namingHostId, label) },
+                onSkip = { model.dismissNaming() },
+            )
+        }
+    }
 
     // Open on a launch with nothing selected: the list is the only useful thing to
     // look at. Placed without animating; the first frame is a state, not a change.

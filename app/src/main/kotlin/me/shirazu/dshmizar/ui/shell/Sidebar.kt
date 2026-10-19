@@ -448,6 +448,7 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
                     },
                     onTheme = { mode -> model.setTheme(mode) },
                     onQuietHours = { on -> model.setQuietHours(on) },
+                    onRename = { hostId, label -> model.renameHost(hostId, label) },
                 )
             }
         }

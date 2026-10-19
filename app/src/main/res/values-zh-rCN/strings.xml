@@ -16,6 +16,10 @@
     <string name="host_label">主机，例如 192.168.1.20:19390</string>
     <string name="pairing_code">配对码</string>
     <string name="device_name">这台设备</string>
+    <string name="naming_title">给这台电脑起个名字？</string>
+    <string name="naming_body">起个顺口的名字会代替机器名显示在这里，以后也可以在设置里改。</string>
+    <string name="naming_save">保存</string>
+    <string name="naming_skip">跳过</string>
     <string name="pair">配对</string>
     <string name="camera_needed">扫描配对码需要使用相机。</string>
     <string name="allow_camera">允许使用相机</string>
@@ -41,6 +45,7 @@
 
     <string name="settings">设置</string>
     <string name="settings_note">配对与本地历史都在这里。通知设置在 Android 应用的系统页面里。</string>
+    <string name="rename">重命名</string>
     <string name="forget">忘记</string>
     <string name="add_mac">添加一台电脑</string>
 

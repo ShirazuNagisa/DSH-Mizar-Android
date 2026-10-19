@@ -106,6 +106,12 @@ data class UiState(
      * screen must offer that instead of a retry that cannot work.
      */
     val needsPairing: Boolean = false,
+    /**
+     * A pairing just succeeded and the operator has not yet been offered to name
+     * the computer. Set by `pair`, cleared by `renameHost`/`dismissNaming` and by
+     * switching computers: a naming prompt belongs to the pairing that raised it.
+     */
+    val pendingNameHostId: String? = null,
     val statsError: String? = null,
     val conversationError: String? = null,
     val loadingConversation: Boolean = false,
@@ -239,7 +245,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 credentials.save(paired)
                 val hosts = credentials.loadAll().sortedBy { it.pairedAtMillis }
-                _state.update { it.copy(hosts = hosts, host = paired) }
+                _state.update { it.copy(hosts = hosts, host = paired, pendingNameHostId = paired.hostId) }
                 connect(paired)
             } catch (error: Throwable) {
                 _state.update { it.copy(phase = Phase.FAILED, problem = messageOf(error, target.authority ?: target.baseUrl)) }
@@ -625,10 +631,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     turns = emptyList(),
                     stats = null,
                     problem = null,
+                    pendingNameHostId = null,
                 )
             }
             connect(host)
         }
+    }
+
+    /**
+     * Give a paired computer a label of the operator's own, or take one away.
+     * An empty label means "use the machine's own name" (`PairedHost.renamed`).
+     */
+    fun renameHost(hostId: String, label: String?) {
+        viewModelScope.launch {
+            val current = credentials.loadAll().firstOrNull { it.hostId == hostId } ?: return@launch
+            val renamed = current.renamed(to = label)
+            credentials.save(renamed)
+            val hosts = credentials.loadAll().sortedBy { it.pairedAtMillis }
+            _state.update {
+                it.copy(
+                    hosts = hosts,
+                    host = if (it.host?.hostId == hostId) renamed else it.host,
+                    pendingNameHostId = if (it.pendingNameHostId == hostId) null else it.pendingNameHostId,
+                )
+            }
+        }
+    }
+
+    /** The naming prompt was declined: naming is optional, and "skip" is final. */
+    fun dismissNaming() {
+        _state.update { it.copy(pendingNameHostId = null) }
     }
 
     /**
