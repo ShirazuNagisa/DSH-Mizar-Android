@@ -194,7 +194,7 @@ fun HomeView(
                     modifier = Modifier
                         .size(34.dp)
                         .scale(scale)
-                        .clip(RoundedCornerShape(Radius.sm))
+                        .clip(RoundedCornerShape(Radius.lg))
                         .background(
                             if (canSend) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
@@ -241,9 +241,9 @@ private fun WorkspaceMenu(
         Row(
             modifier = Modifier
                 .height(32.dp)
-                .clip(RoundedCornerShape(Radius.sm))
+                .clip(RoundedCornerShape(Radius.lg))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.sm))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.lg))
                 .pressable()
                 .clickable { open = true }
                 .padding(horizontal = 11.dp),

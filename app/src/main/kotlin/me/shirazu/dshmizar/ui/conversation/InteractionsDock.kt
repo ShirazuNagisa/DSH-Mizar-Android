@@ -325,9 +325,9 @@ private fun DeckHeader(
             Row(
                 modifier = Modifier
                     .height(26.dp)
-                    .clip(RoundedCornerShape(Radius.sm))
+                    .clip(RoundedCornerShape(Radius.lg))
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.sm))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.lg))
                     .pressable()
                     .clickable(onClick = onNext)
                     .padding(horizontal = 10.dp),

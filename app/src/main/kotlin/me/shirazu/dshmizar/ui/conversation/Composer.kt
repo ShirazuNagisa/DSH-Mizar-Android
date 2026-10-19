@@ -268,9 +268,9 @@ private fun CommandButton(open: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(32.dp)
-            .clip(RoundedCornerShape(Radius.sm))
+            .clip(RoundedCornerShape(Radius.lg))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.sm))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.lg))
             .pressable(scale = 0.9f)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -309,9 +309,9 @@ private fun ModelPill(
         modifier = modifier
             .height(32.dp)
             .animateContentSize(Motion.smooth())
-            .clip(RoundedCornerShape(Radius.sm))
+            .clip(RoundedCornerShape(Radius.lg))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.sm))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.lg))
             .pressable()
             .clickable(onClick = onClick)
             .padding(horizontal = if (focused) 0.dp else 11.dp)
@@ -345,9 +345,9 @@ private fun ContextPill(state: UiState, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .height(32.dp)
-            .clip(RoundedCornerShape(Radius.sm))
+            .clip(RoundedCornerShape(Radius.lg))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.sm))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.lg))
             .then(if (context != null) Modifier.pressable().clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -456,7 +456,7 @@ private fun PrimaryButton(
         modifier = Modifier
             .size(34.dp)
             .scale(scale)
-            .clip(RoundedCornerShape(Radius.sm))
+            .clip(RoundedCornerShape(Radius.lg))
             .background(fill)
             .pressable(scale = 0.88f)
             .clickable(enabled = mode != Mode.IDLE, onClick = if (mode == Mode.STOP) onStop else onSend),
