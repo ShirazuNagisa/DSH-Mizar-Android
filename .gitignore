@@ -31,3 +31,5 @@ dist/
 
 # The vendored plugin's dependencies are installed locally, not committed.
 plugin/node_modules/
+# Screenshots and emulator logs from local verification runs.
+.devstate/
