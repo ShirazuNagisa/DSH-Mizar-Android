@@ -34,6 +34,7 @@ import me.shirazu.mizar.kit.ConversationItem
 import me.shirazu.mizar.kit.ConversationTurn
 import me.shirazu.mizar.kit.CreateSessionResult
 import me.shirazu.mizar.kit.CredentialStore
+import me.shirazu.mizar.kit.Diagnosis
 import me.shirazu.mizar.kit.Diagnoses
 import me.shirazu.dshmizar.ui.Format
 import me.shirazu.mizar.kit.MizarConnection
@@ -1393,10 +1394,47 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun messageOf(error: Throwable, address: String?): String {
         // A refused credential gets the phrasing that names the action (pair again),
         // not the host's terse "unknown or revoked token", which reads like a bug.
-        if (error.isRepairNeeded()) return Diagnoses.message(Diagnoses.of(error, address))
+        if (error.isRepairNeeded()) return diagnosisText(Diagnoses.of(error, address))
         val mizar = error as? me.shirazu.mizar.kit.MizarError
         if (mizar != null) return mizar.message
-        return Diagnoses.message(Diagnoses.of(error, address))
+        return diagnosisText(Diagnoses.of(error, address))
+    }
+
+    /**
+     * The diagnosis in the operator's language.
+     *
+     * The kit phrases an English one for callers that have no resources. This app does,
+     * and the single message shown when nothing works is the worst place in the app for
+     * a second language -- it was the one screen still reading English on a Chinese
+     * phone. Kept here rather than in `mizarkit` because the kit has no resources and
+     * is shared with a platform that phrases its own.
+     */
+    private fun diagnosisText(diagnosis: Diagnosis): String {
+        val context = getApplication<Application>()
+        return when (diagnosis) {
+            is Diagnosis.OutsideTailnet ->
+                context.getString(R.string.diagnosis_outside_tailnet, diagnosis.authority)
+
+            is Diagnosis.TailnetPeerSilent ->
+                context.getString(R.string.diagnosis_tailnet_silent, diagnosis.authority)
+
+            is Diagnosis.Silent ->
+                context.getString(R.string.diagnosis_silent, diagnosis.authority)
+
+            Diagnosis.Offline -> context.getString(R.string.diagnosis_offline)
+
+            is Diagnosis.RequiresRepairing ->
+                if (diagnosis.authority.isEmpty()) {
+                    context.getString(R.string.diagnosis_repair_no_address)
+                } else {
+                    context.getString(R.string.diagnosis_repair, diagnosis.authority)
+                }
+
+            is Diagnosis.UnknownHost ->
+                context.getString(R.string.diagnosis_unknown_host, diagnosis.authority)
+
+            is Diagnosis.Other -> diagnosis.detail
+        }
     }
 
     /** The host answered and refused this phone: retrying cannot fix that. */
