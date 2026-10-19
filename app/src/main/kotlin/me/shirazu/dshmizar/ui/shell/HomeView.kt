@@ -23,7 +23,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +47,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.shirazu.dshmizar.AppViewModel
@@ -284,7 +285,14 @@ private fun WorkspaceMenu(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        // A dropdown's measure -- as wide as its widest workspace, no nudge off the
+        // chip -- in the windows' clothes, so every window in the app is one kind.
+        AnchoredPopover(
+            expanded = open,
+            onDismiss = { open = false },
+            width = Dp.Unspecified,
+            offset = DpOffset.Zero,
+        ) {
             for ((path, name) in choices) {
                 DropdownMenuItem(
                     text = { Text(name) },
