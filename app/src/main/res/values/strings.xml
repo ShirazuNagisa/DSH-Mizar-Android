@@ -17,6 +17,8 @@
     <string name="alert_channel_description">Approvals, questions and finished turns</string>
     <string name="pending_title">The agent is waiting</string>
     <string name="pending_body">— open DSH-Mizar to answer.</string>
+    <string name="pending_approvals">%1$d approvals</string>
+    <string name="pending_questions">%1$d questions</string>
 
     <!-- Launching, pairing, connecting -->
     <string name="connecting">Connecting…</string>

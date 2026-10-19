@@ -1055,9 +1055,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (signature == lastNotified) return true
             lastNotified = signature
             val app = getApplication<Application>()
+            // Counted from the catalogue, not spelled here: the hardcoded English was
+            // the one notification that stayed English on a Chinese phone. Parity over
+            // grammar, like the rest of the catalogue, so a count of one reads
+            // "1 approvals" rather than inventing plural rules the iOS client lacks.
             val counts = listOfNotNull(
-                pending.approvals.size.takeIf { it > 0 }?.let { if (it == 1) "1 approval" else "$it approvals" },
-                pending.questions.size.takeIf { it > 0 }?.let { if (it == 1) "1 question" else "$it questions" },
+                pending.approvals.size.takeIf { it > 0 }
+                    ?.let { app.getString(R.string.pending_approvals, it) },
+                pending.questions.size.takeIf { it > 0 }
+                    ?.let { app.getString(R.string.pending_questions, it) },
             ).joinToString(" + ")
             runCatching {
                 Notifications.show(

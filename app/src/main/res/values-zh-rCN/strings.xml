@@ -148,5 +148,9 @@
     <string name="connection_service_channel">后台连接</string>
     <string name="alert_channel">Agent 提醒</string>
     <string name="alert_channel_description">审批、提问与已完成的轮次</string>
+    <string name="pending_title">Agent 正在等你回复</string>
+    <string name="pending_body">— 打开 DSH-Mizar 回答。</string>
+    <string name="pending_approvals">%1$d 个审批</string>
+    <string name="pending_questions">%1$d 个提问</string>
 </resources>
 
