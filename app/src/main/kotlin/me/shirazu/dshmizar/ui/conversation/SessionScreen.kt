@@ -86,6 +86,9 @@ fun SessionScreen(
     // caller wants.
     listState: androidx.compose.foundation.lazy.LazyListState? = null,
     highlightTurn: Int? = null,
+    // A drawer is out in front of the conversation: back belongs to the drawer, not
+    // to leaving the session.
+    drawerOpen: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
@@ -108,7 +111,7 @@ fun SessionScreen(
     var showingCommands by remember { mutableStateOf(false) }
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
 
-    BackHandler { model.selectSession(null) }
+    BackHandler(enabled = !drawerOpen) { model.selectSession(null) }
 
     // The catalogs behind the model and permission sheets. Loaded here rather than
     // when a sheet opens: a sheet that has to fetch before it can draw shows a spinner

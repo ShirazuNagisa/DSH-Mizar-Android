@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.lazy.LazyListState
@@ -342,6 +343,7 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
                     onOpenIndex = { shell.toggleIndex() },
                     listState = conversationList,
                     highlightTurn = glowingTurn,
+                    drawerOpen = shell.isOpen,
                 )
             }
         } else {
@@ -378,12 +380,18 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
 }
 
 /**
- * The drag that opens and closes the sidebar.
+ * The drag that opens and closes the two drawers.
  *
  * Ported from iOS `Views/Shell/SidebarPan.swift`. Horizontal touch slop is the
  * axis gate: a drag that goes vertical is claimed by the conversation's own
  * scroll before this ever fires, which is the Compose equivalent of the pan
  * recognizer failing fast and letting the scroll view through.
+ *
+ * Two calls, because `awaitHorizontalTouchSlopOrCancellation` calls its callback
+ * **once** -- at the moment the slop is crossed -- and returns. Treating that
+ * callback as the drag loop is why the card used to twitch by the slop and settle
+ * back: the gesture was accepted, one delta was applied, and then it was let go.
+ * The follow-up `horizontalDrag` is what actually follows the finger.
  */
 private fun Modifier.drawerDrag(
     shell: ShellState,
@@ -401,22 +409,36 @@ private fun Modifier.drawerDrag(
         val down = awaitFirstDown(requireUnconsumed = false)
         val tracker = VelocityTracker()
         var began = false
-        awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
-            val directionRight = change.positionChange().x > 0
-            if ((directionRight && !allowRight) || (!directionRight && !allowLeft)) {
-                if (!began) return@awaitHorizontalTouchSlopOrCancellation
+        var rightward = false
+        var width = sidebarWidth
+        // `dragBy` takes the translation since the drag began, not the step since the
+        // last event. Passing the step moved the card by one event's worth -- sixteen
+        // pixels for a 500 px swipe -- and the settle put it back, which is what "the
+        // gesture does nothing" looked like.
+        var travelled = 0f
+        val accepted = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
+            rightward = change.positionChange().x > 0f
+            if ((rightward && !allowRight) || (!rightward && !allowLeft)) {
+                return@awaitHorizontalTouchSlopOrCancellation
             }
-            if (!began) {
-                shell.beginDrag()
-                began = true
-            }
+            width = if (rightward) sidebarWidth else indexWidth
+            began = true
+            shell.beginDrag()
+            travelled = over / width
             tracker.addPosition(change.uptimeMillis, change.position)
-            shell.dragBy(over / if (directionRight) sidebarWidth else indexWidth)
+            shell.dragBy(travelled)
             change.consume()
         }
-        if (began) {
+        if (accepted != null && began) {
+            tracker.addPosition(accepted.uptimeMillis, accepted.position)
+            horizontalDrag(accepted.id) { change ->
+                travelled += change.positionChange().x / width
+                tracker.addPosition(change.uptimeMillis, change.position)
+                shell.dragBy(travelled)
+                change.consume()
+            }
             val velocity = try {
-                tracker.calculateVelocity().x / if (shell.settledAt >= 0f) sidebarWidth else indexWidth
+                tracker.calculateVelocity().x / width
             } catch (_: IllegalStateException) {
                 0f
             }
