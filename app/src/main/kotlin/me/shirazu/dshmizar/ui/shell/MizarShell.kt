@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellati
 import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -157,6 +158,11 @@ fun MizarShell(model: AppViewModel, state: UiState) {
         val indexReveal = (-p).coerceIn(0f, 1f)
         val reveal = maxOf(sidebarReveal, indexReveal)
 
+        // Wide enough and the index stops being a drawer: it stands as a column of
+        // its own beside the conversation, the way the iPad keeps it. The sidebar
+        // stays a drawer whatever the width.
+        val wide = maxWidth >= 600.dp
+
         // The sidebar comes forward as the card leaves: a little travel and a little
         // light, so the two read as layers rather than as one strip sliding sideways.
         Box(
@@ -169,7 +175,7 @@ fun MizarShell(model: AppViewModel, state: UiState) {
                 // full width out, so opening is the list arriving.
                 .offset { IntOffset((-sidebarWidthPx * (1f - sidebarReveal)).toInt(), 0) }
                 .alpha(0.55f + 0.45f * sidebarReveal)
-                .drawerDrag(shell, sidebarWidthPx, indexWidthPx),
+                .drawerDrag(shell, sidebarWidthPx, indexWidthPx, indexEnabled = !wide),
         ) {
             Sidebar(
                 model = model,
@@ -180,48 +186,98 @@ fun MizarShell(model: AppViewModel, state: UiState) {
 
         // The turn index, the sidebar's mirror on the right. Same one number, opposite
         // sign: dragging the conversation left brings this out while the card steps
-        // aside on the left.
-        Box(
-            modifier = Modifier
-                .width(indexWidth)
-                .fillMaxSize()
-                .align(Alignment.CenterEnd)
-                .offset { IntOffset((indexWidthPx * (1f - indexReveal)).toInt(), 0) }
-                .alpha(0.55f + 0.45f * indexReveal)
-                .drawerDrag(shell, sidebarWidthPx, indexWidthPx),
-        ) {
-            TurnIndex(
+        // aside on the left. On a wide screen it is a standing column instead, drawn
+        // beside the card below, and the gesture that would open it is switched off.
+        if (!wide) {
+            Box(
+                modifier = Modifier
+                    .width(indexWidth)
+                    .fillMaxSize()
+                    .align(Alignment.CenterEnd)
+                    .offset { IntOffset((indexWidthPx * (1f - indexReveal)).toInt(), 0) }
+                    .alpha(0.55f + 0.45f * indexReveal)
+                    .drawerDrag(shell, sidebarWidthPx, indexWidthPx),
+            ) {
+                TurnIndex(
+                    state = state,
+                    now = System.currentTimeMillis(),
+                    onScreen = onScreenTurns,
+                    onPick = { index ->
+                        // Put the drawer away first: the settle is what makes the jump read
+                        // as "go there" rather than as the list moving underneath something
+                        // that is still in the way.
+                        shell.close()
+                        scope.launch {
+                            // The page-up row above the turns shifts every index by one.
+                            val header = if (!state.exhausted && state.oldestSeq != null) 1 else 0
+                            conversationList.animateScrollToItem(index + header)
+                            glowingTurn = index
+                            kotlinx.coroutines.delay(1_400)
+                            glowingTurn = null
+                        }
+                    },
+                )
+            }
+        }
+        if (wide) {
+            // Conversation on the left, the index standing on the right, and the
+            // sidebar still a drawer over the conversation alone.
+            Row(Modifier.fillMaxSize()) {
+                Box(Modifier.weight(1f).fillMaxSize()) {
+                    this@BoxWithConstraints.ConversationCard(
+                        model = model,
+                        state = state,
+                        shell = shell,
+                        progress = p.coerceAtLeast(0f),
+                        reveal = sidebarReveal,
+                        sidebarWidth = sidebarWidth,
+                        sidebarWidthPx = sidebarWidthPx,
+                        indexWidthPx = indexWidthPx,
+                        conversationList = conversationList,
+                        glowingTurn = glowingTurn,
+                        wide = true,
+                        indexEnabled = false,
+                    )
+                }
+                Box(
+                    Modifier
+                        .width(indexWidth)
+                        .fillMaxSize()
+                        .background(MizarColors.SidebarBackground)
+                        .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+                ) {
+                    TurnIndex(
+                        state = state,
+                        now = System.currentTimeMillis(),
+                        onScreen = onScreenTurns,
+                        onPick = { index ->
+                            scope.launch {
+                                val header = if (!state.exhausted && state.oldestSeq != null) 1 else 0
+                                conversationList.animateScrollToItem(index + header)
+                                glowingTurn = index
+                                kotlinx.coroutines.delay(1_400)
+                                glowingTurn = null
+                            }
+                        },
+                    )
+                }
+            }
+        } else {
+            ConversationCard(
+                model = model,
                 state = state,
-                now = System.currentTimeMillis(),
-                onScreen = onScreenTurns,
-                onPick = { index ->
-                    // Put the drawer away first: the settle is what makes the jump read
-                    // as "go there" rather than as the list moving underneath something
-                    // that is still in the way.
-                    shell.close()
-                    scope.launch {
-                        // The page-up row above the turns shifts every index by one.
-                        val header = if (!state.exhausted && state.oldestSeq != null) 1 else 0
-                        conversationList.animateScrollToItem(index + header)
-                        glowingTurn = index
-                        kotlinx.coroutines.delay(1_400)
-                        glowingTurn = null
-                    }
-                },
+                shell = shell,
+                progress = p,
+                reveal = reveal,
+                sidebarWidth = sidebarWidth,
+                sidebarWidthPx = sidebarWidthPx,
+                indexWidthPx = indexWidthPx,
+                conversationList = conversationList,
+                glowingTurn = glowingTurn,
+                wide = false,
+                indexEnabled = true,
             )
         }
-        ConversationCard(
-            model = model,
-            state = state,
-            shell = shell,
-            progress = p,
-            reveal = reveal,
-            sidebarWidth = sidebarWidth,
-            sidebarWidthPx = sidebarWidthPx,
-            indexWidthPx = indexWidthPx,
-            conversationList = conversationList,
-            glowingTurn = glowingTurn,
-        )
 
         // The card, while it is pushed aside, is one big button back.
         if (reveal > 0.02f) {
@@ -229,7 +285,7 @@ fun MizarShell(model: AppViewModel, state: UiState) {
                 modifier = Modifier
                     .fillMaxSize()
                     .offset { IntOffset((if (p >= 0f) sidebarWidthPx * p else indexWidthPx * p).toInt(), 0) }
-                    .drawerDrag(shell, sidebarWidthPx, indexWidthPx)
+                    .drawerDrag(shell, sidebarWidthPx, indexWidthPx, indexEnabled = !wide)
                     .then(
                         if (reveal > 0.5f) {
                             Modifier.clickable(
@@ -258,6 +314,8 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
     indexWidthPx: Float,
     conversationList: LazyListState,
     glowingTurn: Int?,
+    wide: Boolean,
+    indexEnabled: Boolean,
 ) {
     val density = LocalDensity.current
     val dark = LocalMizarDark.current
@@ -281,7 +339,7 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
             .background(MaterialTheme.colorScheme.background)
             // A console card does not cast a shadow; it is outlined.
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
-            .drawerDrag(shell, sidebarWidthPx, indexWidthPx),
+            .drawerDrag(shell, sidebarWidthPx, indexWidthPx, indexEnabled),
     ) {
         // Keyed on the session, which is what makes every piece of state inside
         // belong to the session it was filled from: the draft, the scroll anchor,
@@ -294,7 +352,9 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
                     model = model,
                     state = state,
                     onOpenSidebar = { shell.toggle() },
-                    onOpenIndex = { shell.toggleIndex() },
+                    // The index is already standing beside the conversation on a
+                    // wide screen; the title's tap has nothing to open.
+                    onOpenIndex = { if (!wide) shell.toggleIndex() },
                     listState = conversationList,
                     highlightTurn = glowingTurn,
                     drawerOpen = shell.isOpen,
@@ -343,7 +403,10 @@ private fun Modifier.drawerDrag(
     shell: ShellState,
     sidebarWidthPx: Float,
     indexWidthPx: Float,
-): Modifier = this.pointerInput(sidebarWidthPx, indexWidthPx) {
+    // A wide screen keeps the index standing as a column: there is no index
+    // drawer to open, so a leftward drag means nothing.
+    indexEnabled: Boolean = true,
+): Modifier = this.pointerInput(sidebarWidthPx, indexWidthPx, indexEnabled) {
     val sidebarWidth = sidebarWidthPx.coerceAtLeast(1f)
     val indexWidth = indexWidthPx.coerceAtLeast(1f)
     awaitEachGesture {
@@ -354,7 +417,7 @@ private fun Modifier.drawerDrag(
         // an exact float comparison there is a way to refuse a gesture nobody meant to
         // refuse.
         val allowRight = shell.settledAt <= 0.001f
-        val allowLeft = shell.settledAt >= -0.001f
+        val allowLeft = indexEnabled && shell.settledAt >= -0.001f
         val down = awaitFirstDown(requireUnconsumed = false)
         val tracker = VelocityTracker()
         var began = false

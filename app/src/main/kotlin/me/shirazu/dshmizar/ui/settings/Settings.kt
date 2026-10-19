@@ -48,6 +48,7 @@ import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.ThemeMode
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.MizarMarkConnecting
+import me.shirazu.dshmizar.ui.design.PopoverRow
 import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.pressable
@@ -147,14 +148,27 @@ fun SettingsDialog(
         SectionLabel(stringResource(R.string.hosts_section))
         var renaming by remember { mutableStateOf<me.shirazu.mizar.kit.PairedHost?>(null) }
         for (host in state.hosts) {
-            ListItem(
-                headlineContent = { Text(host.displayName) },
-                supportingContent = { Text(host.authority ?: host.baseUrl.orEmpty()) },
-                leadingContent = { Icon(Icons.Default.Computer, contentDescription = null) },
-                trailingContent = {
+            PopoverRow(
+                title = host.displayName,
+                subtitle = host.authority ?: host.baseUrl.orEmpty(),
+                trailing = {
                     Row {
-                        TextButton(onClick = { renaming = host }) { Text(stringResource(R.string.rename)) }
-                        TextButton(onClick = { onForget(host.hostId) }) { Text(stringResource(R.string.forget)) }
+                        Text(
+                            stringResource(R.string.rename),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clickable { renaming = host }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                        )
+                        Text(
+                            stringResource(R.string.forget),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MizarColors.Failure,
+                            modifier = Modifier
+                                .clickable { onForget(host.hostId) }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                        )
                     }
                 },
             )
@@ -223,16 +237,20 @@ private fun SectionLabel(text: String) {
 fun HostPickerDialog(state: UiState, onDismiss: () -> Unit, onOpen: (String) -> Unit) {
     DialogShell(title = stringResource(R.string.choose_mac), onDismiss = onDismiss) {
         for (host in state.hosts) {
-            ListItem(
-                headlineContent = { Text(host.displayName) },
-                supportingContent = { Text(host.hostName) },
-                leadingContent = { Icon(Icons.Default.Computer, contentDescription = null) },
-                trailingContent = {
+            PopoverRow(
+                title = host.displayName,
+                subtitle = host.hostName,
+                onClick = { onOpen(host.hostId) },
+                trailing = {
                     if (host.hostId == state.host?.hostId) {
-                        Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp),
+                        )
                     }
                 },
-                modifier = Modifier.clickable { onOpen(host.hostId) },
             )
         }
     }
@@ -247,15 +265,12 @@ fun NewSessionDialog(state: UiState, onDismiss: () -> Unit, onCreate: (String) -
     }
 
     DialogShell(title = stringResource(R.string.new_session), onDismiss = onDismiss) {
-        // A plain column, not a LazyColumn: the window this lives in already
-        // scrolls, and a lazy list inside a scrolling column never measures.
+        // Plain rows, measured like the workspace list the window floats beside.
         for (directory in recent) {
-            ListItem(
-                headlineContent = { Text(SessionGrouping.lastComponent(directory)) },
-                supportingContent = {
-                    Text(directory, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                },
-                modifier = Modifier.clickable { onCreate(directory) },
+            PopoverRow(
+                title = SessionGrouping.lastComponent(directory),
+                subtitle = directory,
+                onClick = { onCreate(directory) },
             )
         }
         OutlinedTextField(

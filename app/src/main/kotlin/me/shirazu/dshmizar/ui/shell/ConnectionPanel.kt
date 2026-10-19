@@ -44,8 +44,8 @@ fun ConnectionPanel(
 ) {
     DialogShell(title = stringResource(R.string.connection_details), onDismiss = onDismiss) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp),
         ) {
             RowValue(
                 label = stringResource(R.string.connection_status),

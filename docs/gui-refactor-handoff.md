@@ -210,6 +210,7 @@ adb reverse tcp:19390 tcp:19390
 |---|---|
 | `UiState.quietHours` + `setQuietHours(on)` | 静音时段开关，设置页持有；通知判定直接读存储，不读这个字段 |
 | `createSessionWithPrompt(cwd, prompt)` | 新建会话并立刻发出第一条消息（首页空状态用），等价于 `createSession` + `sendPrompt` |
+| `UiState.pendingNameHostId` + `renameHost(hostId, label)` + `dismissNaming()` | 配对成功后的一次性命名提示：`pair` 置位，`renameHost` 保存并清除，跳过或切换主机也清除。label 为空表示用机器本名（`PairedHost.renamed`） |
 
 以上都是**新增**，没有删除或改变既有语义。
 
@@ -248,10 +249,10 @@ adb reverse tcp:19390 tcp:19390
 
 | iOS | 计划 |
 |---|---|
-| **所有弹层 → 锚定 popover**（`Popover.swift`） | Compose 没有 SwiftUI 的 popover 定位，替代方案是用 `DropdownMenu`/`Popup` 挂在触发它的 chip 的 Box 里，而不是整屏 sheet。涉及 `Sheets.kt` 的四个 chip 菜单 + 侧边栏三个对话框；改动是"把 sheet 内容搬进锚点"，不动数据 |
+| ~~所有弹层 → 锚定 popover~~ | ✅ 0.9.2 完成：`ui/design/AnchoredPopover.kt`（DropdownMenu 锚定父 Box，自动翻转不出屏），七个弹层全部改为从触发控件长出；尺寸阶梯 compact 320×380 / list 340×480 / tall 360×620 |
+| ~~弹出命名提示~~ | ✅ 0.9.2 完成：配对成功弹居中 `NamingDialog`（无触发控件可锚定，同 iOS 的例外规则）；设置页主机行有「重命名」 |
 | iPad 独立列 + 刻度轨 | 手机上没有对应形态；宽屏（≥600dp）时索引可作为常驻列，暂缓 |
-| 连接面板 `ConnectionPanel.swift` | 侧边栏底部现在只有连接状态一行；面板要展示地址/中继/延迟，属于新面板，未做 |
-| 弹出命名提示 | 未做 |
+| iOS `fe28359` 轮次裁决（`endInferred` / "Ended" 灰色空心勾） | 属协议层移植（MizarKit `Conversation.swift` + `ConversationCache.swift` + SettlingRunsTests），UI 侧需新增第三种终态显示。**待做，工作量与风险单列** |
 
 **注意**：`TurnIndex` 的等宽假设与 `Space` 尺度都来自 0.9.0 的设计语言，改它时要连着 `MizarShell` 的抽屉宽度一起看（`min(320.dp, maxWidth * 0.84f)`）。
 
