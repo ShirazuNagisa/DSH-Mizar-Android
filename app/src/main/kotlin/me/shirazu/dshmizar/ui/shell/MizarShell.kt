@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -88,6 +89,17 @@ fun MizarShell(model: AppViewModel, state: UiState) {
     // leaves a glow on it that fades by itself.
     val conversationList = remember(state.selectedSessionId) { LazyListState() }
     var glowingTurn by remember { mutableStateOf<Int?>(null) }
+    // Which turns are on screen right now: the index brackets them, so the list and
+    // the conversation agree about where the reader is.
+    val onScreenTurns by remember {
+        derivedStateOf {
+            val header = if (!state.exhausted && state.oldestSeq != null) 1 else 0
+            conversationList.layoutInfo.visibleItemsInfo
+                .map { it.index - header }
+                .filter { it in state.turns.indices }
+                .toSet()
+        }
+    }
 
     var showingSettings by remember { mutableStateOf(false) }
     var showingNewSession by remember { mutableStateOf(false) }
@@ -173,6 +185,7 @@ fun MizarShell(model: AppViewModel, state: UiState) {
             TurnIndex(
                 state = state,
                 now = System.currentTimeMillis(),
+                onScreen = onScreenTurns,
                 onPick = { index ->
                     // Put the drawer away first: the settle is what makes the jump read
                     // as "go there" rather than as the list moving underneath something
@@ -313,6 +326,7 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
                     model = model,
                     state = state,
                     onOpenSidebar = { shell.toggle() },
+                    onOpenIndex = { shell.toggleIndex() },
                     listState = conversationList,
                     highlightTurn = glowingTurn,
                 )

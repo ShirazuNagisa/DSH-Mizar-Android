@@ -56,6 +56,9 @@ import me.shirazu.mizar.kit.ConversationTurn
 fun TurnIndex(
     state: UiState,
     now: Long,
+    // Which turns the conversation is showing: bracketed in the list, so the two views
+    // agree about where the reader is.
+    onScreen: Set<Int> = emptySet(),
     onPick: (index: Int) -> Unit,
 ) {
     val turns = state.turns
@@ -133,6 +136,7 @@ fun TurnIndex(
                     number = index + 1,
                     now = now,
                     longest = longest,
+                    onScreen = index in onScreen,
                     onClick = { onPick(index) },
                 )
             }
@@ -146,6 +150,7 @@ private fun TurnIndexRow(
     number: Int,
     now: Long,
     longest: Long,
+    onScreen: Boolean,
     onClick: () -> Unit,
 ) {
     val prompt = (turn.prompts.firstOrNull() as? ConversationItem.Message)?.text?.trim().orEmpty()
@@ -158,6 +163,13 @@ private fun TurnIndexRow(
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.medium)
             .clickable(onClick = onClick)
+            // The bracket: a wash on the rows the conversation is showing. It is the
+            // index's answer to "where am I", and it moves as the conversation scrolls.
+            .background(
+                if (onScreen) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                else androidx.compose.ui.graphics.Color.Transparent,
+                MaterialTheme.shapes.medium,
+            )
             .padding(horizontal = Space.sm, vertical = Space.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {

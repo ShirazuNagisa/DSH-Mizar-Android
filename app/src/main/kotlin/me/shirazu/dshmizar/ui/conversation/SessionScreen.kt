@@ -78,6 +78,9 @@ fun SessionScreen(
     model: AppViewModel,
     state: UiState,
     onOpenSidebar: () -> Unit = {},
+    // Tapping the title opens the turn index, as it does on iOS: the two drawers are
+    // mirrors, and this is the mirror of the menu button.
+    onOpenIndex: () -> Unit = {},
     // The shell owns these two: the turn index scrolls this list, and highlights the
     // turn it scrolled to. Null means "make your own", which is what every other
     // caller wants.
@@ -238,7 +241,11 @@ fun SessionScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onOpenIndex),
+                    ) {
                         Text(
                             text = state.stats?.title ?: stringResource(R.string.session),
                             maxLines = 1,
