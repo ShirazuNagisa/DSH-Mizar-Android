@@ -71,9 +71,11 @@ fun WorkspaceGroups(
     query: String,
     expanded: Set<String>,
     waitingSessions: Set<String>,
+    listState: androidx.compose.foundation.lazy.LazyListState,
     onToggle: (String) -> Unit,
     onOpen: (String) -> Unit,
     onLoadTitles: (List<String>) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var limits by remember { mutableStateOf(mapOf<String, Int>()) }
 
@@ -108,7 +110,7 @@ fun WorkspaceGroups(
         if (visibleIds.isNotEmpty()) onLoadTitles(visibleIds)
     }
 
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
+    LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
             if (groups.isEmpty()) {
                 item(key = "empty") {
                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {

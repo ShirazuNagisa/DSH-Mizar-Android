@@ -1,10 +1,10 @@
 package me.shirazu.dshmizar.ui.shell
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -33,27 +33,33 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import me.shirazu.dshmizar.AppViewModel
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
@@ -61,6 +67,7 @@ import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.GlassCircleLabel
 import me.shirazu.dshmizar.ui.design.Motion
 import me.shirazu.dshmizar.ui.design.Radius
+import me.shirazu.dshmizar.ui.design.RefreshSpinner
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.glassCapsule
 import me.shirazu.dshmizar.ui.design.glassCard
@@ -72,7 +79,6 @@ import me.shirazu.dshmizar.ui.design.pressable
  * button, a search capsule, the new-session button, the workspace groups
  * (SidebarRows.kt), and the connection footer.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Sidebar(
     model: AppViewModel,
@@ -95,7 +101,54 @@ fun Sidebar(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+    // Pull-to-refresh, drawn by hand: the stock indicator swallows the list's
+    // own scrolling and drops a spinner over the content. Here the list always
+    // scrolls, and a pull at the top opens a gap between the new-session key
+    // and the workspaces, with the three-dash spinner turning inside it.
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val gap = remember { Animatable(0f) }
+    val thresholdPx = with(density) { 56.dp.toPx() }
+    val spinnerPx = with(density) { 40.dp.toPx() }
+    val maxPx = with(density) { 96.dp.toPx() }
+
+    val pullConnection = remember(state.refreshing) {
+        object : NestedScrollConnection {
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (state.refreshing || source != NestedScrollSource.UserInput) return Offset.Zero
+                if (available.y > 0f) {
+                    scope.launch { gap.snapTo((gap.value + available.y * 0.45f).coerceAtMost(maxPx)) }
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (state.refreshing || source != NestedScrollSource.UserInput) return Offset.Zero
+                if (available.y < 0f && gap.value > 0f) {
+                    val take = minOf(-available.y, gap.value)
+                    scope.launch { gap.snapTo(gap.value - take) }
+                    return Offset(0f, -take)
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    // The hand leaves the screen: past the line the pull becomes a refresh and
+    // the gap holds the spinner for as long as the refresh runs; short of the
+    // line the gap folds away.
+    LaunchedEffect(listState.isScrollInProgress, state.refreshing) {
+        if (listState.isScrollInProgress) return@LaunchedEffect
+        when {
+            state.refreshing -> gap.animateTo(spinnerPx, Motion.snappy())
+            gap.value >= thresholdPx -> model.refreshSessions()
+            else -> gap.animateTo(0f, Motion.snappy())
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize().nestedScroll(pullConnection).statusBarsPadding().navigationBarsPadding()) {
         // Header: the Mac's name, and a refresh button that turns while it works.
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = Space.lg, vertical = Space.md),
@@ -231,6 +284,18 @@ fun Sidebar(
             )
         }
 
+        // The gap a pull opens between the new-session key and the workspaces:
+        // empty but for the three-dash spinner turning inside it.
+        val gapDp = with(density) { gap.value.toDp() }
+        if (gapDp > 0.5.dp) {
+            Box(Modifier.fillMaxWidth().height(gapDp), contentAlignment = Alignment.Center) {
+                RefreshSpinner(
+                    spinning = state.refreshing,
+                    dragRotation = gap.value / maxPx * 270f,
+                )
+            }
+        }
+
         Text(
             text = stringResource(R.string.workspaces).uppercase(),
             style = MaterialTheme.typography.labelSmall.copy(
@@ -241,24 +306,20 @@ fun Sidebar(
             modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.xs),
         )
 
-        PullToRefreshBox(
-            isRefreshing = state.refreshing,
-            onRefresh = { model.refreshSessions() },
+        WorkspaceGroups(
+            state = state,
+            query = query,
+            expanded = expanded,
+            waitingSessions = waitingSessions,
+            listState = listState,
+            onToggle = { path ->
+                expanded = if (path in expanded) expanded - path else expanded + path
+                shell.setExpanded(expanded, hostId)
+            },
+            onOpen = { model.selectSession(it) },
+            onLoadTitles = { model.loadTitles(it) },
             modifier = Modifier.weight(1f),
-        ) {
-            WorkspaceGroups(
-                state = state,
-                query = query,
-                expanded = expanded,
-                waitingSessions = waitingSessions,
-                onToggle = { path ->
-                    expanded = if (path in expanded) expanded - path else expanded + path
-                    shell.setExpanded(expanded, hostId)
-                },
-                onOpen = { model.selectSession(it) },
-                onLoadTitles = { model.loadTitles(it) },
-            )
-        }
+        )
 
         // The pending cards dock in the conversation, above the composer, as on
         // iOS; the list says which rows are waiting with a raised hand instead.
