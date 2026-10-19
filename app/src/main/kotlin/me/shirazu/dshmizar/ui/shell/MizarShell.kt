@@ -74,7 +74,9 @@ import kotlin.math.min
 fun MizarShell(model: AppViewModel, state: UiState) {
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
-    val reduceMotion = LocalReduceMotion.current
+    // Read through a state, not captured: the shell outlives a Reduce Motion switch
+    // flipped while the app is open, and its next settle must honour the new value.
+    val reduceMotion by androidx.compose.runtime.rememberUpdatedState(LocalReduceMotion.current)
     val shell = remember {
         ShellState(
             scope = scope,
