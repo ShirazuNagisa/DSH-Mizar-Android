@@ -132,11 +132,11 @@ object Diagnoses {
 
         is Diagnosis.TailnetPeerSilent ->
             "${diagnosis.authority} is on your Tailscale network but nothing answered. " +
-                "Make sure DSH is running on the Mac and that the Mizar panel shows it listening."
+                "Make sure DSH is running on the computer and that the Mizar panel shows it listening."
 
         is Diagnosis.Silent ->
-            "Nothing answered at ${diagnosis.authority}. Make sure DSH is running on the Mac and " +
-                "that this phone is on the same network."
+            "Nothing answered at ${diagnosis.authority}. Make sure DSH is running on the computer and " +
+                "that this phone can reach it."
 
         Diagnosis.Offline ->
             "This device has no network connection."
