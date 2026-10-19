@@ -74,7 +74,16 @@ import me.shirazu.mizar.kit.ConversationItem
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SessionScreen(model: AppViewModel, state: UiState, onOpenSidebar: () -> Unit = {}) {
+fun SessionScreen(
+    model: AppViewModel,
+    state: UiState,
+    onOpenSidebar: () -> Unit = {},
+    // The shell owns these two: the turn index scrolls this list, and highlights the
+    // turn it scrolled to. Null means "make your own", which is what every other
+    // caller wants.
+    listState: androidx.compose.foundation.lazy.LazyListState? = null,
+    highlightTurn: Int? = null,
+) {
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val clipboard = LocalClipboardManager.current
@@ -85,7 +94,7 @@ fun SessionScreen(model: AppViewModel, state: UiState, onOpenSidebar: () -> Unit
         clipboard.setText(AnnotatedString(text))
         scope.launch { snackbar.showSnackbar(copiedMessage) }
     }
-    val listState = rememberLazyListState()
+    val list = listState ?: rememberLazyListState()
     var draft by remember { mutableStateOf("") }
     // Whether the field holds the keyboard, so the dock can tuck into a pill.
     var composerFocused by remember { mutableStateOf(false) }
@@ -117,7 +126,7 @@ fun SessionScreen(model: AppViewModel, state: UiState, onOpenSidebar: () -> Unit
     // Follow new output only while the operator is at the bottom. Scrolling up to read
     // something must not be undone by the agent writing its next sentence -- which is
     // exactly what the old unconditional scroll did.
-    val atBottom by remember { derivedStateOf { !listState.canScrollForward } }
+    val atBottom by remember { derivedStateOf { !list.canScrollForward } }
     var counted by remember { mutableIntStateOf(0) }
     var waitingNew by remember { mutableIntStateOf(0) }
     // Nothing is drawn until the first load is parked at the end: the operator opens a
@@ -136,15 +145,15 @@ fun SessionScreen(model: AppViewModel, state: UiState, onOpenSidebar: () -> Unit
      * and does nothing while the list is still empty.
      */
     suspend fun scrollToEnd() {
-        val last = listState.layoutInfo.totalItemsCount - 1
-        if (last >= 0) listState.animateScrollToItem(last)
+        val last = list.layoutInfo.totalItemsCount - 1
+        if (last >= 0) list.animateScrollToItem(last)
     }
 
     // A different conversation opens at its own end, and the first load has to land
     // there too. `itemCount` is an effect key on purpose: the first pass runs before the
     // list has measured anything, and scrolling then scrolled to the top -- which is
     // exactly the "always opens at the top" the operator reported.
-    val itemCount = listState.layoutInfo.totalItemsCount
+    val itemCount = list.layoutInfo.totalItemsCount
 
     LaunchedEffect(state.selectedSessionId) {
         counted = 0
@@ -172,13 +181,13 @@ fun SessionScreen(model: AppViewModel, state: UiState, onOpenSidebar: () -> Unit
             // Instant, not animated: opening a conversation shows its newest message at
             // once. Following live output stays animated, because that one is a motion
             // the operator should be able to track.
-            listState.scrollToItem(itemCount - 1)
+            list.scrollToItem(itemCount - 1)
             positioned = true
         } else if (atBottom) {
             counted = size
             waitingNew = 0
             following = true
-            listState.animateScrollToItem(itemCount - 1)
+            list.animateScrollToItem(itemCount - 1)
         } else if (added > 0) {
             counted = size
             following = false
@@ -193,7 +202,7 @@ fun SessionScreen(model: AppViewModel, state: UiState, onOpenSidebar: () -> Unit
     val pendingCardCount = (state.pending?.approvals?.size ?: 0) + (state.pending?.questions?.size ?: 0)
     LaunchedEffect(pendingCardCount, itemCount) {
         if (!following || itemCount == 0) return@LaunchedEffect
-        listState.scrollToItem(itemCount - 1)
+        list.scrollToItem(itemCount - 1)
     }
     // Say when a refresh finished. A spinner that merely stops is ambiguous: success and
     // a silently failed request look the same.
@@ -368,11 +377,12 @@ fun SessionScreen(model: AppViewModel, state: UiState, onOpenSidebar: () -> Unit
                 ) {
                     ConversationList(
                         state = state,
-                        listState = listState,
+                        listState = list,
                         now = now,
                         onLoadOlder = { scope.launch { model.loadOlder() } },
                         onCopy = onCopy,
                         onRetry = { model.sendPrompt(it) },
+                        highlightTurn = highlightTurn,
                     )
                 }
             }

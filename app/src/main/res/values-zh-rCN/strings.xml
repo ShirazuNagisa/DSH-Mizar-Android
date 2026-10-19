@@ -146,6 +146,8 @@
     <string name="turn_count">%1$d 个轮次</string>
     <string name="turn_index_empty">这个会话还没有轮次。</string>
     <string name="turn_index_untitled">（无提示）</string>
+    <string name="turn_index_unfinished">只看未完成</string>
+    <string name="turn_index_all_finished">这里的轮次都已完成。取消筛选可看全部。</string>
 
     <!-- 通知：常驻连接与 agent 提醒 -->
     <string name="connection_service_text">已连接到电脑 · 这条常驻通知让 App 在后台保持连接</string>

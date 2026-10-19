@@ -2,6 +2,8 @@ package me.shirazu.dshmizar.ui.conversation
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +19,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -36,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -70,6 +75,7 @@ internal fun ConversationList(
     onLoadOlder: () -> Unit,
     onCopy: (String) -> Unit,
     onRetry: (String) -> Unit,
+    highlightTurn: Int? = null,
 ) {
     LazyColumn(
         state = listState,
@@ -90,8 +96,8 @@ internal fun ConversationList(
                 ConversationItemView(item, isLastPrompt = false, onCopy = onCopy)
             }
         } else {
-            items(state.turns, key = { it.id }) { turn ->
-                TurnSection(turn, now, onCopy, onRetry)
+            itemsIndexed(state.turns, key = { _, turn -> turn.id }) { index, turn ->
+                TurnSection(turn, now, onCopy, onRetry, highlighted = index == highlightTurn)
             }
         }
 
@@ -140,8 +146,24 @@ private fun TurnSection(
     now: Long,
     onCopy: (String) -> Unit,
     onRetry: (String) -> Unit,
+    highlighted: Boolean = false,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    // The glow the turn index leaves behind: a wash that fades on its own, because the
+    // point is to find the turn once, not to mark it. `animateFloatAsState` drives it,
+    // so the fade survives a recomposition in the middle of it.
+    val wash by animateFloatAsState(
+        targetValue = if (highlighted) 1f else 0f,
+        animationSpec = tween(600),
+        label = "turnGlow",
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f * wash))
+            .padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         turn.prompts.forEachIndexed { index, item ->
             ConversationItemView(item, isLastPrompt = index == turn.prompts.size - 1, onCopy = onCopy)
         }

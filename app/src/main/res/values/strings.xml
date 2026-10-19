@@ -178,4 +178,6 @@
     <string name="turn_count">%1$d turns</string>
     <string name="turn_index_empty">This session has no turns yet.</string>
     <string name="turn_index_untitled">(no prompt)</string>
+    <string name="turn_index_unfinished">Unfinished only</string>
+    <string name="turn_index_all_finished">Every turn here finished. Untick the filter to see them all.</string>
 </resources>

@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,6 +82,12 @@ fun MizarShell(model: AppViewModel, state: UiState) {
         )
     }
     var placed by remember { mutableStateOf(false) }
+
+    // The conversation's list belongs to the shell now, not to the screen: the turn
+    // index scrolls it, and the turn it scrolled to has to be findable -- so the index
+    // leaves a glow on it that fades by itself.
+    val conversationList = remember(state.selectedSessionId) { LazyListState() }
+    var glowingTurn by remember { mutableStateOf<Int?>(null) }
 
     var showingSettings by remember { mutableStateOf(false) }
     var showingNewSession by remember { mutableStateOf(false) }
@@ -162,9 +170,25 @@ fun MizarShell(model: AppViewModel, state: UiState) {
                 .alpha(0.55f + 0.45f * indexReveal)
                 .drawerDrag(shell, sidebarWidthPx, indexWidthPx),
         ) {
-            TurnIndex(state = state, now = System.currentTimeMillis(), onPick = { shell.close() })
+            TurnIndex(
+                state = state,
+                now = System.currentTimeMillis(),
+                onPick = { index ->
+                    // Put the drawer away first: the settle is what makes the jump read
+                    // as "go there" rather than as the list moving underneath something
+                    // that is still in the way.
+                    shell.close()
+                    scope.launch {
+                        // The page-up row above the turns shifts every index by one.
+                        val header = if (!state.exhausted && state.oldestSeq != null) 1 else 0
+                        conversationList.animateScrollToItem(index + header)
+                        glowingTurn = index
+                        kotlinx.coroutines.delay(1_400)
+                        glowingTurn = null
+                    }
+                },
+            )
         }
-
         ConversationCard(
             model = model,
             state = state,
@@ -174,6 +198,8 @@ fun MizarShell(model: AppViewModel, state: UiState) {
             sidebarWidth = sidebarWidth,
             sidebarWidthPx = sidebarWidthPx,
             indexWidthPx = indexWidthPx,
+            conversationList = conversationList,
+            glowingTurn = glowingTurn,
             onNewSession = { showingNewSession = true },
         )
 
@@ -247,6 +273,8 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
     sidebarWidth: Dp,
     sidebarWidthPx: Float,
     indexWidthPx: Float,
+    conversationList: LazyListState,
+    glowingTurn: Int?,
     onNewSession: () -> Unit,
 ) {
     val density = LocalDensity.current
@@ -281,7 +309,13 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
         val sessionId = state.selectedSessionId
         if (sessionId != null) {
             androidx.compose.runtime.key(sessionId) {
-                SessionScreen(model, state, onOpenSidebar = { shell.toggle() })
+                SessionScreen(
+                    model = model,
+                    state = state,
+                    onOpenSidebar = { shell.toggle() },
+                    listState = conversationList,
+                    highlightTurn = glowingTurn,
+                )
             }
         } else {
             HomeView(
