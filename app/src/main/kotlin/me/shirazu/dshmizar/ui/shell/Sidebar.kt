@@ -376,7 +376,9 @@ private fun ConnectionFooter(state: UiState, onSettings: () -> Unit, onOpen: () 
 @Composable
 private fun ConnectionDot(connected: Boolean) {
     if (!connected) {
-        Box(Modifier.size(10.dp).background(MaterialTheme.colorScheme.outline, CircleShape))
+        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(10.dp).background(MaterialTheme.colorScheme.outline, CircleShape))
+        }
         return
     }
     val pulse by rememberInfiniteTransition(label = "connDot").animateFloat(
@@ -385,7 +387,9 @@ private fun ConnectionDot(connected: Boolean) {
         animationSpec = infiniteRepeatable(tween(1600)),
         label = "connDotPulse",
     )
-    Box(contentAlignment = Alignment.Center) {
+    // A fixed box, so the ring's growth is painted inside it and the text beside
+    // the dot never moves: the centre of the dot is the centre of the box.
+    Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
         // The ring grows and fades out over 1.6 s.
         Box(
             Modifier
