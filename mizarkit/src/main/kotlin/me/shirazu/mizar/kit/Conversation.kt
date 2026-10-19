@@ -58,6 +58,15 @@ class SessionRecord(private val raw: JsonElement) {
     val turn: Int? get() = payload["data"]["turn"].intValue()
 }
 
+/** Persisted attachment metadata only. Never fetch host paths or decode base64 from history. */
+data class ConversationAttachment(
+    val kind: String,
+    val name: String,
+    val bytes: Long? = null,
+    val mediaType: String? = null,
+    val id: String? = null,
+)
+
 /** One thing the conversation draws. */
 sealed interface ConversationItem {
     /** Stable across merges: the same item from two pages has one id. */
@@ -74,6 +83,7 @@ sealed interface ConversationItem {
         val role: Role,
         val text: String,
         override val atMillis: Long?,
+        val attachments: List<ConversationAttachment> = emptyList(),
     ) : ConversationItem
 
     /**
@@ -273,7 +283,7 @@ object Conversation {
                 // edits are real and survive.
                 val last = out.lastOrNull()
                 if (item is ConversationItem.Message && last is ConversationItem.Message &&
-                    last.role == item.role && last.text == item.text
+                    last.role == item.role && last.text == item.text && last.attachments == item.attachments
                 ) {
                     continue
                 }
@@ -366,9 +376,7 @@ object Conversation {
             if (!isUserAuthored(record.payload)) {
                 emptyList()
             } else {
-                messageText(record.payload)?.let {
-                    listOf(ConversationItem.Message(record.recordId, ConversationItem.Role.USER, it, record.timestampMillis))
-                } ?: emptyList()
+                messageItem(record, ConversationItem.Role.USER)?.let { listOf(it) } ?: emptyList()
             }
 
         // The system prompt is thousands of characters of instructions, not a
@@ -376,9 +384,7 @@ object Conversation {
         "system/message" -> emptyList()
 
         "assistant/message" ->
-            messageText(record.payload)?.let {
-                listOf(ConversationItem.Message(record.recordId, ConversationItem.Role.ASSISTANT, it, record.timestampMillis))
-            } ?: attemptItems(record)
+            messageItem(record, ConversationItem.Role.ASSISTANT)?.let { listOf(it) } ?: attemptItems(record)
 
         "assistant/attempt" -> attemptItems(record)
 
@@ -400,6 +406,28 @@ object Conversation {
         val kind = data["source"]["kind"].stringValue()
             ?: data["message"]["source"]["kind"].stringValue()
         return kind == "user"
+    }
+
+    private fun messageItem(record: SessionRecord, role: ConversationItem.Role): ConversationItem.Message? {
+        val text = messageText(record.payload)
+        val data = record.payload["data"]
+        val parts = data["message"]["content"].arrayValue() ?: data["content"].arrayValue().orEmpty()
+        val attachments = parts.mapNotNull { part ->
+            val kind = part["type"].stringValue()
+            if (kind != "image" && kind != "file") return@mapNotNull null
+            // DSH stores attachment references after admission, not the input base64.
+            val reference = part["attachment"]
+            val rawName = reference["name"].stringValue() ?: part["name"].stringValue()
+            ConversationAttachment(
+                kind = kind,
+                name = rawName?.let(::attachmentDisplayName) ?: if (kind == "image") "Image" else "File",
+                bytes = (reference["bytes"].longValue() ?: part["bytes"].longValue())?.takeIf { it >= 0 },
+                mediaType = reference["mediaType"].stringValue() ?: part["mediaType"].stringValue(),
+                id = reference["attachmentId"].stringValue() ?: part["attachmentId"].stringValue() ?: part["receiptId"].stringValue(),
+            )
+        }
+        if (text == null && attachments.isEmpty()) return null
+        return ConversationItem.Message(record.recordId, role, text.orEmpty(), record.timestampMillis, attachments)
     }
 
     /**
