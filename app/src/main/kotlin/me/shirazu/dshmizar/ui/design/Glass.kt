@@ -41,14 +41,18 @@ object Glass {
     }
 }
 
-/** A rounded-rectangle panel. */
+/** A rounded-rectangle panel. [translucent] lets the content behind breathe
+ *  through the fill, for the one panel that always floats over a transcript:
+ *  the composer. */
 @Composable
 fun Modifier.glassCard(
     radius: Dp = Radius.card,
     tint: Color? = null,
     tintedBorder: Color? = null,
+    translucent: Boolean = false,
 ): Modifier {
     val shape: Shape = RoundedCornerShape(radius)
+    val fill = Glass.fill(tint).let { if (translucent) it.copy(alpha = 0.72f) else it }
     val borderBrush = if (tintedBorder != null) {
         Brush.verticalGradient(listOf(tintedBorder.copy(alpha = 0.35f), tintedBorder.copy(alpha = 0.20f)))
     } else {
@@ -56,7 +60,7 @@ fun Modifier.glassCard(
     }
     return this
         .clip(shape)
-        .background(Glass.fill(tint))
+        .background(fill)
         .border(1.dp, borderBrush, shape)
 }
 

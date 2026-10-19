@@ -129,7 +129,7 @@ fun HomeView(
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp)
                 .padding(bottom = 6.dp)
-                .glassCard(radius = Radius.md),
+                .glassCard(radius = Radius.md, translucent = true),
         ) {
             TextField(
                 value = draft,

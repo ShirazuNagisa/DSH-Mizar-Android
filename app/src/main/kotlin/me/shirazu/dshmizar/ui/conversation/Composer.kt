@@ -111,7 +111,7 @@ internal fun Composer(
             .padding(horizontal = 10.dp)
             .padding(bottom = 6.dp)
             .onGloballyPositioned { ComposerGeometry.slabTop = it.boundsInRoot().top }
-            .glassCard(radius = Radius.md)
+            .glassCard(radius = Radius.md, translucent = true)
             // A tap anywhere on the slab is a tap on the field.
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
