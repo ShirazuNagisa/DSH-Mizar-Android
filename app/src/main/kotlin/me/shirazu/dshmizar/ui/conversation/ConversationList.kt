@@ -159,7 +159,7 @@ private fun TurnSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(me.shirazu.dshmizar.ui.design.Radius.md))
             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f * wash))
             .padding(vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),

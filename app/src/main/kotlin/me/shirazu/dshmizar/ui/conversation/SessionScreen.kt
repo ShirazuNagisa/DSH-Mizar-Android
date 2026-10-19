@@ -54,6 +54,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.shirazu.dshmizar.AppViewModel
@@ -488,6 +489,10 @@ private fun StatusLine(running: Boolean, pending: Boolean, failed: Boolean) {
             Box(Modifier.size(6.dp).background(tint, androidx.compose.foundation.shape.CircleShape))
         }
         Spacer(Modifier.width(6.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = tint)
+        Text(
+            label.uppercase(),
+            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
+            color = tint,
+        )
     }
 }

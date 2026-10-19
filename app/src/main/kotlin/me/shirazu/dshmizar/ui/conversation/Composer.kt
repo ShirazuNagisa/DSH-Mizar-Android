@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.border
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -109,7 +111,7 @@ internal fun Composer(
             .padding(horizontal = 10.dp)
             .padding(bottom = 6.dp)
             .onGloballyPositioned { ComposerGeometry.slabTop = it.boundsInRoot().top }
-            .glassCard(radius = Radius.xl)
+            .glassCard(radius = Radius.md)
             // A tap anywhere on the slab is a tap on the field.
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -212,8 +214,9 @@ private fun CommandButton(open: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(32.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f))
+            .clip(RoundedCornerShape(Radius.sm))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.sm))
             .pressable(scale = 0.9f)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -252,8 +255,9 @@ private fun ModelPill(
         modifier = modifier
             .height(32.dp)
             .animateContentSize(Motion.smooth())
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f))
+            .clip(RoundedCornerShape(Radius.sm))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.sm))
             .pressable()
             .clickable(onClick = onClick)
             .padding(horizontal = if (focused) 0.dp else 11.dp)
@@ -287,8 +291,9 @@ private fun ContextPill(state: UiState, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .height(32.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f))
+            .clip(RoundedCornerShape(Radius.sm))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.sm))
             .then(if (context != null) Modifier.pressable().clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -397,7 +402,7 @@ private fun PrimaryButton(
         modifier = Modifier
             .size(34.dp)
             .scale(scale)
-            .clip(CircleShape)
+            .clip(RoundedCornerShape(Radius.sm))
             .background(fill)
             .pressable(scale = 0.88f)
             .clickable(enabled = mode != Mode.IDLE, onClick = if (mode == Mode.STOP) onStop else onSend),

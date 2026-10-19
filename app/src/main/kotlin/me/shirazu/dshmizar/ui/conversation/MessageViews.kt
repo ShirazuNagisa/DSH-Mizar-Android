@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.ui.Format
@@ -121,18 +122,18 @@ internal fun SentBubbleBody(
 ) {
     val accent = MaterialTheme.colorScheme.primary
     val ink = MizarColors.OnAccent
-    // The corner nearest the answer tightens -- the tail that says "this is
-    // the message that was answered".
+    // Console bubbles are flat -- one slab of accent, sharp corners, and the
+    // tightened corner nearest the answer is all the tail that remains.
     val shape = RoundedCornerShape(
-        topStart = Radius.lg,
-        topEnd = Radius.lg,
-        bottomEnd = if (tail) 6.dp else Radius.lg,
-        bottomStart = Radius.lg,
+        topStart = Radius.sm,
+        topEnd = Radius.sm,
+        bottomEnd = if (tail) 2.dp else Radius.sm,
+        bottomStart = Radius.sm,
     )
     Box(
         modifier = Modifier
             .clip(shape)
-            .background(Brush.verticalGradient(listOf(accent, accent.scaled(0.80f))))
+            .background(accent)
             .padding(horizontal = 14.dp, vertical = 9.dp),
     ) {
         MessageText(
@@ -168,19 +169,23 @@ private fun AgentText(text: String, onCopy: (String) -> Unit) {
     }
 }
 
-/** What the system said, as an aside. */
+/** What the system said, as an aside: a bordered log line, not a tinted card. */
 @Composable
 private fun SystemNote(text: String, onCopy: (String) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(Radius.md))
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+            .clip(RoundedCornerShape(Radius.sm))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.sm))
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         Text(
             text = stringResource(R.string.system_label).uppercase(),
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.5.sp,
+            ),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(Space.xs))
@@ -215,8 +220,10 @@ private fun ActivityRow(item: ConversationItem.Activity) {
         item.atMillis?.let {
             Text(
                 Format.clockTime(it),
-                style = MaterialTheme.typography.labelSmall,
-                fontFamily = FontFamily.Monospace,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontFeatureSettings = "tnum",
+                ),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -279,9 +286,6 @@ private fun FailureCard(item: ConversationItem.Failure) {
         }
     }
 }
-
-/** A colour pulled towards black, for the bubble's gradient bottom. */
-private fun Color.scaled(factor: Float): Color = Color(red * factor, green * factor, blue * factor, alpha)
 
 /**
  * A band of light sweeping across, for text that is still being worked on --
