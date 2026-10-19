@@ -9,7 +9,6 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +22,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -45,7 +43,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -65,14 +62,16 @@ import me.shirazu.dshmizar.AppViewModel
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.ui.CameraScanner
 import me.shirazu.dshmizar.ui.MizarColors
+import me.shirazu.dshmizar.ui.design.ButtonShape
+import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.GlassCircleLabel
 import me.shirazu.dshmizar.ui.design.MizarMarkSearching
 import me.shirazu.dshmizar.ui.design.Motion
-import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.Transitions
 import me.shirazu.dshmizar.ui.design.glassCapsule
 import me.shirazu.dshmizar.ui.design.pressable
+import me.shirazu.dshmizar.ui.design.shapedClickable
 import me.shirazu.mizar.kit.PairingTarget
 import me.shirazu.mizar.kit.PairingUri
 
@@ -137,7 +136,7 @@ fun UnpairedScreen(model: AppViewModel) {
         Button(
             onClick = { scanning = true },
             modifier = Modifier.fillMaxWidth().padding(top = 32.dp).height(54.dp),
-            shape = RoundedCornerShape(Radius.md),
+            shape = ButtonShape.Primary,
         ) {
             Icon(Icons.Default.QrCodeScanner, contentDescription = null)
             Spacer(Modifier.width(8.dp))
@@ -152,9 +151,8 @@ fun UnpairedScreen(model: AppViewModel) {
         Row(
             modifier = Modifier
                 .padding(top = 10.dp)
-                .clip(RoundedCornerShape(Radius.sm))
                 .pressable(scale = 0.97f)
-                .clickable { showManual = !showManual }
+                .shapedClickable(Corner.sm) { showManual = !showManual }
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -215,9 +213,8 @@ private fun ManualForm(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(Radius.md))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.md)),
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, Corner.md)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Corner.md),
         ) {
             ManualField(
                 value = authority,
@@ -252,9 +249,8 @@ private fun ManualForm(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(Radius.md))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.md)),
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, Corner.md)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Corner.md),
             ) {
                 ManualField(
                     value = deviceName,
@@ -269,7 +265,7 @@ private fun ManualForm(
             onClick = onPair,
             enabled = authority.isNotBlank() && code.isNotBlank(),
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(50.dp),
-            shape = RoundedCornerShape(Radius.md),
+            shape = ButtonShape.Primary,
         ) {
             Text(
                 stringResource(R.string.pair),
@@ -353,7 +349,7 @@ internal fun ScannerScreen(onCode: (String) -> Unit, onCancel: () -> Unit) {
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Spacer(Modifier.height(16.dp))
-                Button(onClick = { request.launch(Manifest.permission.CAMERA) }) {
+                Button(onClick = { request.launch(Manifest.permission.CAMERA) }, shape = ButtonShape.Primary) {
                     Text(stringResource(R.string.allow_camera))
                 }
             }

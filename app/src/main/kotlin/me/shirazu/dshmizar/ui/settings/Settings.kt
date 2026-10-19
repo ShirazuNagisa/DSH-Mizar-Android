@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -39,7 +38,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -50,11 +48,16 @@ import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.ThemeMode
 import me.shirazu.dshmizar.ui.MizarColors
+import me.shirazu.dshmizar.ui.design.ButtonShape
+import me.shirazu.dshmizar.ui.design.ContinuousCornerShape
+import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.MizarMarkConnecting
 import me.shirazu.dshmizar.ui.design.PopoverRow
 import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.Space
+import me.shirazu.dshmizar.ui.design.concentric
 import me.shirazu.dshmizar.ui.design.pressable
+import me.shirazu.dshmizar.ui.design.shapedClickable
 import me.shirazu.dshmizar.ui.pairing.NamingDialog
 import me.shirazu.mizar.kit.SessionGrouping
 
@@ -111,9 +114,8 @@ fun SettingsDialog(
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(RoundedCornerShape(Radius.md))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.md)),
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, Corner.md)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Corner.md),
                 contentAlignment = Alignment.Center,
             ) {
                 MizarMarkConnecting(
@@ -145,9 +147,8 @@ fun SettingsDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp)
-                .clip(RoundedCornerShape(Radius.sm))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.sm))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, Corner.sm)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Corner.sm)
                 .padding(2.dp),
             horizontalArrangement = Arrangement4,
         ) {
@@ -161,8 +162,7 @@ fun SettingsDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp)
-                .clip(RoundedCornerShape(Radius.md))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, Corner.md)
                 .padding(horizontal = 10.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -237,15 +237,17 @@ fun SettingsDialog(
 
 private val Arrangement4 = Arrangement.spacedBy(4.dp)
 
+/** A segment inside the theme track: the track's corner less its 2 dp inset, so the curves stay parallel. */
+private val SegmentShape = ContinuousCornerShape(concentric(Radius.sm, 2.dp))
+
 /** One theme option in the segmented row. */
 @Composable
 private fun ThemeSegment(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(Radius.xs))
-            .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
+            .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent, SegmentShape)
             .pressable(scale = 0.95f)
-            .clickable(onClick = onClick)
+            .shapedClickable(SegmentShape, onClick = onClick)
             .padding(vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -331,7 +333,7 @@ fun NewSessionDialog(state: UiState, onDismiss: () -> Unit, onCreate: (String) -
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
-            shape = RoundedCornerShape(Radius.md),
+            shape = ButtonShape.Primary,
         ) {
             Text(stringResource(R.string.start_session))
         }

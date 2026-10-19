@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -43,15 +42,20 @@ object Glass {
 
 /** A rounded-rectangle panel. [translucent] lets the content behind breathe
  *  through the fill, for the one panel that always floats over a transcript:
- *  the composer. */
+ *  the composer.
+ *
+ *  The panel paints its shape rather than clipping to it; pass [clip] only when
+ *  the content really reaches the corners. A clickable panel takes its press
+ *  highlight from `shapedClickable` with the same radius. */
 @Composable
 fun Modifier.glassCard(
     radius: Dp = Radius.card,
     tint: Color? = null,
     tintedBorder: Color? = null,
     translucent: Boolean = false,
+    clip: Boolean = false,
 ): Modifier {
-    val shape: Shape = RoundedCornerShape(radius)
+    val shape: Shape = ContinuousCornerShape(radius)
     val fill = Glass.fill(tint).let { if (translucent) it.copy(alpha = 0.72f) else it }
     val borderBrush = if (tintedBorder != null) {
         Brush.verticalGradient(listOf(tintedBorder.copy(alpha = 0.35f), tintedBorder.copy(alpha = 0.20f)))
@@ -59,8 +63,8 @@ fun Modifier.glassCard(
         Glass.strokeBrush()
     }
     return this
-        .clip(shape)
-        .background(fill)
+        .then(if (clip) Modifier.clip(shape) else Modifier)
+        .background(fill, shape)
         .border(1.dp, borderBrush, shape)
 }
 

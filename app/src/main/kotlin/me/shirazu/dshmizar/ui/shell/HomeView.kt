@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -56,10 +55,12 @@ import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.AnchoredPopover
+import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.MizarMarkConnecting
 import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.glassCard
 import me.shirazu.dshmizar.ui.design.pressable
+import me.shirazu.dshmizar.ui.design.shapedClickable
 import me.shirazu.dshmizar.ui.settings.NewSessionDialog
 import androidx.compose.animation.core.animateFloatAsState
 import me.shirazu.dshmizar.ui.design.Motion
@@ -262,11 +263,10 @@ private fun WorkspaceMenu(
         Row(
             modifier = Modifier
                 .height(32.dp)
-                .clip(RoundedCornerShape(Radius.lg))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f))
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.lg))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f), Corner.lg)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Corner.lg)
                 .pressable()
-                .clickable { open = true }
+                .shapedClickable(Corner.lg) { open = true }
                 .padding(horizontal = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

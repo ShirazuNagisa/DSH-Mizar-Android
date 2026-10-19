@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -71,11 +70,13 @@ import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.LocalReduceMotion
 import me.shirazu.dshmizar.ui.design.Motion
 import me.shirazu.dshmizar.ui.design.AnchoredPopover
+import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.PopoverSize
 import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.glassCard
 import me.shirazu.dshmizar.ui.design.pressable
+import me.shirazu.dshmizar.ui.design.shapedClickable
 
 /**
  * Sending a prompt, and stopping one -- ported from iOS `Views/ComposerView.swift`
@@ -280,11 +281,10 @@ private fun CommandButton(open: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(32.dp)
-            .clip(RoundedCornerShape(Radius.lg))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.lg))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f), Corner.lg)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Corner.lg)
             .pressable(scale = 0.9f)
-            .clickable(onClick = onClick),
+            .shapedClickable(Corner.lg, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -327,11 +327,10 @@ private fun ModelPill(
         modifier = modifier
             .height(32.dp)
             .animateContentSize(Motion.smooth())
-            .clip(RoundedCornerShape(Radius.lg))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.lg))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f), Corner.lg)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Corner.lg)
             .pressable()
-            .clickable(onClick = onClick)
+            .shapedClickable(Corner.lg, onClick = onClick)
             .padding(horizontal = if (focused) 0.dp else 11.dp)
             .then(if (focused) Modifier.width(32.dp) else Modifier),
         verticalAlignment = Alignment.CenterVertically,
@@ -363,10 +362,9 @@ private fun ContextPill(state: UiState, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .height(32.dp)
-            .clip(RoundedCornerShape(Radius.lg))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.lg))
-            .then(if (context != null) Modifier.pressable().clickable(onClick = onClick) else Modifier)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f), Corner.lg)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Corner.lg)
+            .then(if (context != null) Modifier.pressable().shapedClickable(Corner.lg, onClick = onClick) else Modifier)
             .padding(horizontal = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

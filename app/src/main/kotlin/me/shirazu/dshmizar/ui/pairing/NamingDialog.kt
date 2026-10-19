@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -25,7 +24,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import me.shirazu.dshmizar.R
-import me.shirazu.dshmizar.ui.design.Radius
+import me.shirazu.dshmizar.ui.design.ButtonShape
+import me.shirazu.dshmizar.ui.design.Corner
 
 /**
  * The one question asked after a pairing: what should this phone call the
@@ -45,7 +45,7 @@ fun NamingDialog(
     var name by remember { mutableStateOf("") }
     Dialog(onDismissRequest = onSkip) {
         Surface(
-            shape = RoundedCornerShape(Radius.md),
+            shape = Corner.md,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
@@ -67,7 +67,7 @@ fun NamingDialog(
                     onValueChange = { name = it },
                     placeholder = { Text(machineName) },
                     singleLine = true,
-                    shape = RoundedCornerShape(Radius.sm),
+                    shape = Corner.sm,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(14.dp))
@@ -78,7 +78,7 @@ fun NamingDialog(
                     Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = { onSave(name) },
-                        shape = RoundedCornerShape(Radius.sm),
+                        shape = ButtonShape.Primary,
                     ) {
                         Text(stringResource(R.string.naming_save))
                     }

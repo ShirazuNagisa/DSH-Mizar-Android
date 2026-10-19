@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -47,7 +46,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -62,12 +60,16 @@ import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.ui.MizarColors
+import me.shirazu.dshmizar.ui.design.ButtonShape
+import me.shirazu.dshmizar.ui.design.ContinuousCornerShape
+import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.Motion
 import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.glassCapsule
 import me.shirazu.dshmizar.ui.design.glassCard
 import me.shirazu.dshmizar.ui.design.pressable
+import me.shirazu.dshmizar.ui.design.shapedClickable
 import me.shirazu.mizar.kit.ApprovalOutcome
 import me.shirazu.mizar.kit.PendingApproval
 import me.shirazu.mizar.kit.PendingQuestion
@@ -247,8 +249,7 @@ private fun Deck(
                     .scale(1f - (depth + 1) * 0.05f)
                     .alpha(1f - depth * 0.35f)
                     .zIndex(-(depth + 1).toFloat())
-                    .clip(RoundedCornerShape(Radius.card))
-                    .background(card.tint.copy(alpha = 0.25f)),
+                    .background(card.tint.copy(alpha = 0.25f), Corner.card),
             )
         }
 
@@ -325,11 +326,10 @@ private fun DeckHeader(
             Row(
                 modifier = Modifier
                     .height(26.dp)
-                    .clip(RoundedCornerShape(Radius.lg))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.lg))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, ButtonShape.Inline)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, ButtonShape.Inline)
                     .pressable()
-                    .clickable(onClick = onNext)
+                    .shapedClickable(ButtonShape.Inline, onClick = onNext)
                     .padding(horizontal = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -537,7 +537,7 @@ private fun QuestionBody(
             onValueChange = onCustom,
             placeholder = { Text(stringResource(R.string.or_type_your_own)) },
             maxLines = 4,
-            shape = RoundedCornerShape(Radius.sm),
+            shape = Corner.sm,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f),
                 unfocusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f),
@@ -562,20 +562,20 @@ private fun OptionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(Radius.sm))
             .background(
                 if (isOn) MizarColors.Question.copy(alpha = 0.14f)
                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f),
+                Corner.sm,
             )
             .then(
                 if (isOn) {
-                    Modifier.border(1.dp, MizarColors.Question.copy(alpha = 0.45f), RoundedCornerShape(Radius.sm))
+                    Modifier.border(1.dp, MizarColors.Question.copy(alpha = 0.45f), Corner.sm)
                 } else {
                     Modifier
                 },
             )
             .pressable(scale = 0.98f)
-            .clickable {
+            .shapedClickable(Corner.sm) {
                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onClick()
             }
@@ -597,10 +597,13 @@ private fun OptionRow(
     }
 }
 
+/** A checkbox's corner: a mark, not a card. */
+private val MarkShape = ContinuousCornerShape(Radius.mark)
+
 /** A radio or a checkbox whose mark springs in -- iOS `ChoiceMark`. */
 @Composable
 private fun ChoiceMark(isOn: Boolean, multiple: Boolean, modifier: Modifier = Modifier) {
-    val shape = if (multiple) RoundedCornerShape(6.dp) else CircleShape
+    val shape = if (multiple) MarkShape else CircleShape
     val fillScale by animateFloatAsState(if (isOn) 1f else 0.3f, Motion.pick(Motion.bouncy()), label = "markScale")
     val fillAlpha by animateFloatAsState(if (isOn) 1f else 0f, Motion.pick(Motion.bouncy()), label = "markAlpha")
     Box(modifier = modifier.size(20.dp), contentAlignment = Alignment.Center) {
@@ -613,7 +616,7 @@ private fun ChoiceMark(isOn: Boolean, multiple: Boolean, modifier: Modifier = Mo
                     shape,
                 ),
         )
-        Box(Modifier.size(20.dp).scale(fillScale).alpha(fillAlpha).clip(shape).background(MizarColors.Question))
+        Box(Modifier.size(20.dp).scale(fillScale).alpha(fillAlpha).background(MizarColors.Question, shape))
         if (isOn) {
             Icon(
                 Icons.Default.Check,

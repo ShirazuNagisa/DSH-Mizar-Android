@@ -45,6 +45,8 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.shirazu.dshmizar.R
+import me.shirazu.dshmizar.ui.design.ContinuousCornerShape
+import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.mizar.kit.Markdown
@@ -368,12 +370,11 @@ private fun CodeBlockView(block: MarkdownBlock.Code, onCopy: (String) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(Radius.sm))
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), Corner.sm)
             .border(
                 0.5.dp,
                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-                RoundedCornerShape(Radius.sm),
+                Corner.sm,
             )
             .padding(2.dp),
     ) {
@@ -413,6 +414,13 @@ private fun CodeBlockView(block: MarkdownBlock.Code, onCopy: (String) -> Unit) {
     }
 }
 
+/**
+ * The table's corner. The one clip inside the transcript -- the zebra rows reach the
+ * corners under a sideways scroll -- so it is cut circular (smoothing 0): a native
+ * rounded clip on every API level, and at 12 dp indistinguishable from continuous.
+ */
+private val TableShape = ContinuousCornerShape(Radius.sm, smoothing = 0f)
+
 /** A GFM table: a grid that scrolls sideways when it outgrows the column. */
 @Composable
 private fun TableView(
@@ -424,15 +432,10 @@ private fun TableView(
     val lineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(Radius.sm))
-            .drawBehind {
-                drawRect(
-                    color = lineColor,
-                    topLeft = Offset.Zero,
-                    size = Size(size.width, size.height),
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 0.5.dp.toPx()),
-                )
-            }
+            .clip(TableShape)
+            // The hairline follows the corner. A rectangle stroked under a rounded clip
+            // loses its corners -- invisibly at 6 dp, as a visible gap at 12.
+            .border(0.5.dp, lineColor, TableShape)
             .horizontalScroll(rememberScrollState()),
     ) {
         Column {

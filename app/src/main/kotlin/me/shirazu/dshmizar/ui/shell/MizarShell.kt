@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -52,6 +51,7 @@ import me.shirazu.dshmizar.ui.LocalMizarDark
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.conversation.SessionScreen
 import me.shirazu.dshmizar.ui.pairing.NamingDialog
+import me.shirazu.dshmizar.ui.design.ContinuousCornerShape
 import me.shirazu.dshmizar.ui.design.LocalReduceMotion
 import me.shirazu.dshmizar.ui.design.Radius
 import kotlin.math.min
@@ -322,7 +322,9 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
     val density = LocalDensity.current
     val dark = LocalMizarDark.current
     val corner = Radius.cardPushed * min(1f, reveal * 3f)
-    val shape = RoundedCornerShape(corner)
+    // Zero at rest, which the shape draws as a plain rectangle: the card only pays
+    // for a path clip while a drawer is actually out.
+    val shape = ContinuousCornerShape(corner)
 
     Box(
         modifier = Modifier
@@ -375,8 +377,7 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(shape)
-                    .background(Color.Black.copy(alpha = (if (dark) 0.32f else 0.05f) * reveal))
+                    .background(Color.Black.copy(alpha = (if (dark) 0.32f else 0.05f) * reveal), shape)
                     .border(
                         width = 1.dp,
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f * reveal),

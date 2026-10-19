@@ -1,7 +1,6 @@
 package me.shirazu.dshmizar.ui.conversation
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
@@ -27,7 +25,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -35,9 +32,11 @@ import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.Format
 import me.shirazu.dshmizar.ui.MizarColors
+import me.shirazu.dshmizar.ui.design.ButtonShape
+import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.PopoverRow
+import me.shirazu.dshmizar.ui.design.shapedClickable
 import me.shirazu.dshmizar.ui.design.PopoverSection
-import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.mizar.kit.ModelSelection
 import me.shirazu.mizar.kit.ReasoningEffortOption
 
@@ -152,12 +151,12 @@ private fun EffortChooser(
                 Box(
                     modifier = Modifier
                         .height(26.dp)
-                        .clip(RoundedCornerShape(Radius.sm))
                         .background(
                             if (on) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.surfaceContainerHigh,
+                            Corner.sm,
                         )
-                        .clickable { onPick(effort.id) }
+                        .shapedClickable(Corner.sm) { onPick(effort.id) }
                         .padding(horizontal = 10.dp),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -215,7 +214,7 @@ internal fun PermissionContent(state: UiState, onChoose: (String) -> Unit) {
         Button(
             onClick = { onChoose(preset) },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
-            shape = RoundedCornerShape(Radius.sm),
+            shape = ButtonShape.Inline,
         ) {
             Text(stringResource(R.string.allow_full_access))
         }

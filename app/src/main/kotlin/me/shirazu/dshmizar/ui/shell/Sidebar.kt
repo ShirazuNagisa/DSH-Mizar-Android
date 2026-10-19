@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -47,7 +46,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
@@ -65,6 +63,7 @@ import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.AnchoredPopover
+import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.GlassCircleLabel
 import me.shirazu.dshmizar.ui.design.Motion
 import me.shirazu.dshmizar.ui.design.PopoverSize
@@ -74,6 +73,7 @@ import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.glassCapsule
 import me.shirazu.dshmizar.ui.design.glassCard
 import me.shirazu.dshmizar.ui.design.pressable
+import me.shirazu.dshmizar.ui.design.shapedClickable
 import me.shirazu.dshmizar.ui.settings.HostPickerDialog
 import me.shirazu.dshmizar.ui.settings.NewSessionDialog
 import me.shirazu.dshmizar.ui.settings.SettingsDialog
@@ -203,8 +203,7 @@ fun Sidebar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = Space.lg, vertical = Space.xs)
-                    .clip(RoundedCornerShape(Radius.sm))
-                    .background(MizarColors.FailureFill)
+                    .background(MizarColors.FailureFill, Corner.sm)
                     .padding(horizontal = Space.md, vertical = Space.sm),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -292,7 +291,7 @@ fun Sidebar(
                     .height(48.dp)
                     .glassCard(radius = Radius.md)
                     .pressable(scale = 0.97f)
-                    .clickable { showingNewSession = true }
+                    .shapedClickable(Corner.md) { showingNewSession = true }
                     .padding(horizontal = Space.lg),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

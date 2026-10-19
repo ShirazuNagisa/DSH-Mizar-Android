@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Computer
@@ -42,7 +41,7 @@ import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.Format
 import me.shirazu.dshmizar.ui.MizarColors
-import me.shirazu.dshmizar.ui.design.Radius
+import me.shirazu.dshmizar.ui.design.ButtonShape
 import me.shirazu.mizar.kit.SessionGrouping
 import me.shirazu.mizar.kit.SessionRow
 
@@ -71,9 +70,9 @@ fun FailedScreen(state: UiState, onRetry: () -> Unit, onPairAgain: () -> Unit) {
         // A refused credential is not something a retry can fix: the same token would be
         // rejected again. Offer the one action that works.
         if (state.needsPairing) {
-            Button(onClick = onPairAgain, shape = RoundedCornerShape(Radius.md)) { Text(stringResource(R.string.pair_again)) }
+            Button(onClick = onPairAgain, shape = ButtonShape.Primary) { Text(stringResource(R.string.pair_again)) }
         } else {
-            Button(onClick = onRetry, shape = RoundedCornerShape(Radius.md)) { Text(stringResource(R.string.retry)) }
+            Button(onClick = onRetry, shape = ButtonShape.Primary) { Text(stringResource(R.string.retry)) }
         }
         if (state.sessions.isNotEmpty()) {
             Text(stringResource(R.string.stored_sessions_kept), style = MaterialTheme.typography.labelMedium)

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -58,7 +57,7 @@ fun AnchoredPopover(
         expanded = expanded,
         onDismissRequest = onDismiss,
         offset = offset,
-        shape = RoundedCornerShape(Radius.md),
+        shape = Corner.md,
         // Translucent, but only just: the work behind shows as a breath, not as
         // words competing with the window's own.
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),

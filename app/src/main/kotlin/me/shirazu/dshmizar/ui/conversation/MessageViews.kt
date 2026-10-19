@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
@@ -34,7 +34,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -49,6 +48,8 @@ import kotlin.math.roundToInt
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.ui.Format
 import me.shirazu.dshmizar.ui.MizarColors
+import me.shirazu.dshmizar.ui.design.ContinuousCornerShape
+import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.LocalReduceMotion
 import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.Space
@@ -122,18 +123,17 @@ internal fun SentBubbleBody(
 ) {
     val accent = MaterialTheme.colorScheme.primary
     val ink = MizarColors.OnAccent
-    // Console bubbles are flat -- one slab of accent, sharp corners, and the
-    // tightened corner nearest the answer is all the tail that remains.
-    val shape = RoundedCornerShape(
-        topStart = Radius.sm,
-        topEnd = Radius.sm,
-        bottomEnd = if (tail) 2.dp else Radius.sm,
-        bottomStart = Radius.sm,
+    // One flat slab of accent; the tightened corner nearest the answer is all the
+    // tail that remains.
+    val shape = ContinuousCornerShape(
+        topStartSize = CornerSize(Radius.sm),
+        topEndSize = CornerSize(Radius.sm),
+        bottomEndSize = CornerSize(if (tail) Radius.tail else Radius.sm),
+        bottomStartSize = CornerSize(Radius.sm),
     )
     Box(
         modifier = Modifier
-            .clip(shape)
-            .background(accent)
+            .background(accent, shape)
             .padding(horizontal = 14.dp, vertical = 9.dp),
     ) {
         MessageText(
@@ -175,9 +175,8 @@ private fun SystemNote(text: String, onCopy: (String) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(Radius.sm))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.sm))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, Corner.sm)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Corner.sm)
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         Text(
@@ -261,9 +260,8 @@ private fun FailureCard(item: ConversationItem.Failure) {
         modifier = Modifier
             .fillMaxWidth()
             .offset { IntOffset(shake.value.roundToInt(), 0) }
-            .clip(RoundedCornerShape(Radius.md))
-            .background(MizarColors.Failed.copy(alpha = 0.09f))
-            .border(1.dp, MizarColors.Failed.copy(alpha = 0.28f), RoundedCornerShape(Radius.md))
+            .background(MizarColors.Failed.copy(alpha = 0.09f), Corner.md)
+            .border(1.dp, MizarColors.Failed.copy(alpha = 0.28f), Corner.md)
             .padding(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

@@ -35,7 +35,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -49,10 +48,11 @@ import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.Format
 import me.shirazu.dshmizar.ui.MizarColors
+import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.Motion
-import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.TwinStar
+import me.shirazu.dshmizar.ui.design.shapedClickable
 import me.shirazu.mizar.kit.SessionGrouping
 import me.shirazu.mizar.kit.SessionRow
 import me.shirazu.mizar.kit.WorkspaceGroup
@@ -272,14 +272,12 @@ private fun SessionRowButton(
                 if (selected) {
                     // The console's selection is a whisper of the accent with a
                     // leading bar, not a lifted sheet of paper.
-                    Modifier
-                        .clip(RoundedCornerShape(Radius.sm))
-                        .background(MizarColors.SelectionFill)
+                    Modifier.background(MizarColors.SelectionFill, Corner.sm)
                 } else {
                     Modifier
                 },
             )
-            .clickable(onClick = onClick)
+            .shapedClickable(Corner.sm, onClick = onClick)
             .padding(top = 9.dp, bottom = 9.dp, end = Space.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {

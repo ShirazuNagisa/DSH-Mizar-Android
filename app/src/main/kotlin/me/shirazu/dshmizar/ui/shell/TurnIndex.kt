@@ -37,7 +37,9 @@ import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.Format
 import me.shirazu.dshmizar.ui.MizarColors
+import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.Space
+import me.shirazu.dshmizar.ui.design.shapedClickable
 import me.shirazu.mizar.kit.ConversationItem
 import me.shirazu.mizar.kit.ConversationTurn
 
@@ -208,15 +210,14 @@ private fun TurnIndexRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .clickable(onClick = onClick)
             // The bracket: a wash on the rows the conversation is showing. It is the
             // index's answer to "where am I", and it moves as the conversation scrolls.
             .background(
                 if (onScreen) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
                 else androidx.compose.ui.graphics.Color.Transparent,
-                MaterialTheme.shapes.medium,
+                Corner.md,
             )
+            .shapedClickable(Corner.md, onClick = onClick)
             .padding(horizontal = Space.sm, vertical = Space.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
