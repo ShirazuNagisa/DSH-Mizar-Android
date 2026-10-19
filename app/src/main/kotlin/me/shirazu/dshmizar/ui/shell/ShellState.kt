@@ -27,34 +27,49 @@ class ShellState(
     private val reduceMotion: () -> Boolean,
     private val dismissKeyboard: () -> Unit,
 ) {
-    /** 0 closed, 1 open. Values a little outside that range while dragging are the rubber band. */
+    /**
+     * Where the shell is, as one number.
+     *
+     * `-1` is the turn index (the drawer on the right), `0` the conversation, `1` the
+     * sidebar. One number rather than two flags on purpose: the drawers are mirrors,
+     * they cannot both be out, and a drag that starts closed decides by its own
+     * direction which one it opens.
+     */
     val progress = Animatable(0f)
 
     /** Whether a finger is on it right now. */
     var isDragging by mutableStateOf(false)
         private set
 
-    /** Whether the last settle left it open, for the haptic and for the toggle. */
-    var settledOpen by mutableStateOf(false)
+    /** Where the last settle left it: -1 (index), 0 (conversation), 1 (sidebar). */
+    var settledAt by mutableStateOf(0f)
         private set
+
+    /** Whether the sidebar is the drawer that is out. */
+    val settledOpen: Boolean get() = settledAt > 0.5f
+
+    /** Whether the turn index is the drawer that is out. */
+    val settledIndex: Boolean get() = settledAt < -0.5f
 
     /** Which workspaces are open, per Mac, for the life of the process. */
     private val expandedByHost = mutableMapOf<String, Set<String>>()
 
     private var dragOrigin = 0f
 
-    val isOpen: Boolean get() = progress.value > 0.5f
+    val isOpen: Boolean get() = kotlin.math.abs(progress.value) > 0.5f
 
     // Opening and closing
 
     fun open() = settle(1f)
     fun close() = settle(0f)
+    fun openIndex() = settle(-1f)
     fun toggle() = settle(if (settledOpen) 0f else 1f)
+    fun toggleIndex() = settle(if (settledIndex) 0f else -1f)
 
     /** Put it somewhere without animating, for the first frame. */
-    fun place(open: Boolean) {
-        scope.launch { progress.snapTo(if (open) 1f else 0f) }
-        settledOpen = open
+    fun place(at: Float) {
+        scope.launch { progress.snapTo(at) }
+        settledAt = at
     }
 
     // Dragging
@@ -73,10 +88,11 @@ class ShellState(
     fun dragBy(fraction: Float) {
         val raw = dragOrigin + fraction
         // Past either end the card still moves, at a third of the finger's speed and
-        // less the further it goes: the edge is felt, not hit.
+        // less the further it goes: the edge is felt, not hit. Both ends, because both
+        // drawers have one.
         val banded = when {
             raw > 1f -> 1f + rubberBand(raw - 1f)
-            raw < 0f -> -rubberBand(-raw)
+            raw < -1f -> -1f - rubberBand(-raw - 1f)
             else -> raw
         }
         // A very short spring rather than an assignment: grabbing the card while it is
@@ -94,14 +110,21 @@ class ShellState(
     fun endDrag(velocity: Float) {
         isDragging = false
         // Where a flick would carry it, a tenth of a second on. Deciding on the
-        // projection rather than the position is what lets a short quick flick open it
-        // and a long slow drag that changes its mind close it.
-        val projected = progress.value + velocity * 0.12f
-        settle(if (projected > 0.5f) 1f else 0f, velocity)
+        // projection rather than the position is what lets a short quick flick open a
+        // drawer and a long slow drag that changes its mind close it. The nearest of
+        // the three stops wins, so a flick that closes one drawer can never throw the
+        // card on into the other -- there is only ever one target.
+        val projected = (progress.value + velocity * 0.12f).coerceIn(-1f, 1f)
+        val target = when {
+            projected > 0.5f -> 1f
+            projected < -0.5f -> -1f
+            else -> 0f
+        }
+        settle(target, velocity)
     }
 
     private fun settle(target: Float, velocity: Float = 0f) {
-        if (target > 0.5f) dismissKeyboard()
+        if (kotlin.math.abs(target) > 0.5f) dismissKeyboard()
         scope.launch {
             if (reduceMotion()) {
                 progress.animateTo(target, tween(220))
@@ -115,7 +138,7 @@ class ShellState(
                 )
             }
         }
-        settledOpen = target > 0.5f
+        settledAt = target
     }
 
     private fun rubberBand(overshoot: Float): Float {

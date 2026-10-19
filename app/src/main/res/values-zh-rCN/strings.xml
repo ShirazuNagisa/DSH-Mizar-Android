@@ -142,6 +142,10 @@
     <string name="home_no_workspaces">在电脑上开一个会话，然后刷新。</string>
     <string name="choose_workspace">选择工作区</string>
     <string name="somewhere_else">其他目录…</string>
+    <string name="turn_index">轮次</string>
+    <string name="turn_count">%1$d 个轮次</string>
+    <string name="turn_index_empty">这个会话还没有轮次。</string>
+    <string name="turn_index_untitled">（无提示）</string>
 
     <!-- 通知：常驻连接与 agent 提醒 -->
     <string name="connection_service_text">已连接到电脑 · 这条常驻通知让 App 在后台保持连接</string>

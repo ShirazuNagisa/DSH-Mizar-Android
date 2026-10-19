@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -89,7 +90,7 @@ fun MizarShell(model: AppViewModel, state: UiState) {
     LaunchedEffect(Unit) {
         if (!placed) {
             placed = true
-            shell.place(open = state.selectedSessionId == null)
+            shell.place(at = if (state.selectedSessionId == null) 1f else 0f)
         }
     }
     // A session chosen from anywhere -- a row, a notification, a session just
@@ -112,9 +113,18 @@ fun MizarShell(model: AppViewModel, state: UiState) {
         val fullWidthPx = with(density) { maxWidth.toPx() }
         val sidebarWidth = min(330.dp.value, maxWidth.value * 0.84f).dp
         val sidebarWidthPx = with(density) { sidebarWidth.toPx() }
+        // The drawers are not the same width, and the pan needs to know which one it is
+        // moving: measuring a drag in points against the wrong width makes the same
+        // finger travel move the card by different amounts on each side.
+        val indexWidth = min(320.dp.value, maxWidth.value * 0.84f).dp
+        val indexWidthPx = with(density) { indexWidth.toPx() }
 
         val p = shell.progress.value
-        val reveal = p.coerceIn(0f, 1f)
+        // One number, two drawers: only one of these is ever non-zero, which is what
+        // keeps the card from being pushed by both at once.
+        val sidebarReveal = p.coerceIn(0f, 1f)
+        val indexReveal = (-p).coerceIn(0f, 1f)
+        val reveal = maxOf(sidebarReveal, indexReveal)
 
         // The sidebar comes forward as the card leaves: a little travel and a little
         // light, so the two read as layers rather than as one strip sliding sideways.
@@ -126,9 +136,9 @@ fun MizarShell(model: AppViewModel, state: UiState) {
                 // revealed by the card leaving, which reads as "a strip appeared behind
                 // the card" rather than as a sidebar sliding in. At rest it now sits a
                 // full width out, so opening is the list arriving.
-                .offset { IntOffset((-sidebarWidthPx * (1f - reveal)).toInt(), 0) }
-                .alpha(0.55f + 0.45f * reveal)
-                .sidebarDrag(shell, sidebarWidthPx),
+                .offset { IntOffset((-sidebarWidthPx * (1f - sidebarReveal)).toInt(), 0) }
+                .alpha(0.55f + 0.45f * sidebarReveal)
+                .drawerDrag(shell, sidebarWidthPx, indexWidthPx),
         ) {
             Sidebar(
                 model = model,
@@ -140,6 +150,21 @@ fun MizarShell(model: AppViewModel, state: UiState) {
             )
         }
 
+        // The turn index, the sidebar's mirror on the right. Same one number, opposite
+        // sign: dragging the conversation left brings this out while the card steps
+        // aside on the left.
+        Box(
+            modifier = Modifier
+                .width(indexWidth)
+                .fillMaxSize()
+                .align(Alignment.CenterEnd)
+                .offset { IntOffset((indexWidthPx * (1f - indexReveal)).toInt(), 0) }
+                .alpha(0.55f + 0.45f * indexReveal)
+                .drawerDrag(shell, sidebarWidthPx, indexWidthPx),
+        ) {
+            TurnIndex(state = state, now = System.currentTimeMillis(), onPick = { shell.close() })
+        }
+
         ConversationCard(
             model = model,
             state = state,
@@ -148,6 +173,7 @@ fun MizarShell(model: AppViewModel, state: UiState) {
             reveal = reveal,
             sidebarWidth = sidebarWidth,
             sidebarWidthPx = sidebarWidthPx,
+            indexWidthPx = indexWidthPx,
             onNewSession = { showingNewSession = true },
         )
 
@@ -156,8 +182,8 @@ fun MizarShell(model: AppViewModel, state: UiState) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .offset { IntOffset((sidebarWidthPx * p).toInt().coerceAtLeast(0), 0) }
-                    .sidebarDrag(shell, sidebarWidthPx)
+                    .offset { IntOffset((if (p >= 0f) sidebarWidthPx * p else indexWidthPx * p).toInt(), 0) }
+                    .drawerDrag(shell, sidebarWidthPx, indexWidthPx)
                     .then(
                         if (reveal > 0.5f) {
                             Modifier.clickable(
@@ -220,6 +246,7 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
     reveal: Float,
     sidebarWidth: Dp,
     sidebarWidthPx: Float,
+    indexWidthPx: Float,
     onNewSession: () -> Unit,
 ) {
     val density = LocalDensity.current
@@ -231,7 +258,7 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
         modifier = Modifier
             .fillMaxSize()
             .graphicsLayer {
-                translationX = sidebarWidthPx * progress
+                translationX = if (progress >= 0f) sidebarWidthPx * progress else indexWidthPx * progress
                 val s = 1f - 0.06f * reveal
                 scaleX = s
                 scaleY = s
@@ -245,7 +272,7 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
             )
             .clip(shape)
             .background(MaterialTheme.colorScheme.background)
-            .sidebarDrag(shell, sidebarWidthPx),
+            .drawerDrag(shell, sidebarWidthPx, indexWidthPx),
     ) {
         // Keyed on the session, which is what makes every piece of state inside
         // belong to the session it was filled from: the draft, the scroll anchor,
@@ -297,37 +324,38 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
  * scroll before this ever fires, which is the Compose equivalent of the pan
  * recognizer failing fast and letting the scroll view through.
  */
-private fun Modifier.sidebarDrag(
+private fun Modifier.drawerDrag(
     shell: ShellState,
-    widthPx: Float,
-): Modifier = this.pointerInput(widthPx) {
-    val width = widthPx.coerceAtLeast(1f)
+    sidebarWidthPx: Float,
+    indexWidthPx: Float,
+): Modifier = this.pointerInput(sidebarWidthPx, indexWidthPx) {
+    val sidebarWidth = sidebarWidthPx.coerceAtLeast(1f)
+    val indexWidth = indexWidthPx.coerceAtLeast(1f)
     awaitEachGesture {
-        // Which way this gesture is allowed to go is decided once, from where the
-        // sidebar is now: closed means a right drag opens it, open means a left drag
-        // closes it. Passing that in as a constant was the reason the card could not
-        // close the sidebar it had opened -- the same finger had to find the strip
-        // under the overlay instead.
-        val wantsOpen = !shell.settledOpen
+        // Closed: either direction, and the sign of the movement picks the drawer.
+        // A drawer already out accepts only the way back -- which is what stops a
+        // flick that closes the sidebar from carrying the card on into the index.
+        val allowRight = shell.settledAt <= 0f
+        val allowLeft = shell.settledAt >= 0f
         val down = awaitFirstDown(requireUnconsumed = false)
         val tracker = VelocityTracker()
         var began = false
         awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
             val directionRight = change.positionChange().x > 0
-            // Sideways means sideways, and in this recognizer's own direction: an
-            // opening drag goes right, a closing drag goes left.
-            if (directionRight != wantsOpen && !began) return@awaitHorizontalTouchSlopOrCancellation
+            if ((directionRight && !allowRight) || (!directionRight && !allowLeft)) {
+                if (!began) return@awaitHorizontalTouchSlopOrCancellation
+            }
             if (!began) {
                 shell.beginDrag()
                 began = true
             }
             tracker.addPosition(change.uptimeMillis, change.position)
-            shell.dragBy(over / width)
+            shell.dragBy(over / if (directionRight) sidebarWidth else indexWidth)
             change.consume()
         }
         if (began) {
             val velocity = try {
-                tracker.calculateVelocity().x / width
+                tracker.calculateVelocity().x / if (shell.settledAt >= 0f) sidebarWidth else indexWidth
             } catch (_: IllegalStateException) {
                 0f
             }

@@ -174,4 +174,8 @@
     <string name="home_no_workspaces">Start a session on your computer, then refresh.</string>
     <string name="choose_workspace">Choose a workspace</string>
     <string name="somewhere_else">Somewhere else…</string>
+    <string name="turn_index">Turns</string>
+    <string name="turn_count">%1$d turns</string>
+    <string name="turn_index_empty">This session has no turns yet.</string>
+    <string name="turn_index_untitled">(no prompt)</string>
 </resources>
