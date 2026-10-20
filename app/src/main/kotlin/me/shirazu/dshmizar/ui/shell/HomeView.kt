@@ -43,7 +43,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -54,6 +53,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.shirazu.dshmizar.AppViewModel
+import me.shirazu.dshmizar.ui.design.mizarPerform
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.MizarColors
@@ -85,6 +85,7 @@ fun HomeView(
     onOpenSidebar: () -> Unit,
 ) {
     var draft by remember { mutableStateOf("") }
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     // Where the new session will work. Defaults to the first workspace, and
     // follows the list if the choice disappears.
     var workspace by remember { mutableStateOf<String?>(null) }
@@ -99,7 +100,6 @@ fun HomeView(
     if (workspace == null || choices.none { it.first == workspace }) {
         workspace = choices.firstOrNull()?.first
     }
-    val haptics = LocalHapticFeedback.current
     LaunchedEffect(Unit) { model.loadCatalogs() }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -192,7 +192,7 @@ fun HomeView(
                             onSend = {
                                 val target = workspace
                                 if (target != null && draft.isNotBlank()) {
-                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    haptics.mizarPerform(HapticFeedbackType.LongPress)
                                     val text = draft
                                     draft = ""
                                     model.createSessionWithPrompt(target, text)
@@ -225,7 +225,7 @@ fun HomeView(
                         .pressable(scale = 0.88f)
                         .clickable(enabled = canSend) {
                             val target = workspace ?: return@clickable
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            haptics.mizarPerform(HapticFeedbackType.LongPress)
                             val text = draft
                             draft = ""
                             model.createSessionWithPrompt(target, text)

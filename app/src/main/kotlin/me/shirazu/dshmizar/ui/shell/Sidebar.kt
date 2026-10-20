@@ -496,7 +496,9 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
             onNotifyInterrupted = { on -> model.setNotifyInterrupted(on) },
             onNotifyQuestions = { on -> model.setNotifyQuestions(on) },
             onNotifyApprovals = { on -> model.setNotifyApprovals(on) },
+            onHaptics = { on -> model.setHapticsEnabled(on) },
             onLocalNetworkFirst = { on -> model.setLocalNetworkFirst(on) },
+            onExportLogs = { onReady -> model.exportLogs(onReady) },
             onRename = { hostId, label -> model.renameHost(hostId, label) },
         )
     }

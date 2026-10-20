@@ -2,6 +2,9 @@ package me.shirazu.dshmizar.ui.settings
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
+import androidx.core.content.FileProvider
+import java.io.File
 import android.provider.Settings
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationManagerCompat
@@ -81,7 +84,9 @@ fun SettingsDialog(
     onNotifyInterrupted: (Boolean) -> Unit,
     onNotifyQuestions: (Boolean) -> Unit,
     onNotifyApprovals: (Boolean) -> Unit,
+    onHaptics: (Boolean) -> Unit,
     onLocalNetworkFirst: (Boolean) -> Unit,
+    onExportLogs: ((File?) -> Unit) -> Unit,
     onRename: (String, String?) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
@@ -194,6 +199,9 @@ fun SettingsDialog(
         SettingToggle(stringResource(R.string.notify_questions), state.notifyQuestions, onNotifyQuestions)
         SettingToggle(stringResource(R.string.notify_approvals), state.notifyApprovals, onNotifyApprovals)
 
+        SectionLabel(stringResource(R.string.haptics))
+        SettingToggle(stringResource(R.string.haptics_enabled), state.hapticsEnabled, onHaptics)
+
         // Where the bytes travel, and what that unlocks. The relay works from
         // anywhere; the LAN is faster and is what makes the running-turn detail and
         // attachments available without an account.
@@ -301,6 +309,22 @@ fun SettingsDialog(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
         )
 
+        SectionLabel(stringResource(R.string.diagnostics))
+        TextButton(
+            onClick = {
+                onExportLogs { file ->
+                    if (file == null) {
+                        Toast.makeText(context, R.string.export_failed, Toast.LENGTH_SHORT).show()
+                    } else {
+                        shareArchive(context, file)
+                    }
+                }
+            },
+            modifier = Modifier.padding(horizontal = 6.dp),
+        ) {
+            Text(stringResource(R.string.export_logs))
+        }
+
         Text(
             text = stringResource(R.string.settings_note),
             style = MaterialTheme.typography.bodySmall,
@@ -310,6 +334,21 @@ fun SettingsDialog(
     }
 }
 
+
+/** Hand the diagnostics zip to whichever app the operator picks. */
+private fun shareArchive(context: android.content.Context, file: File) {
+    runCatching {
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "application/zip"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(send, context.getString(R.string.export_logs)))
+    }.onFailure {
+        Toast.makeText(context, R.string.export_failed, Toast.LENGTH_SHORT).show()
+    }
+}
 
 /** One compact switch row in the notifications section. */
 @Composable

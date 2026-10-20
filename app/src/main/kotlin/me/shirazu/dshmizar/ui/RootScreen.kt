@@ -19,7 +19,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -36,6 +38,8 @@ import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.ui.pairing.FailedScreen
 import me.shirazu.dshmizar.ui.pairing.UnpairedScreen
 import me.shirazu.dshmizar.ui.design.RefreshSpinner
+import me.shirazu.dshmizar.ui.design.LocalHapticsEnabled
+import me.shirazu.dshmizar.ui.design.MizarHapticsState
 import me.shirazu.dshmizar.ui.design.Transitions
 import me.shirazu.dshmizar.ui.shell.MizarShell
 import me.shirazu.mizar.kit.PairingUri
@@ -65,6 +69,8 @@ fun RootScreen(model: AppViewModel, incomingPairUri: String?, onPairUriHandled: 
         onPairUriHandled()
     }
 
+    SideEffect { MizarHapticsState.enabled = state.hapticsEnabled }
+    CompositionLocalProvider(LocalHapticsEnabled provides state.hapticsEnabled) {
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             // Above both screens on purpose: a lost connection matters whether the
@@ -103,6 +109,7 @@ fun RootScreen(model: AppViewModel, incomingPairUri: String?, onPairUriHandled: 
                 }
             }
         }
+    }
     }
 }
 

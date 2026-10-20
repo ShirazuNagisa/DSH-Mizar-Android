@@ -50,7 +50,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -60,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import me.shirazu.dshmizar.AppViewModel
+import me.shirazu.dshmizar.ui.design.mizarPerform
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.ui.CameraScanner
 import me.shirazu.dshmizar.ui.MizarColors
@@ -320,7 +320,6 @@ private fun ManualField(
 @Composable
 internal fun ScannerScreen(onCode: (String) -> Unit, onCancel: () -> Unit) {
     val context = LocalContext.current
-    val haptics = LocalHapticFeedback.current
     var granted by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED,
@@ -330,13 +329,14 @@ internal fun ScannerScreen(onCode: (String) -> Unit, onCancel: () -> Unit) {
         granted = allowed
     }
     var locked by remember { mutableStateOf(false) }
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         if (granted) {
             CameraScanner(onCode = { value ->
                 if (!locked) {
                     locked = true
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptics.mizarPerform(HapticFeedbackType.LongPress)
                     onCode(value)
                 }
             })

@@ -75,6 +75,16 @@
     <string name="app_version">版本 %2$s（%1$d）</string>
     <string name="source_code">源代码</string>
     <string name="acknowledgements">GPLv3。iOS 与 Android 共用 MizarKit 与同一套宿主插件。</string>
+    <string name="haptics">触感</string>
+    <string name="haptics_enabled">震动反馈</string>
+    <string name="diagnostics">诊断</string>
+    <string name="export_logs">导出日志</string>
+    <string name="export_failed">无法生成日志压缩包。</string>
+    <string name="connection_uptime">已连接时长</string>
+    <string name="connection_poll">轮询</string>
+    <string name="poll_lan">每 3 秒（局域网）</string>
+    <string name="poll_relay">每 10 秒（中继）</string>
+    <string name="connection_latency_history">最近往返</string>
     <string name="no_sessions">还没有会话。在电脑上新建一个，然后刷新。</string>
     <string name="workspace_count">%1$d 个会话</string>
     <string name="show_more">再显示 %1$d 个</string>

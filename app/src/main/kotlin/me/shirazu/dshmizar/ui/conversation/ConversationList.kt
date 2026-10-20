@@ -41,10 +41,10 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import me.shirazu.dshmizar.ui.design.mizarPerform
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.Format
@@ -231,12 +231,12 @@ private fun TurnSummary(
 ) {
     // One small tap when a turn the operator is watching finishes. Only on the
     // change, never on the first draw of a finished turn.
-    val haptics = LocalHapticFeedback.current
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     val active = waiting || turn.isRunning
     var wasActive by remember(turn.id) { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(active) {
         if (wasActive == true && !active && !turn.failed) {
-            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            haptics.mizarPerform(HapticFeedbackType.LongPress)
         }
         wasActive = active
     }

@@ -6,7 +6,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -82,6 +84,9 @@ import me.shirazu.mizar.kit.mergeConversations
 import me.shirazu.mizar.kit.mergeTurns
 import java.io.IOException
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.security.MessageDigest
 import java.util.UUID
 
@@ -120,6 +125,10 @@ data class UiState(
     val disconnectReason: String? = null,
     /** Round trip to the host, from the last poll that got an answer. */
     val latencyMillis: Long? = null,
+    /** When the current link came up, for the connection panel's uptime. */
+    val connectedAtMillis: Long? = null,
+    /** The last few round trips, oldest first, for the panel's tiny chart. */
+    val latencyHistory: List<Long> = emptyList(),
     /**
      * The host refused this phone's credential: only pairing again can help, so the
      * screen must offer that instead of a retry that cannot work.
@@ -148,6 +157,8 @@ data class UiState(
     val notifyInterrupted: Boolean = true,
     val notifyQuestions: Boolean = true,
     val notifyApprovals: Boolean = true,
+    /** Master switch for every haptic in the app. */
+    val hapticsEnabled: Boolean = true,
     /** Prefer a direct LAN socket over the relay when one can be found. */
     val localNetworkFirst: Boolean = false,
     /** The live link is a direct/LAN socket rather than the relay. */
@@ -202,6 +213,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             notifyInterrupted = activity.notifyInterrupted(),
             notifyQuestions = activity.notifyQuestions(),
             notifyApprovals = activity.notifyApprovals(),
+            hapticsEnabled = activity.hapticsEnabled(),
         ),
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -240,6 +252,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Whether the last-opened conversation has already been restored this process. */
     private var restoredOnce = false
+
+    /** The app's own events, newest last, for the diagnostics export. */
+    private val recentNotes = ArrayDeque<String>()
 
     /** Signature of the pending set already announced, so a batch buzzes once. */
     private var lastNotified: String? = null
@@ -338,6 +353,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         needsPairing = false,
                         seenAt = activity.seenAt(host.hostId),
                         isLocalNetwork = endpoint is MizarConnection.Endpoint.Direct,
+                        connectedAtMillis = System.currentTimeMillis(),
+                        latencyHistory = emptyList(),
                     )
                 }
                 // The notice says who we are talking to and how far away it is; the
@@ -431,7 +448,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun recordLatency(millis: Long) {
         val rounded = millis.coerceIn(1, 9_999)
         val previous = _state.value.latencyMillis
-        _state.update { it.copy(latencyMillis = rounded) }
+        _state.update {
+            it.copy(
+                latencyMillis = rounded,
+                latencyHistory = (it.latencyHistory + rounded).takeLast(30),
+            )
+        }
         val host = _state.value.host ?: return
         if (previous == null || kotlin.math.abs(rounded - previous) >= LATENCY_NOTICE_STEP_MILLIS) {
             publishLinkNotice(linkConnectedText(host, rounded))
@@ -1776,6 +1798,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(notifyApprovals = on) }
     }
 
+    fun setHapticsEnabled(on: Boolean) {
+        activity.setHapticsEnabled(on)
+        _state.update { it.copy(hapticsEnabled = on) }
+    }
+
     /**
      * Prefer the local network over the relay, like iOS 0.9.4's transfer setting.
      *
@@ -1850,6 +1877,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             phase = Phase.READY,
                             isLocalNetwork = true,
                             problem = null,
+                            connectedAtMillis = System.currentTimeMillis(),
                         )
                     }
                     publishLinkNotice(linkConnectedText(updated, _state.value.latencyMillis))
@@ -1989,6 +2017,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun note(message: String) {
         android.util.Log.i("mizar-notify", message)
+        val line = "${SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US).format(Date())}  $message"
+        recentNotes.addLast(line)
+        while (recentNotes.size > 800) recentNotes.removeFirst()
+    }
+
+    /**
+     * Write the diagnostics zip and hand it to the caller on the main thread.
+     *
+     * Built off the UI thread: it reads the whole session list and writes a zip, and
+     * a settings button that freezes the screen for that looks broken.
+     */
+    fun exportLogs(onReady: (File?) -> Unit) {
+        val snapshot = _state.value
+        val notes = recentNotes.toList()
+        viewModelScope.launch(Dispatchers.IO) {
+            val file = runCatching { LogArchive.build(getApplication(), snapshot, notes) }.getOrNull()
+            withContext(Dispatchers.Main) { onReady(file) }
+        }
     }
 
     private fun regroup() {

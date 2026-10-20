@@ -65,12 +65,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import me.shirazu.dshmizar.ui.design.mizarPerform
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.MizarColors
@@ -123,7 +123,7 @@ internal fun Composer(
 ) {
     var focused by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
-    val haptics = LocalHapticFeedback.current
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     val sendable = draft.isNotBlank() || hasAttachments
     // Each window grows out of the chip that opens it; the chips own their
     // windows, so the screen above never has to know they exist.
@@ -193,7 +193,7 @@ internal fun Composer(
                     orbit = orbit,
                     draftBlank = !sendable,
                     onSend = {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        haptics.mizarPerform(HapticFeedbackType.LongPress)
                         onSend()
                     },
                     onStop = onStop,

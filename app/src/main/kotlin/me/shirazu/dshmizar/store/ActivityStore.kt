@@ -88,6 +88,10 @@ class ActivityStore(context: Context) {
     fun notifyApprovals(): Boolean = prefs.getBoolean(NOTIFY_APPROVALS, true)
     fun setNotifyApprovals(on: Boolean) { prefs.edit().putBoolean(NOTIFY_APPROVALS, on).apply() }
 
+    /** Whether the operator wants the app to use haptics at all. */
+    fun hapticsEnabled(): Boolean = prefs.getBoolean(HAPTICS, true)
+    fun setHapticsEnabled(on: Boolean) { prefs.edit().putBoolean(HAPTICS, on).apply() }
+
     /**
      * Whether the operator wants the LAN tried before the relay.
      *
@@ -110,6 +114,7 @@ class ActivityStore(context: Context) {
         const val NOTIFY_INTERRUPTED = "notify-interrupted"
         const val NOTIFY_QUESTIONS = "notify-questions"
         const val NOTIFY_APPROVALS = "notify-approvals"
+        const val HAPTICS = "haptics"
         const val LAN_FIRST = "lan-first"
     }
 }

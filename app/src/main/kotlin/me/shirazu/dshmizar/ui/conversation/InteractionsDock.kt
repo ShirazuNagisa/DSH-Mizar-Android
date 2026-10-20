@@ -53,7 +53,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -63,6 +62,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
+import me.shirazu.dshmizar.ui.design.mizarPerform
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.toolDisplayName
@@ -396,9 +396,9 @@ private fun DeckHeader(
 /** "Allowed write_file", for a moment, where the card was. */
 @Composable
 private fun ConfirmationCapsule(note: Confirmation) {
-    val haptics = LocalHapticFeedback.current
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     LaunchedEffect(note.key) {
-        haptics.performHapticFeedback(
+        haptics.mizarPerform(
             if (note.allowed) HapticFeedbackType.LongPress else HapticFeedbackType.TextHandleMove,
         )
     }
@@ -604,7 +604,7 @@ private fun OptionRow(
     multiple: Boolean,
     onClick: () -> Unit,
 ) {
-    val haptics = LocalHapticFeedback.current
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -622,7 +622,7 @@ private fun OptionRow(
             )
             .pressable(scale = 0.98f)
             .shapedClickable(Corner.sm) {
-                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                haptics.mizarPerform(HapticFeedbackType.TextHandleMove)
                 onClick()
             }
             .padding(horizontal = 12.dp, vertical = 10.dp),
