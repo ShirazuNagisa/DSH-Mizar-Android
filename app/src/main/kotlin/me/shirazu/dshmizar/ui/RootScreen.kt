@@ -1,5 +1,9 @@
 package me.shirazu.dshmizar.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
@@ -21,6 +24,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -29,6 +35,8 @@ import me.shirazu.dshmizar.Phase
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.ui.pairing.FailedScreen
 import me.shirazu.dshmizar.ui.pairing.UnpairedScreen
+import me.shirazu.dshmizar.ui.design.RefreshSpinner
+import me.shirazu.dshmizar.ui.design.Transitions
 import me.shirazu.dshmizar.ui.shell.MizarShell
 import me.shirazu.mizar.kit.PairingUri
 
@@ -64,7 +72,14 @@ fun RootScreen(model: AppViewModel, incomingPairUri: String?, onPairUriHandled: 
             // shown rather than navigated to so nothing on screen is thrown away.
             // The 2 s delay lives in the view model's `reconnecting` flag; a one-second
             // network flap must not flash this.
-            if (state.reconnecting) {
+            // It takes its height in one step and arrives by fading and rising its
+            // last few points; leaving, it fades, then gives its height back. The
+            // conversation below moves once each way and never animates.
+            AnimatedVisibility(
+                visible = state.reconnecting,
+                enter = Transitions.riseIn(distance = 6.dp),
+                exit = fadeOut(tween(160)),
+            ) {
                 ReconnectingBanner(state.disconnectReason)
             }
             Box(Modifier.weight(1f)) {
@@ -99,30 +114,38 @@ fun RootScreen(model: AppViewModel, incomingPairUri: String?, onPairUriHandled: 
  */
 @Composable
 private fun ReconnectingBanner(reason: String?) {
-    Surface(
-        modifier = Modifier.statusBarsPadding(),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        tonalElevation = 3.dp,
+    // The console's own neutral, with a hairline under it: a note on top of the
+    // screen, not a coloured alarm. The three-dash spinner is the app's own sign
+    // of work in progress.
+    val hairline = MaterialTheme.colorScheme.outlineVariant
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .drawBehind {
+                val h = 1.dp.toPx()
+                drawRect(hairline, topLeft = Offset(0f, size.height - h), size = Size(size.width, h))
+            }
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-            Spacer(Modifier.width(10.dp))
-            Column {
+        RefreshSpinner(size = 16.dp, spinning = true)
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(
+                text = stringResource(R.string.reconnecting),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (reason != null) {
                 Text(
-                    text = stringResource(R.string.reconnecting),
-                    style = MaterialTheme.typography.labelLarge,
+                    text = reason,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                if (reason != null) {
-                    Text(
-                        text = reason,
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
             }
         }
     }

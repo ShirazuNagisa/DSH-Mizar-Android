@@ -1,6 +1,5 @@
 package me.shirazu.dshmizar.ui.shell
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,7 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -49,6 +47,7 @@ import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.Format
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.Corner
+import me.shirazu.dshmizar.ui.design.LocalReduceMotion
 import me.shirazu.dshmizar.ui.design.Motion
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.TwinStar
@@ -178,17 +177,25 @@ private fun StaggeredRow(index: Int, content: @Composable () -> Unit) {
         delay((index.coerceAtMost(11) * 28).toLong())
         visible = true
     }
-    val offset by animateDpAsState(
-        targetValue = if (visible) 0.dp else 10.dp,
-        animationSpec = Motion.smooth(),
+    // The rise is the layer's: the row is in place from the first frame and only its
+    // drawing travels the last 10 dp. Under Reduce Motion it only fades.
+    val reduceMotion = LocalReduceMotion.current
+    val rise by animateFloatAsState(
+        targetValue = if (visible) 0f else 1f,
+        animationSpec = Motion.pick(Motion.smooth()),
         label = "rowRise",
     )
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = Motion.smooth(),
+        animationSpec = Motion.pick(Motion.smooth()),
         label = "rowFade",
     )
-    Box(Modifier.offset(y = offset).alpha(alpha)) {
+    Box(
+        Modifier.graphicsLayer {
+            translationY = if (reduceMotion) 0f else rise * 10.dp.toPx()
+            this.alpha = alpha.coerceIn(0f, 1f)
+        },
+    ) {
         content()
     }
 }
@@ -202,7 +209,7 @@ private fun WorkspaceHeader(
     waiting: Boolean,
     onToggle: () -> Unit,
 ) {
-    val chevron by animateFloatAsState(if (open) 90f else 0f, Motion.snappy(), label = "chevron")
+    val chevron by animateFloatAsState(if (open) 90f else 0f, Motion.pick(Motion.snappy()), label = "chevron")
     Row(
         modifier = Modifier
             .fillMaxWidth()

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -46,7 +47,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -65,6 +70,7 @@ import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.AnchoredPopover
 import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.GlassCircleLabel
+import me.shirazu.dshmizar.ui.design.LocalReduceMotion
 import me.shirazu.dshmizar.ui.design.Motion
 import me.shirazu.dshmizar.ui.design.PopoverSize
 import me.shirazu.dshmizar.ui.design.Radius
@@ -113,6 +119,7 @@ fun Sidebar(
     val thresholdPx = with(density) { 56.dp.toPx() }
     val spinnerPx = with(density) { 40.dp.toPx() }
     val maxPx = with(density) { 96.dp.toPx() }
+    val spinnerSizePx = with(density) { 22.dp.toPx() }
 
     val pullConnection = remember(state.refreshing) {
         object : NestedScrollConnection {
@@ -182,6 +189,7 @@ fun Sidebar(
                     )
                 }
             }
+            val reduceMotion = LocalReduceMotion.current
             val spin by rememberInfiniteTransition(label = "refresh").animateFloat(
                 initialValue = 0f,
                 targetValue = if (state.refreshing) 360f else 0f,
@@ -192,7 +200,10 @@ fun Sidebar(
                 Icon(
                     Icons.Default.Refresh,
                     contentDescription = stringResource(R.string.refresh),
-                    modifier = Modifier.size(18.dp).rotate(if (state.refreshing) spin else 0f),
+                    // Turned in the layer, as it draws; held still under Reduce Motion.
+                    modifier = Modifier.size(18.dp).graphicsLayer {
+                        rotationZ = if (state.refreshing && !reduceMotion) spin else 0f
+                    },
                 )
             }
         }
@@ -323,17 +334,11 @@ fun Sidebar(
         }
 
         // The gap a pull opens between the new-session key and the workspaces:
-        // empty but for the three-dash spinner turning inside it.
-        val gapDp = with(density) { gap.value.toDp() }
-        if (gapDp > 0.5.dp) {
-            Box(Modifier.fillMaxWidth().height(gapDp), contentAlignment = Alignment.Center) {
-                RefreshSpinner(
-                    spinning = state.refreshing,
-                    dragRotation = gap.value / maxPx * 270f,
-                )
-            }
-        }
-
+        // empty but for the three-dash spinner turning inside it. The workspaces move
+        // down by their layer, not by a spacer growing above them, so a pull
+        // re-measures nothing; the spinner is drawn in the gap and clipped to it.
+        Box(modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
+        Column(modifier = Modifier.fillMaxSize().graphicsLayer { translationY = gap.value }) {
         Text(
             text = stringResource(R.string.workspaces).uppercase(),
             style = MaterialTheme.typography.labelSmall.copy(
@@ -358,6 +363,24 @@ fun Sidebar(
             onLoadTitles = { model.loadTitles(it) },
             modifier = Modifier.weight(1f),
         )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(with(density) { maxPx.toDp() })
+                .drawWithContent { if (gap.value > 0.5f) clipRect(bottom = gap.value) { this@drawWithContent.drawContent() } },
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            RefreshSpinner(
+                modifier = Modifier.graphicsLayer {
+                    translationY = (gap.value - spinnerSizePx) / 2f
+                    alpha = (gap.value / spinnerSizePx).coerceIn(0f, 1f)
+                },
+                spinning = state.refreshing,
+                dragRotation = { gap.value / maxPx * 270f },
+            )
+        }
+        }
 
         // The pending cards dock in the conversation, above the composer, as on
         // iOS; the list says which rows are waiting with a raised hand instead.
@@ -388,10 +411,12 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp)
+                    // At least the settings key's height, and as tall as its two lines need:
+                    // a fixed 54 dp clipped the host's name at large text sizes.
+                    .heightIn(min = 54.dp)
                     .glassCapsule()
                     .shapedClickable(CircleShape) { showingConnection = true }
-                    .padding(horizontal = Space.lg),
+                    .padding(horizontal = Space.lg, vertical = Space.sm),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 ConnectionDot(connected = state.phase == me.shirazu.dshmizar.Phase.READY && !state.reconnecting)
@@ -479,21 +504,28 @@ private fun ConnectionDot(connected: Boolean) {
         }
         return
     }
-    val pulse by rememberInfiniteTransition(label = "connDot").animateFloat(
+    val running = MizarColors.Running
+    if (LocalReduceMotion.current) {
+        // Under Reduce Motion the dot is simply lit: being up needs no motion to say so.
+        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(10.dp).background(running, CircleShape))
+        }
+        return
+    }
+    val pulse = rememberInfiniteTransition(label = "connDot").animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(1600)),
         label = "connDotPulse",
     )
-    // A fixed box, so the ring's growth is painted inside it and the text beside
-    // the dot never moves: the centre of the dot is the centre of the box.
-    Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-        // The ring grows and fades out over 1.6 s.
-        Box(
-            Modifier
-                .size(10.dp + 14.dp * pulse)
-                .background(MizarColors.Running.copy(alpha = (1f - pulse) * 0.4f), CircleShape),
-        )
-        Box(Modifier.size(10.dp).background(MizarColors.Running, CircleShape))
-    }
+    // A fixed box, so the text beside the dot never moves. The ring is drawn, not
+    // laid out: it grows and fades over 1.6 s by being painted larger, and the pulse
+    // is read as it draws, so the loop redraws the dot and recomposes nothing.
+    Box(
+        Modifier.size(24.dp).drawBehind {
+            val p = pulse.value
+            drawCircle(running.copy(alpha = (1f - p) * 0.4f), radius = (5.dp + 7.dp * p).toPx())
+            drawCircle(running, radius = 5.dp.toPx())
+        },
+    )
 }

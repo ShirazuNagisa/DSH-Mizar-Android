@@ -37,6 +37,14 @@ class ShellState(
      */
     val progress = Animatable(0f)
 
+    /**
+     * Under Reduce Motion a settle does not travel: the shell snaps to where it is
+     * going and this veil, laid over the whole shell in the ground's colour, fades
+     * from [ReduceMotionVeil] to nothing over 220 ms -- the change still reads as a
+     * change, but nothing slides. Zero, and drawn as nothing, otherwise.
+     */
+    val veil = Animatable(0f)
+
     /** Whether a finger is on it right now. */
     var isDragging by mutableStateOf(false)
         private set
@@ -157,7 +165,9 @@ class ShellState(
         if (kotlin.math.abs(target) > 0.5f) dismissKeyboard()
         scope.launch {
             if (reduceMotion()) {
-                progress.animateTo(target, tween(220))
+                progress.snapTo(target)
+                veil.snapTo(ReduceMotionVeil)
+                veil.animateTo(0f, tween(220))
             } else {
                 // initialVelocity is measured in progress per second, which is exactly
                 // what the drag reports, so no iOS-style relative conversion is needed.
@@ -171,6 +181,11 @@ class ShellState(
             }
         }
         settledAt = target
+    }
+
+    private companion object {
+        /** How much of the old frame the Reduce Motion veil hides at first. */
+        const val ReduceMotionVeil = 0.6f
     }
 
     private fun rubberBand(overshoot: Float): Float {

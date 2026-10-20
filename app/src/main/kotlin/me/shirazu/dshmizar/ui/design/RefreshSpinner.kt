@@ -24,14 +24,16 @@ import androidx.compose.ui.unit.dp
  * the same refresh, and each door gets its own face.
  *
  * While the pull is still in the operator's hand the ring turns with the hand
- * ([dragRotation]); once the refresh owns it, it spins on its own.
+ * ([dragRotation], read as it draws, so following the finger redraws and never
+ * recomposes); once the refresh owns it, it spins on its own -- unless Reduce
+ * Motion is on, when it holds still and the gap alone says it is working.
  */
 @Composable
 fun RefreshSpinner(
     modifier: Modifier = Modifier,
     size: Dp = 22.dp,
     spinning: Boolean = false,
-    dragRotation: Float = 0f,
+    dragRotation: () -> Float = { 0f },
 ) {
     val turn by if (spinning && !LocalReduceMotion.current) {
         rememberInfiniteTransition(label = "pullSpin").animateFloat(
@@ -50,7 +52,7 @@ fun RefreshSpinner(
         val inset = stroke.width / 2f
         val arcSize = androidx.compose.ui.geometry.Size(this.size.width - stroke.width, this.size.height - stroke.width)
         val topLeft = androidx.compose.ui.geometry.Offset(inset, inset)
-        rotate(if (spinning) turn else dragRotation) {
+        rotate(if (spinning) turn else dragRotation()) {
             for (arm in 0 until 3) {
                 drawArc(
                     color = tint,

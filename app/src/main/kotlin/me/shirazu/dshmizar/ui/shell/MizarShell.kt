@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -53,7 +54,7 @@ import me.shirazu.dshmizar.ui.conversation.SessionScreen
 import me.shirazu.dshmizar.ui.pairing.NamingDialog
 import me.shirazu.dshmizar.ui.design.ContinuousCornerShape
 import me.shirazu.dshmizar.ui.design.LocalReduceMotion
-import me.shirazu.dshmizar.ui.design.Radius
+import me.shirazu.dshmizar.ui.design.rememberPushedCardRadius
 import kotlin.math.min
 
 /**
@@ -300,6 +301,16 @@ fun MizarShell(model: AppViewModel, state: UiState) {
                     ),
             )
         }
+
+        // The Reduce Motion settle's veil: drawn, never laid out or hit-tested, and
+        // nothing at all when no settle is fading.
+        val veilColor = MizarColors.SidebarBackground
+        Box(
+            Modifier.fillMaxSize().drawBehind {
+                val v = shell.veil.value
+                if (v > 0f) drawRect(veilColor.copy(alpha = v))
+            },
+        )
     }
 }
 
@@ -321,7 +332,8 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
 ) {
     val density = LocalDensity.current
     val dark = LocalMizarDark.current
-    val corner = Radius.cardPushed * min(1f, reveal * 3f)
+    // The phone's own corner (held to 26-34 dp), reached a third of the way out.
+    val corner = rememberPushedCardRadius() * min(1f, reveal * 3f)
     // Zero at rest, which the shape draws as a plain rectangle: the card only pays
     // for a path clip while a drawer is actually out.
     val shape = ContinuousCornerShape(corner)
