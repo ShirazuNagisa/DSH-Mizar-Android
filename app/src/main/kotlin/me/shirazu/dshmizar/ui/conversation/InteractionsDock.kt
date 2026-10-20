@@ -5,6 +5,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,15 +18,16 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -49,10 +52,12 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -66,6 +71,7 @@ import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.Motion
 import me.shirazu.dshmizar.ui.design.NumericText
 import me.shirazu.dshmizar.ui.design.Radius
+import me.shirazu.dshmizar.ui.design.ShapedIndication
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.glassCapsule
 import me.shirazu.dshmizar.ui.design.glassCard
@@ -118,6 +124,9 @@ private val DockCard.tint: Color
         is DockCard.Approval -> MizarColors.Waiting
         is DockCard.Question -> MizarColors.Question
     }
+
+/** How far the Next target reaches past its 26 dp pill, above and below: (48 - 26) / 2. */
+private val NextTargetOverhang = 11.dp
 
 /** A brief "done" note, shown where the answered card was. */
 private data class Confirmation(val text: String, val allowed: Boolean, val key: Long)
@@ -303,8 +312,21 @@ private fun DeckHeader(
     selectedSessionId: String?,
     onNext: () -> Unit,
 ) {
+    val nextInteractions = remember { MutableInteractionSource() }
+    // The Next target is 48 dp tall where its pill is 26: the header gives back the
+    // 11 dp the target adds above the pill, so the card is exactly as tall as before
+    // and the pending-card re-anchor sees the same dock.
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(top = 12.dp)
+            .layout { measurable, constraints ->
+                val p = measurable.measure(constraints)
+                // Only when there is a Next target to give back for.
+                val give = if (count > 1) NextTargetOverhang.roundToPx().coerceAtMost(p.height / 2) else 0
+                layout(p.width, (p.height - 2 * give).coerceAtLeast(0)) { p.place(0, -give) }
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val sessionId = card.sessionId
@@ -329,13 +351,27 @@ private fun DeckHeader(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             )
             Spacer(Modifier.width(8.dp))
+            // A 26 dp pill to look at and a 48 dp target to hit: the touch area is
+            // the whole minimum-size box around the pill, and the pill is drawn in
+            // its middle, so the header keeps its compact look.
+            Box(
+                modifier = Modifier
+                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    .pressable()
+                    .clickable(
+                        interactionSource = nextInteractions,
+                        indication = null,
+                        role = Role.Button,
+                        onClick = onNext,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
             Row(
                 modifier = Modifier
                     .height(26.dp)
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh, ButtonShape.Inline)
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, ButtonShape.Inline)
-                    .pressable()
-                    .shapedClickable(ButtonShape.Inline, onClick = onNext)
+                    .indication(nextInteractions, ShapedIndication(ButtonShape.Inline))
                     .padding(horizontal = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -344,10 +380,11 @@ private fun DeckHeader(
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                 )
                 Icon(
-                    Icons.Default.KeyboardArrowRight,
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,
                     modifier = Modifier.size(12.dp),
                 )
+            }
             }
         }
     }
