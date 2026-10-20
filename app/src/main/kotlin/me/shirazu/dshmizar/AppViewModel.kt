@@ -233,6 +233,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var connectionObserver: Job? = null
     /** The single automatic retry loop; never two at once. */
     private var reconnectJob: Job? = null
+    /**
+     * Bumped whenever a new socket becomes the live one.
+     *
+     * A read that was waiting on the old socket can fail -- or succeed -- long after
+     * the reconnect, and writing either result over the new socket's transcript is
+     * how a recovered screen went back to "there is no connection to the host" all
+     * on its own. Reads capture this number and only publish when it still matches.
+     */
+    private var connectionEpoch = 0
     /** Last presence we reported, re-asserted after a reconnect. */
     // False until an activity says otherwise: a process restarted in the background by
     // the foreground service is *not* being watched, and defaulting to true made the app
@@ -359,6 +368,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val welcome = candidate.connect()
                 connection = candidate
+                connectionEpoch++
                 _state.update {
                     it.copy(
                         phase = Phase.READY,
@@ -556,7 +566,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     // Whatever happened while the socket was down never arrived as an
                     // event, so the screen has to be re-read once -- and a turn that
                     // ended during the outage is announced from the list it reads.
-                    refreshConversation()
+                    refreshAfterReconnect()
                     // The host forgot we were on screen while we were away.
                     setPresence(foreground)
                     return@launch
@@ -1158,6 +1168,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (!refreshBundleSupported) return false
         val socket = connection ?: return true
         val sessionId = _state.value.selectedSessionId ?: return true
+        val epoch = connectionEpoch
         val bundle = try {
             socket.call<RefreshBundle>(
                 "session.refresh",
@@ -1174,6 +1185,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 note("host does not implement session.refresh; using the three reads")
                 refreshBundleSupported = false
             }
+            return false
+        }
+        // The answer belongs to a socket that is no longer the live one: let the
+        // caller read again on the new connection instead of merging this one in.
+        if (epoch != connectionEpoch) {
+            note("discarding a bundle from a replaced socket")
             return false
         }
         applyPage(bundle.messages)
@@ -1193,6 +1210,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun loadOnce(tail: Int = FULL_PAGE, afterSeq: Int? = null) {
         val socket = connection ?: return
         val sessionId = _state.value.selectedSessionId ?: return
+        val epoch = connectionEpoch
         _state.update { it.copy(loadingConversation = true) }
 
         try {
@@ -1217,13 +1235,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }.toTypedArray(),
                 ),
             )
-            applyPage(page)
+            if (epoch == connectionEpoch) {
+                applyPage(page)
+            } else {
+                note("discarding a page from a replaced socket")
+            }
         } catch (error: Throwable) {
-            _state.update { it.copy(conversationError = messageOf(error, addressOf())) }
+            if (epoch == connectionEpoch) {
+                _state.update { it.copy(conversationError = messageOf(error, addressOf())) }
+            } else {
+                note("ignoring a failure from a replaced socket")
+            }
         }
 
         try {
             val stats = socket.call<SessionStatsResult>("session.stats", payload("sessionId" to jsonString(sessionId)))
+            if (epoch != connectionEpoch) {
+                _state.update { it.copy(loadingConversation = false) }
+                return
+            }
             _state.update { it.copy(stats = stats.stats, statsError = null) }
             val hostId = _state.value.host?.hostId
             if (hostId != null) {
@@ -1232,7 +1262,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         } catch (error: Throwable) {
-            _state.update { it.copy(statsError = messageOf(error, addressOf())) }
+            if (epoch == connectionEpoch) {
+                _state.update { it.copy(statsError = messageOf(error, addressOf())) }
+            }
         }
 
         _state.update { it.copy(loadingConversation = false) }
@@ -1583,6 +1615,47 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } finally {
                 _state.update { it.copy(refreshing = false) }
             }
+        }
+    }
+
+    /**
+     * Bring the open conversation back after the socket was away.
+     *
+     * A delta refresh is right when the screen already held a transcript: the merge
+     * keeps it and only the missing tail arrives. It is the wrong call when the last
+     * read failed while the socket was half-alive -- the screen is showing an error,
+     * not a transcript, and a delta has nothing to merge into. That case asks for a
+     * full page again, which is what clears the error instead of leaving it up until
+     * the next manual pull.
+     */
+    private fun refreshAfterReconnect() {
+        val current = _state.value
+        if (current.selectedSessionId == null) {
+            refreshConversation()
+            return
+        }
+        val needsFullPage = current.conversation.isEmpty() ||
+            current.conversationError != null ||
+            current.statsError != null
+        if (!needsFullPage) {
+            refreshConversation()
+            return
+        }
+        // A refresh from before the drop may still be holding the latch; it can never
+        // finish on a socket that is gone, so clear it for this recovery read.
+        if (current.refreshing) _state.update { it.copy(refreshing = false) }
+        viewModelScope.launch {
+            note("reconnected: full page for ${current.selectedSessionId}")
+            reload(FULL_PAGE, afterSeq = null)
+            if (_state.value.conversationError != null && connection != null) {
+                // A socket that just came back can lose the first race with the old
+                // one's teardown; one quiet retry is enough to make recovery invisible.
+                delay(900)
+                note("reconnected: retrying the recovery read")
+                reload(FULL_PAGE, afterSeq = null)
+            }
+            refreshInteractionsNow()
+            lastRefreshAt = System.currentTimeMillis()
         }
     }
     fun refreshInteractions() {
@@ -1960,6 +2033,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     connectionObserver?.cancel()
                     connectionObserver = null
                     connection = candidateWelcome
+                    connectionEpoch++
                     runCatching { socket.disconnect() }
                     credentials.save(updated)
                     _state.update { current ->
