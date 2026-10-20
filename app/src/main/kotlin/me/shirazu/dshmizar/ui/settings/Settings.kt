@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,7 +38,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.border
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,15 +47,11 @@ import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.ThemeMode
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.ButtonShape
-import me.shirazu.dshmizar.ui.design.ContinuousCornerShape
 import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.MizarMarkConnecting
 import me.shirazu.dshmizar.ui.design.PopoverRow
-import me.shirazu.dshmizar.ui.design.Radius
+import me.shirazu.dshmizar.ui.design.SegmentedControl
 import me.shirazu.dshmizar.ui.design.Space
-import me.shirazu.dshmizar.ui.design.concentric
-import me.shirazu.dshmizar.ui.design.pressable
-import me.shirazu.dshmizar.ui.design.shapedClickable
 import me.shirazu.dshmizar.ui.pairing.NamingDialog
 import me.shirazu.mizar.kit.SessionGrouping
 
@@ -127,7 +121,7 @@ fun SettingsDialog(
             Spacer(Modifier.width(12.dp))
             Column {
                 Text(
-                    "DSH-Mizar",
+                    stringResource(R.string.app_name),
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 )
                 Text(
@@ -143,19 +137,17 @@ fun SettingsDialog(
         // The palette is a preference, and the operator should not have to change
         // the system to get a dark screen at night.
         SectionLabel(stringResource(R.string.theme))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp)
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh, Corner.sm)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Corner.sm)
-                .padding(2.dp),
-            horizontalArrangement = Arrangement4,
-        ) {
-            ThemeSegment(stringResource(R.string.theme_system), state.themeMode == ThemeMode.SYSTEM, Modifier.weight(1f)) { onTheme(ThemeMode.SYSTEM) }
-            ThemeSegment(stringResource(R.string.theme_light), state.themeMode == ThemeMode.LIGHT, Modifier.weight(1f)) { onTheme(ThemeMode.LIGHT) }
-            ThemeSegment(stringResource(R.string.theme_dark), state.themeMode == ThemeMode.DARK, Modifier.weight(1f)) { onTheme(ThemeMode.DARK) }
-        }
+        val modes = listOf(ThemeMode.SYSTEM, ThemeMode.LIGHT, ThemeMode.DARK)
+        SegmentedControl(
+            options = listOf(
+                stringResource(R.string.theme_system),
+                stringResource(R.string.theme_light),
+                stringResource(R.string.theme_dark),
+            ),
+            selected = modes.indexOf(state.themeMode),
+            onSelect = { onTheme(modes[it]) },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+        )
 
         SectionLabel(stringResource(R.string.notifications))
         Row(
@@ -235,29 +227,6 @@ fun SettingsDialog(
     }
 }
 
-private val Arrangement4 = Arrangement.spacedBy(4.dp)
-
-/** A segment inside the theme track: the track's corner less its 2 dp inset, so the curves stay parallel. */
-private val SegmentShape = ContinuousCornerShape(concentric(Radius.sm, 2.dp))
-
-/** One theme option in the segmented row. */
-@Composable
-private fun ThemeSegment(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Box(
-        modifier = modifier
-            .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent, SegmentShape)
-            .pressable(scale = 0.95f)
-            .shapedClickable(SegmentShape, onClick = onClick)
-            .padding(vertical = 6.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal),
-            color = if (selected) MizarColors.OnAccent else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
 
 @Composable
 private fun SectionLabel(text: String) {

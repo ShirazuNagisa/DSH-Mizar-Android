@@ -54,7 +54,7 @@ fun ConnectionPanel(
                 },
             )
             state.latencyMillis?.let { rtt ->
-                RowValue(stringResource(R.string.connection_latency), "$rtt ms")
+                RowValue(stringResource(R.string.connection_latency), stringResource(R.string.latency_ms, rtt))
             }
             state.host?.let { host ->
                 RowValue(stringResource(R.string.connection_route), routeText(host))
@@ -87,9 +87,14 @@ private fun statusText(state: UiState): String = when {
     else -> stringResource(R.string.connecting)
 }
 
-private fun routeText(host: PairedHost): String = host.endpoints.joinToString(" · ") { endpoint ->
-    when (endpoint) {
-        is MizarConnection.Endpoint.Direct -> "direct ${endpoint.authority}"
-        is MizarConnection.Endpoint.Relay -> "relay"
+@Composable
+private fun routeText(host: PairedHost): String {
+    val relay = stringResource(R.string.route_relay)
+    val direct = stringResource(R.string.route_direct)
+    return host.endpoints.joinToString(" · ") { endpoint ->
+        when (endpoint) {
+            is MizarConnection.Endpoint.Direct -> String.format(direct, endpoint.authority)
+            is MizarConnection.Endpoint.Relay -> relay
+        }
     }
 }
