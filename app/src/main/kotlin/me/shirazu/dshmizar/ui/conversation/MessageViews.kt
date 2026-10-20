@@ -31,7 +31,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -44,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.ui.Format
@@ -54,6 +57,7 @@ import me.shirazu.dshmizar.ui.design.LocalReduceMotion
 import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.mizar.kit.ConversationItem
+import me.shirazu.mizar.kit.TypewriterPlan
 
 /**
  * The voices of a conversation, ported from iOS `Views/ConversationView.swift`.
@@ -70,11 +74,13 @@ internal fun ConversationItemView(
     item: ConversationItem,
     isLastPrompt: Boolean,
     onCopy: (String) -> Unit,
+    /** This answer arrived while the operator was watching: type it on. */
+    typing: Boolean = false,
 ) {
     when (item) {
         is ConversationItem.Message -> when (item.role) {
             ConversationItem.Role.USER -> UserBubble(item.text, tail = isLastPrompt, onCopy = onCopy)
-            ConversationItem.Role.ASSISTANT -> AgentText(item.text, onCopy = onCopy)
+            ConversationItem.Role.ASSISTANT -> AgentText(item.text, typing = typing, onCopy = onCopy)
             ConversationItem.Role.SYSTEM -> SystemNote(item.text, onCopy = onCopy)
         }
 
@@ -149,24 +155,62 @@ internal fun SentBubbleBody(
 
 /** The agent's answer: the page, not a bubble. */
 @Composable
-private fun AgentText(text: String, onCopy: (String) -> Unit) {
+private fun AgentText(text: String, typing: Boolean, onCopy: (String) -> Unit) {
     Box(modifier = Modifier.fillMaxWidth().padding(top = 2.dp)) {
         // A readable measure on a wide screen; edge to edge on a phone.
         Box(modifier = Modifier.widthIn(max = 680.dp)) {
             SelectionContainer {
-                MessageText(
-                    text = text,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    codeColor = MaterialTheme.colorScheme.onSurface,
-                    linkColor = MaterialTheme.colorScheme.primary,
-                    onCopy = onCopy,
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * 1.15,
-                    ),
-                )
+                if (typing && !MarkdownBlocks.looksBlocky(text)) {
+                    TypewriterAgentText(text)
+                } else {
+                    MessageText(
+                        text = text,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        codeColor = MaterialTheme.colorScheme.onSurface,
+                        linkColor = MaterialTheme.colorScheme.primary,
+                        onCopy = onCopy,
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * 1.15,
+                        ),
+                    )
+                }
             }
         }
     }
+}
+
+/**
+ * An answer revealed a character at a time.
+ *
+ * Only plain bodies use this: a Markdown body cut mid-syntax would crawl markers
+ * across the screen, and the iOS client solves that by cutting the parsed blocks.
+ * Formatting therefore arrives with the whole answer; the rhythm is what this adds.
+ */
+@Composable
+private fun TypewriterAgentText(text: String) {
+    val reduceMotion = LocalReduceMotion.current
+    val plan = remember(text) { TypewriterPlan.forText(text) }
+    var revealed by remember(text) { mutableIntStateOf(if (reduceMotion) text.length else 0) }
+    LaunchedEffect(text) {
+        if (reduceMotion) {
+            revealed = text.length
+            return@LaunchedEffect
+        }
+        val start = System.nanoTime()
+        while (true) {
+            val elapsedMicros = (System.nanoTime() - start) / 1_000L
+            revealed = plan.revealedCount(elapsedMicros)
+            if (plan.isFinished(elapsedMicros)) break
+            delay(16)
+        }
+    }
+    Text(
+        text = text.take(revealed),
+        style = MaterialTheme.typography.bodyLarge.copy(
+            lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * 1.15,
+        ),
+        color = MaterialTheme.colorScheme.onSurface,
+    )
 }
 
 /** What the system said, as an aside: a bordered log line, not a tinted card. */

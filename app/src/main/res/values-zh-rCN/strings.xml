@@ -89,6 +89,11 @@
     <string name="pairing_stage_syncing">正在读取会话…</string>
     <string name="browse_offline">浏览本地历史</string>
     <string name="offline_banner">离线模式 · 仅显示本地缓存</string>
+    <string name="subagents">子代理</string>
+    <string name="subagents_hint">当前会话委派出去的工作。这里只列出来，不进入对话。</string>
+    <string name="subagents_empty">还没有子代理</string>
+    <string name="subagent_running">运行中</string>
+    <string name="subagent_finished">已结束</string>
     <string name="no_sessions">还没有会话。在电脑上新建一个，然后刷新。</string>
     <string name="workspace_count">%1$d 个会话</string>
     <string name="show_more">再显示 %1$d 个</string>

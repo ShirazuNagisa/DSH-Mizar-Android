@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
@@ -138,6 +139,12 @@ fun SessionScreen(
     var composerFocused by remember { mutableStateOf(false) }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var showingPermissions by remember { mutableStateOf(false) }
+    var showingSubagents by remember { mutableStateOf(false) }
+    // The host sends subagent rows with the ordinary session list; the sidebar hides
+    // them, but this conversation's children are exactly what the panel shows.
+    val subagents = state.sessions.filter {
+        it.isSubagent && it.parentSessionId == state.selectedSessionId
+    }
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
 
     BackHandler(enabled = !drawerOpen) { model.selectSession(null) }
@@ -334,6 +341,15 @@ fun SessionScreen(
                     }
                 },
                 actions = {
+                    if (subagents.isNotEmpty()) {
+                        IconButton(onClick = { showingSubagents = true }) {
+                            Icon(
+                                Icons.Default.Person,
+                                contentDescription = stringResource(R.string.subagents),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     // The running turn's process is the answer to "what is it doing?";
                     // on a relay socket it is not requested (iOS gates it the same way,
                     // on a paid account or the LAN).
@@ -522,6 +538,14 @@ fun SessionScreen(
                 }
             }
         }
+    }
+
+    if (showingSubagents) {
+        SubagentPanel(
+            state = state,
+            children = subagents,
+            onDismiss = { showingSubagents = false },
+        )
     }
 
     // The ghost of what was just sent, flying up into the conversation.

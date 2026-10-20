@@ -116,6 +116,11 @@
     <string name="pairing_stage_syncing">Reading sessions…</string>
     <string name="browse_offline">Browse offline</string>
     <string name="offline_banner">Offline · showing cached data</string>
+    <string name="subagents">Subagents</string>
+    <string name="subagents_hint">Agents this session delegated work to. They are listed, not opened.</string>
+    <string name="subagents_empty">No subagents yet</string>
+    <string name="subagent_running">Running</string>
+    <string name="subagent_finished">Finished</string>
     <string name="no_sessions">No sessions yet. Start one on your computer, then refresh.</string>
     <string name="workspace_count">%1$d sessions</string>
     <string name="show_more">Show %1$d more</string>

@@ -59,6 +59,7 @@ import me.shirazu.dshmizar.ui.design.pressable
 import me.shirazu.dshmizar.ui.design.shapedClickable
 import me.shirazu.mizar.kit.ConversationItem
 import me.shirazu.mizar.kit.ConversationTurn
+import kotlinx.coroutines.delay
 
 /**
  * What was said, and how long the agent took over it -- ported from iOS
@@ -85,6 +86,27 @@ internal fun ConversationList(
     val sessionRunning = state.sessions.firstOrNull { it.sessionId == state.selectedSessionId }?.running == true
     val newestAt = state.conversation.lastOrNull()?.atMillis
     val recent = newestAt != null && System.currentTimeMillis() - newestAt < IN_FLIGHT_FRESH_MILLIS
+
+    // The last answer that arrived while this screen was watching gets typed on.
+    // Only a transition from in-flight to finished counts: history opened from the
+    // cache and a message redrawn after a scroll are the message, not a re-run.
+    var typingTurnId by remember { mutableStateOf<String?>(null) }
+    var sawRunning by remember { mutableStateOf(false) }
+    val newest = state.turns.lastOrNull()
+    val newestActive = newest != null && (newest.isRunning || newest.isPending) && (sessionRunning || recent)
+    LaunchedEffect(newest?.id, newestActive) {
+        if (newestActive) {
+            sawRunning = true
+            typingTurnId = null
+        } else if (sawRunning && newest != null) {
+            sawRunning = false
+            typingTurnId = newest.id
+            // The reveal is over long before this, but the flag should not outlive a
+            // row that was never actually drawn.
+            delay(TYPEWRITER_GRACE_MILLIS)
+            if (typingTurnId == newest.id) typingTurnId = null
+        }
+    }
 
     LazyColumn(
         state = listState,
@@ -117,6 +139,7 @@ internal fun ConversationList(
                     onCopy = onCopy,
                     onRetry = onRetry,
                     highlighted = index == highlightTurn,
+                    typing = turn.id == typingTurnId,
                     waiting = index == state.turns.lastIndex &&
                         (turn.isRunning || turn.isPending) &&
                         (sessionRunning || recent),
@@ -170,6 +193,8 @@ private fun TurnSection(
     onCopy: (String) -> Unit,
     onRetry: (String) -> Unit,
     highlighted: Boolean = false,
+    /** This turn's answer arrived while looking: reveal it, do not blink it in. */
+    typing: Boolean = false,
     /** The turn is in flight: opened by the host, or its prompt just recorded. */
     waiting: Boolean = false,
 ) {
@@ -203,7 +228,14 @@ private fun TurnSection(
 
         turn.steps.forEach { step ->
             RiseOnce {
-                ConversationItemView(step, isLastPrompt = false, onCopy = onCopy)
+                ConversationItemView(
+                    step,
+                    isLastPrompt = false,
+                    onCopy = onCopy,
+                    typing = typing && step.id == turn.steps.lastOrNull {
+                        it is ConversationItem.Message && it.role == ConversationItem.Role.ASSISTANT
+                    }?.id,
+                )
             }
         }
     }
@@ -346,4 +378,6 @@ private val RiseDistance = 14.dp
  * is milliseconds, so two minutes is generous for it and short enough that a stale
  * copy cannot keep the row saying "深度求索中~".
  */
+private const val TYPEWRITER_GRACE_MILLIS = 2_500L
+
 private const val IN_FLIGHT_FRESH_MILLIS = 120_000L
