@@ -362,6 +362,7 @@ fun Sidebar(
                 shell.setExpanded(expanded, hostId)
             },
             onOpen = { model.selectSession(it) },
+            onArchive = { model.archiveSession(it) },
             onLoadTitles = { model.loadTitles(it) },
             modifier = Modifier.weight(1f),
         )

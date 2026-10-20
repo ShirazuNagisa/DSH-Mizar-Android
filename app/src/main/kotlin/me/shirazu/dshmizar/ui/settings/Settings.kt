@@ -269,15 +269,24 @@ fun HostPickerDialog(state: UiState, onDismiss: () -> Unit, onOpen: (String) -> 
 @Composable
 fun NewSessionDialog(state: UiState, onDismiss: () -> Unit, onCreate: (String) -> Unit) {
     var path by remember { mutableStateOf("") }
-    val recent = remember(state.sessions) {
-        state.sessions.mapNotNull { it.cwd }.distinct()
+    // The host's own workspace list, with the names the operator gave them. The
+    // session-derived list is only a fallback: a workspace nobody has started a
+    // session in yet was unreachable here, and the title it showed was invented
+    // from the path.
+    val recent = remember(state.workspaces, state.sessions) {
+        if (state.workspaces.isNotEmpty()) {
+            state.workspaces.map { it.path to it.title }
+        } else {
+            state.sessions.mapNotNull { it.cwd }.distinct()
+                .map { it to SessionGrouping.lastComponent(it) }
+        }
     }
 
     DialogShell(title = stringResource(R.string.new_session), onDismiss = onDismiss) {
         // Plain rows, measured like the workspace list the window floats beside.
-        for (directory in recent) {
+        for ((directory, title) in recent) {
             PopoverRow(
-                title = SessionGrouping.lastComponent(directory),
+                title = title,
                 subtitle = directory,
                 onClick = { onCreate(directory) },
             )

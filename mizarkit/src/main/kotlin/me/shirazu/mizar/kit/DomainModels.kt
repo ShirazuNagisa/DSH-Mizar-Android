@@ -61,11 +61,17 @@ data class SessionRow(
     val updatedMillis: Long get() = updatedAt.toLong()
 
     /**
-     * Whether this is a delegated child rather than a session the operator opened.
+     * Whether this session is a delegated child of another session.
      *
-     * Either signal is enough: a subagent sets `origin`, a fork sets a parent.
+     * Only the host's own mark (`origin == "subagent"`) counts. A session forked on
+     * the computer also carries a [parentSessionId], but it is a conversation the
+     * operator opened and can continue — hiding it the way a delegated child is
+     * hidden is what the iOS client calls "where did my session go".
      */
-    val isSubagent: Boolean get() = origin == "subagent" || parentSessionId != null
+    val isSubagent: Boolean get() = origin == "subagent"
+
+    /** A forked conversation: it has a parent, but it is the operator's own work. */
+    val isFork: Boolean get() = parentSessionId != null && !isSubagent
 }
 
 /** `session.stats`. */
@@ -371,3 +377,7 @@ data class SetPermissionResult(val commandResult: CommandResult? = null)
 /** `session.rename`. */
 @Serializable
 data class RenameResult(val renamed: Boolean = false)
+
+/** `session.archive`. The host archives without stopping work; a running session is refused. */
+@Serializable
+data class ArchiveSessionResult(val archived: Boolean = false)

@@ -29,6 +29,7 @@ import me.shirazu.dshmizar.store.EncryptedCredentialStore
 import me.shirazu.dshmizar.store.FileSessionIndexStore
 import me.shirazu.mizar.kit.AcceptanceResult
 import me.shirazu.mizar.kit.ApprovalOutcome
+import me.shirazu.mizar.kit.ArchiveSessionResult
 import me.shirazu.mizar.kit.Backoff
 import me.shirazu.mizar.kit.Conversation
 import me.shirazu.mizar.kit.ConversationItem
@@ -61,6 +62,7 @@ import me.shirazu.mizar.kit.SessionStatsResult
 import me.shirazu.mizar.kit.ServerFrame
 import me.shirazu.mizar.kit.WorkspaceGroup
 import me.shirazu.mizar.kit.WorkspaceListResult
+import me.shirazu.mizar.kit.WorkspaceRow
 import me.shirazu.mizar.kit.get
 import me.shirazu.mizar.kit.intValue
 import me.shirazu.mizar.kit.jsonBool
@@ -82,6 +84,8 @@ data class UiState(
     val sessions: List<SessionRow> = emptyList(),
     val titles: Map<String, String> = emptyMap(),
     val workspacePaths: Set<String> = emptySet(),
+    /** The workspaces the host lists now, with the names its operator gave them. */
+    val workspaces: List<WorkspaceRow> = emptyList(),
     val groups: List<WorkspaceGroup> = emptyList(),
     val selectedSessionId: String? = null,
     val conversation: List<ConversationItem> = emptyList(),
@@ -94,6 +98,8 @@ data class UiState(
     val modelCatalog: ModelCatalog? = null,
     val permissionCatalog: PermissionCatalog? = null,
     val modelChoice: Map<String, ModelSelection> = emptyMap(),
+    /** The model a session started from the home screen should begin on. */
+    val newSessionModel: ModelSelection? = null,
     val problem: String? = null,
     /** A dropped socket is being retried; the screen stays as it was. */
     val reconnecting: Boolean = false,
@@ -740,14 +746,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // Best effort, and an empty answer is treated as no answer: a host that
         // genuinely has no workspaces is a host with no sessions, and clearing the
         // set here would empty the list it is used to filter.
-        val paths = runCatching {
-            socket.call<WorkspaceListResult>("workspace.list").items.map { it.path }.toSet()
+        val workspaces = runCatching {
+            socket.call<WorkspaceListResult>("workspace.list").items
         }.getOrNull()
 
         _state.update { current ->
             current.copy(
                 sessions = list.items,
-                workspacePaths = if (paths.isNullOrEmpty()) current.workspacePaths else paths,
+                workspaces = if (workspaces == null) current.workspaces else workspaces,
+                workspacePaths = if (workspaces.isNullOrEmpty()) current.workspacePaths else workspaces.map { it.path }.toSet(),
                 problem = null,
             )
         }
@@ -836,6 +843,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     "session.create",
                     buildJsonObject { put("cwd", cwd) },
                 )
+                applyNewSessionModel(socket, created.sessionId)
                 refreshSessionsNow()
                 selectSession(created.sessionId)
                 sendPrompt(prompt)
@@ -860,6 +868,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     "session.create",
                     buildJsonObject { put("cwd", cwd) },
                 )
+                applyNewSessionModel(socket, created.sessionId)
                 // Workspaces too, or the new session's directory is not in the set the
                 // list filters by and the session would vanish from this screen.
                 refreshSessionsNow()
@@ -1332,6 +1341,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setHomeModel(selection: ModelSelection) {
+        _state.update { it.copy(newSessionModel = selection) }
+    }
+
+    /**
+     * Apply the model chosen on the home screen to the session that just started.
+     *
+     * The home screen has no session to point `session.model.set` at, so the choice is
+     * held in [UiState.newSessionModel] until `session.create` returns an id. Applied
+     * before the first prompt: the point of choosing on the home screen is that the
+     * session's first turn already runs on it, not the second.
+     */
+    private suspend fun applyNewSessionModel(socket: MizarConnection, sessionId: String) {
+        val selection = _state.value.newSessionModel ?: return
+        _state.update { it.copy(modelChoice = it.modelChoice + (sessionId to selection)) }
+        runCatching {
+            socket.call<JsonObject>(
+                "session.model.set",
+                buildJsonObject {
+                    put("sessionId", sessionId)
+                    put("provider", selection.provider)
+                    put("model", selection.model)
+                    selection.reasoningEffort?.let { put("reasoningEffort", it) }
+                },
+            )
+        }.onFailure { error ->
+            _state.update { it.copy(problem = messageOf(error, addressOf())) }
+        }
+    }
+
     fun setPermission(preset: String) {
         val sessionId = _state.value.selectedSessionId ?: return
         viewModelScope.launch {
@@ -1505,8 +1544,47 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun regroup() {
         _state.update { current ->
             current.copy(
-                groups = SessionGrouping.groups(current.sessions, current.workspacePaths, current.selectedSessionId),
+                groups = SessionGrouping.groups(
+                    current.sessions,
+                    current.workspacePaths,
+                    current.selectedSessionId,
+                    current.workspaces.associate { it.path to it.title },
+                ),
             )
+        }
+    }
+
+    /**
+     * Archive a session on the computer, and take it off this phone's list.
+     *
+     * The host archives without stopping work, so a running session is refused; the
+     * refusal is shown in the problem line rather than silently removed. On success
+     * the row leaves immediately and the list is re-read, so the workspace counts,
+     * the pending set and the stored index agree with the host.
+     */
+    fun archiveSession(sessionId: String) {
+        viewModelScope.launch {
+            val socket = connection ?: return@launch
+            runCatching {
+                socket.call<ArchiveSessionResult>(
+                    "session.archive",
+                    payload("sessionId" to jsonString(sessionId)),
+                )
+            }.onSuccess {
+                if (_state.value.selectedSessionId == sessionId) selectSession(null)
+                _state.update { current ->
+                    current.copy(
+                        sessions = current.sessions.filterNot { it.sessionId == sessionId },
+                        titles = current.titles - sessionId,
+                        modelChoice = current.modelChoice - sessionId,
+                    )
+                }
+                regroup()
+                persistIndex()
+                refreshSessionsNow()
+            }.onFailure { error ->
+                _state.update { it.copy(problem = messageOf(error, addressOf())) }
+            }
         }
     }
 

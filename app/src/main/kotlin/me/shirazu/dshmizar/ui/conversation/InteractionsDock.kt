@@ -65,6 +65,7 @@ import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.ui.MizarColors
+import me.shirazu.dshmizar.ui.toolDisplayName
 import me.shirazu.dshmizar.ui.design.ButtonShape
 import me.shirazu.dshmizar.ui.design.ContinuousCornerShape
 import me.shirazu.dshmizar.ui.design.Corner
@@ -187,7 +188,7 @@ internal fun InteractionsDock(
                         confirm(
                             context.getString(
                                 if (outcome == ApprovalOutcome.ALLOWED_ONCE) R.string.allowed_tool else R.string.rejected_tool,
-                                approval.toolName,
+                                toolDisplayName(context, approval.toolName),
                             ),
                             allowed = outcome == ApprovalOutcome.ALLOWED_ONCE,
                         )
@@ -435,7 +436,7 @@ private fun ApprovalCard(approval: PendingApproval, onAnswered: (ApprovalOutcome
             Text("✋", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.width(10.dp))
             Text(
-                stringResource(R.string.wants_to_run, approval.toolName),
+                stringResource(R.string.wants_to_run, toolDisplayName(LocalContext.current, approval.toolName)),
                 style = MaterialTheme.typography.titleMedium,
                 color = MizarColors.Waiting,
             )

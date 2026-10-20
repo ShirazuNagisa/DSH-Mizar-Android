@@ -52,12 +52,23 @@ class SessionGroupingTest {
     }
 
     @Test
-    fun `forks are hidden`() {
-        // `isSubagent` rather than `parentSessionId`: a delegated child is marked by
-        // *either* fact, and matching on only one leaves the other kind on the list.
+    fun `forks are visible`() {
+        // A fork carries a parent, but it is a conversation the operator opened and
+        // can continue on the phone. Only the host's `origin` mark hides a row.
         val sessions = listOf(row("mine"), row("fork", parentSessionId = "mine"))
-        assertEquals(listOf("mine"), SessionGrouping.visible(sessions, emptySet(), null).map { it.sessionId })
-        assertTrue(sessions[1].isSubagent)
+        assertEquals(
+            listOf("mine", "fork"),
+            SessionGrouping.visible(sessions, emptySet(), null).map { it.sessionId },
+        )
+        assertFalse(sessions[1].isSubagent)
+        assertTrue(sessions[1].isFork)
+    }
+
+    @Test
+    fun `a delegated child is not a fork`() {
+        val child = row("child", parentSessionId = "parent", origin = "subagent")
+        assertTrue(child.isSubagent)
+        assertFalse(child.isFork)
     }
 
     @Test
@@ -206,6 +217,30 @@ class SessionGroupingTest {
             null,
         )
         assertEquals(listOf("/Users/you/other/api", "/Users/you/work/api"), groups.map { it.title })
+    }
+
+    @Test
+    fun `a group is titled by the host's workspace name when it has one`() {
+        // The host lists workspaces by title and by path; the title is what the
+        // operator named it on the computer, so it wins over the last path segment.
+        val groups = SessionGrouping.groups(
+            listOf(row("a", cwd = "/Users/you/projects/demo")),
+            emptySet(),
+            null,
+            workspaceTitles = mapOf("/Users/you/projects/demo" to "Mizar"),
+        )
+        assertEquals("Mizar", groups[0].title)
+    }
+
+    @Test
+    fun `a blank workspace title falls back to the path`() {
+        val groups = SessionGrouping.groups(
+            listOf(row("a", cwd = "/Users/you/projects/demo")),
+            emptySet(),
+            null,
+            workspaceTitles = mapOf("/Users/you/projects/demo" to "   "),
+        )
+        assertEquals("demo", groups[0].title)
     }
 
     @Test

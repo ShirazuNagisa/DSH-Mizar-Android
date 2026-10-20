@@ -51,7 +51,11 @@ import me.shirazu.mizar.kit.ReasoningEffortOption
 
 /** Choose a model, and then its reasoning effort. */
 @Composable
-internal fun ModelPickerContent(state: UiState, onChoose: (ModelSelection) -> Unit) {
+internal fun ModelPickerContent(
+    state: UiState,
+    onChoose: (ModelSelection) -> Unit,
+    homeChoice: ModelSelection? = null,
+) {
     val catalog = state.modelCatalog
     if (catalog == null) {
         Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
@@ -63,7 +67,8 @@ internal fun ModelPickerContent(state: UiState, onChoose: (ModelSelection) -> Un
     // What this session is on, by the same three sources the composer's chip reads.
     // Seed the local choice from it, or the rows open with nothing ticked and no way
     // to tell which model is in force.
-    val inForce = state.selectedSessionId?.let { state.modelChoice[it] }
+    val inForce = homeChoice
+        ?: state.selectedSessionId?.let { state.modelChoice[it] }
         ?: state.stats?.model?.next
         ?: state.stats?.model?.lastUsed
         ?: catalog.defaultSelection

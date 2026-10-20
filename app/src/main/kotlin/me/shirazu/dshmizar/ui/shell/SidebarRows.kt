@@ -3,6 +3,8 @@ package me.shirazu.dshmizar.ui.shell
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.Icon
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,6 +46,7 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -86,6 +91,7 @@ fun WorkspaceGroups(
     listState: androidx.compose.foundation.lazy.LazyListState,
     onToggle: (String) -> Unit,
     onOpen: (String) -> Unit,
+    onArchive: (String) -> Unit,
     onLoadTitles: (List<String>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -216,6 +222,7 @@ fun WorkspaceGroups(
                                     highlight.arm()
                                     onOpen(session.sessionId)
                                 },
+                                onArchive = onArchive,
                             )
                         }
                     }
@@ -326,6 +333,7 @@ private fun WorkspaceHeader(
 }
 
 /** One session: status indicator, title, relative time, the raised hand. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SessionRowButton(
     session: SessionRow,
@@ -334,18 +342,25 @@ private fun SessionRowButton(
     waiting: Boolean,
     query: String,
     onClick: () -> Unit,
+    onArchive: (String) -> Unit,
 ) {
     // A turn that finished while the operator was elsewhere shows the unread dot.
     val unread = !session.running && session.updatedMillis > (state.seenAt[session.sessionId] ?: 0L)
     val title = SessionGrouping.sessionTitle(session, state.titles)
+    var menuOpen by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
 
+    Box {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             // The selection -- a whisper of the accent with a leading bar -- is
             // drawn by the list behind the rows, so it can travel between them.
             .padding(horizontal = Space.md, vertical = 1.dp)
-            .shapedClickable(Corner.sm, onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = { menuOpen = true },
+            )
             .padding(top = 9.dp, bottom = 9.dp, end = Space.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -383,6 +398,27 @@ private fun SessionRowButton(
         if (unread) {
             Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
         }
+    }
+    // The long-press menu is the mobile equivalent of the iOS row's context menu:
+    // copying the id is the first thing a bug report wants, and archiving is the
+    // only way to take a finished conversation off this phone's list without
+    // deleting it on the computer.
+    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.copy_session_id)) },
+            onClick = {
+                clipboard.setText(AnnotatedString(session.sessionId))
+                menuOpen = false
+            },
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.archive_session)) },
+            onClick = {
+                menuOpen = false
+                onArchive(session.sessionId)
+            },
+        )
+    }
     }
 }
 

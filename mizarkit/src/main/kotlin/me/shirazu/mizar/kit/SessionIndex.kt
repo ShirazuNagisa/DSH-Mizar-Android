@@ -69,8 +69,9 @@ data class WorkspaceGroup(
  * These rules are the ones the iOS app arrived at after two rounds of "where did my
  * session go", and each has a reason:
  *
- *  - **Subagents and forks are hidden.** A delegated child has no row to open, so
- *    drawing one offers a tap that leads nowhere.
+ *  - **Delegated children are hidden; forks are not.** A delegated child has no row
+ *    to open, so drawing one offers a tap that leads nowhere. A conversation forked
+ *    on the computer is the operator's own work and belongs in the list.
  *  - **Blank sessions are hidden** — unless it is the session the operator just
  *    created and is looking at, which would otherwise vanish on creation.
  *  - **The workspace set filters the list.** A session's directory outlives the
@@ -108,6 +109,7 @@ object SessionGrouping {
         sessions: List<SessionRow>,
         workspacePaths: Set<String>,
         selectedSessionId: String?,
+        workspaceTitles: Map<String, String> = emptyMap(),
     ): List<WorkspaceGroup> {
         val kept = visible(sessions, workspacePaths, selectedSessionId)
         val byPath = kept.groupBy { it.cwd ?: "" }
@@ -129,6 +131,10 @@ object SessionGrouping {
                     path = path,
                     title = when {
                         path.isEmpty() -> "No workspace"
+                        // The host's own name for the workspace wins over anything
+                        // derived from the path: it is the title the operator sees
+                        // on the computer.
+                        workspaceTitles[path]?.takeIf { it.isNotBlank() } != null -> workspaceTitles.getValue(path)
                         lastComponent(path) in ambiguous -> path
                         else -> lastComponent(path)
                     },

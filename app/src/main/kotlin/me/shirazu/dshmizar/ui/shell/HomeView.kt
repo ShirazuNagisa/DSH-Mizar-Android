@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -30,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,6 +65,8 @@ import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.glassCard
 import me.shirazu.dshmizar.ui.design.pressable
 import me.shirazu.dshmizar.ui.design.shapedClickable
+import me.shirazu.dshmizar.ui.conversation.ModelPickerContent
+import me.shirazu.mizar.kit.ModelSelection
 import me.shirazu.dshmizar.ui.settings.NewSessionDialog
 import androidx.compose.animation.core.animateFloatAsState
 import me.shirazu.dshmizar.ui.design.Motion
@@ -84,11 +88,19 @@ fun HomeView(
     // Where the new session will work. Defaults to the first workspace, and
     // follows the list if the choice disappears.
     var workspace by remember { mutableStateOf<String?>(null) }
-    val choices = state.groups
-    if (workspace == null || choices.none { it.path == workspace }) {
-        workspace = choices.firstOrNull()?.path
+    // The host's workspaces are the authority on what can be started and what each
+    // workspace is called; the session-derived groups are only a fallback for a
+    // host whose `workspace.list` this app could not read.
+    val choices = if (state.workspaces.isNotEmpty()) {
+        state.workspaces.map { it.path to it.title }
+    } else {
+        state.groups.map { it.path to it.title }
+    }
+    if (workspace == null || choices.none { it.first == workspace }) {
+        workspace = choices.firstOrNull()?.first
     }
     val haptics = LocalHapticFeedback.current
+    LaunchedEffect(Unit) { model.loadCatalogs() }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Spacer(Modifier.weight(1f))
@@ -234,12 +246,14 @@ fun HomeView(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 WorkspaceMenu(
-                    choices = choices.map { it.path to it.title },
+                    choices = choices,
                     selected = workspace,
                     state = state,
                     model = model,
                     onSelect = { workspace = it },
                 )
+                Spacer(Modifier.weight(1f))
+                HomeModelPill(state = state, onChoose = { model.setHomeModel(it) })
             }
         }
     }
@@ -331,6 +345,70 @@ private fun WorkspaceMenu(
                     choosingOther = false
                     model.createSession(cwd)
                 },
+            )
+        }
+    }
+}
+
+/**
+ * The model the new session will start on, before there is a session to point
+ * `session.model.set` at. Kept as its own control so the choice is visible on the
+ * home screen rather than applied silently after the fact, as on iOS 0.9.4.
+ */
+@Composable
+private fun HomeModelPill(
+    state: UiState,
+    onChoose: (ModelSelection) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    val chosen = state.newSessionModel ?: state.modelCatalog?.defaultSelection
+    val effortName = chosen?.reasoningEffort?.let { effort ->
+        state.modelCatalog?.providers
+            ?.firstOrNull { it.id == chosen.provider }
+            ?.models?.firstOrNull { it.id == chosen.model }
+            ?.efforts?.firstOrNull { it.id == effort }?.name
+            ?: effort.replaceFirstChar { it.uppercase() }
+    }
+    val label = chosen?.let { listOfNotNull(it.model, effortName).joinToString(" · ") }
+        ?: stringResource(R.string.model)
+
+    Box {
+        Row(
+            modifier = Modifier
+                .height(32.dp)
+                .background(Glass.fill(), Corner.lg)
+                .border(Glass.Hairline, MaterialTheme.colorScheme.outlineVariant, Corner.lg)
+                .pressable()
+                .shapedClickable(Corner.lg) { open = true }
+                .padding(horizontal = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Default.Memory,
+                contentDescription = null,
+                modifier = Modifier.size(13.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(5.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        AnchoredPopover(
+            expanded = open,
+            onDismiss = { open = false },
+            title = stringResource(R.string.model),
+        ) {
+            ModelPickerContent(
+                state = state,
+                onChoose = { selection ->
+                    onChoose(selection)
+                    open = false
+                },
+                homeChoice = state.newSessionModel,
             )
         }
     }
