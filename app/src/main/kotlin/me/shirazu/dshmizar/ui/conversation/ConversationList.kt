@@ -1,9 +1,7 @@
 package me.shirazu.dshmizar.ui.conversation
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Box
@@ -39,7 +37,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -50,6 +50,7 @@ import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.Format
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.Corner
+import me.shirazu.dshmizar.ui.design.LocalReduceMotion
 import me.shirazu.dshmizar.ui.design.Motion
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.TwinStar
@@ -173,17 +174,23 @@ private fun TurnSection(
     waiting: Boolean = false,
 ) {
     // The glow the turn index leaves behind: a wash that fades on its own, because the
-    // point is to find the turn once, not to mark it. `animateFloatAsState` drives it,
-    // so the fade survives a recomposition in the middle of it.
+    // point is to find the turn once, not to mark it. It comes up on the smooth spring
+    // and goes on a slower one, both critically damped (it is opacity); under Reduce
+    // Motion both are the fade. Read in the draw phase, so the fade redraws the wash
+    // and recomposes nothing.
     val wash by animateFloatAsState(
         targetValue = if (highlighted) 1f else 0f,
-        animationSpec = tween(600),
+        animationSpec = Motion.pick(if (highlighted) Motion.smooth() else WashOut),
         label = "turnGlow",
     )
+    val washTint = MaterialTheme.colorScheme.primary
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f * wash), Corner.md)
+            .drawBehind {
+                val w = wash.coerceIn(0f, 1f)
+                if (w > 0f) drawOutline(Corner.md.createOutline(size, layoutDirection, this), washTint.copy(alpha = 0.10f * w))
+            }
             .padding(vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -295,13 +302,23 @@ private fun TurnSummary(
     }
 }
 
-/** A step rising into place as it arrives -- iOS `.transition(.rise)`. */
+/** The wash leaving: critically damped, slower than it came, so it fades rather than blinks. */
+private val WashOut = spring<Float>(dampingRatio = 1f, stiffness = 260f)
+
+/**
+ * A step rising into place as it arrives -- iOS `.transition(.rise)`.
+ *
+ * Drawn, never laid out: the step takes its place at once and only its layer travels
+ * the last 14 dp, so the list does not re-measure an item for every frame of the rise.
+ * Under Reduce Motion it only fades in.
+ */
 @Composable
 private fun RiseOnce(content: @Composable () -> Unit) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
-    val offset by animateDpAsState(
-        targetValue = if (visible) 0.dp else 14.dp,
+    val reduceMotion = LocalReduceMotion.current
+    val rise by animateFloatAsState(
+        targetValue = if (visible) 0f else 1f,
         animationSpec = Motion.pick(Motion.smooth()),
         label = "stepRise",
     )
@@ -310,10 +327,17 @@ private fun RiseOnce(content: @Composable () -> Unit) {
         animationSpec = Motion.pick(Motion.smooth()),
         label = "stepFade",
     )
-    Box(Modifier.padding(top = offset).alpha(alpha)) {
+    Box(
+        Modifier.graphicsLayer {
+            translationY = if (reduceMotion) 0f else rise * RiseDistance.toPx()
+            this.alpha = alpha.coerceIn(0f, 1f)
+        },
+    ) {
         content()
     }
 }
+
+private val RiseDistance = 14.dp
 
 /**
  * How long a copy of the transcript is trusted to say "a turn is in flight".
