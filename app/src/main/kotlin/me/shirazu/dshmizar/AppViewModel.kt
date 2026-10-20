@@ -1778,6 +1778,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     watchConnection(candidateWelcome, updated)
                     refreshSessions()
                     registerPush(candidateWelcome)
+                    // The host forgets which client is on screen when a socket goes
+                    // away; the new socket has to say it again.
+                    setPresence(foreground)
                     note("switched to LAN at $address")
                     return@launch
                 }
