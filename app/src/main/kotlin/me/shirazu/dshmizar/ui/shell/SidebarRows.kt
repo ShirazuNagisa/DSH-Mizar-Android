@@ -46,9 +46,12 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -348,9 +351,21 @@ private fun SessionRowButton(
     val unread = !session.running && session.updatedMillis > (state.seenAt[session.sessionId] ?: 0L)
     val title = SessionGrouping.sessionTitle(session, state.titles)
     var menuOpen by remember { mutableStateOf(false) }
+    var rowWidthPx by remember { mutableStateOf(0) }
     val clipboard = LocalClipboardManager.current
+    val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
+    // The menu hangs off the row's trailing edge, not its leading one: it belongs
+    // to the row but should not cover the titles to its left, and the thumb that
+    // opened it is on the right half of the screen.
+    val menuWidth = 200.dp
+    val menuOffset = if (layoutDirection == LayoutDirection.Ltr) {
+        DpOffset(x = (with(density) { rowWidthPx.toDp() } - menuWidth).coerceAtLeast(0.dp), y = 0.dp)
+    } else {
+        DpOffset.Zero
+    }
 
-    Box {
+    Box(modifier = Modifier.fillMaxWidth().onSizeChanged { rowWidthPx = it.width }) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -403,7 +418,12 @@ private fun SessionRowButton(
     // copying the id is the first thing a bug report wants, and archiving is the
     // only way to take a finished conversation off this phone's list without
     // deleting it on the computer.
-    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+    DropdownMenu(
+        expanded = menuOpen,
+        onDismissRequest = { menuOpen = false },
+        modifier = Modifier.width(menuWidth),
+        offset = menuOffset,
+    ) {
         DropdownMenuItem(
             text = { Text(stringResource(R.string.copy_session_id)) },
             onClick = {
