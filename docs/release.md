@@ -13,7 +13,8 @@ $env:JAVA_HOME = '<jdk-17>'
 Copy-Item app\build\outputs\apk\release\app-release.apk dist\dsh-mizar-<版本>.apk
 ```
 
-版本号在 `app/build.gradle.kts`：`versionCode` 每次发版 +1，`versionName` 跟随 tag。
+版本号在 `app/build.gradle.kts`：`versionCode` 每次发版 +1，`versionName` 与发布版本一致。
+本地发版不强制打 tag（0.9.2 起如此），tag 只用于需要 CI 出包的场合。
 
 ## 校验
 
@@ -46,3 +47,4 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 | 0.9.0 | 38 | `dist/dsh-mizar-0.9.0.apk` | CI 出包（tag `v0.9.0`） |
 | 0.9.1 | 39 | — | 仅本地/调试包 |
 | 0.9.2 | 40 | `dist/dsh-mizar-0.9.2.apk` | 首个本地签名的正式包，不再走 CI |
+| 0.10.0 | 41 | `dist/dsh-mizar-0.10.0.apk` | GUI 重构：continuous corners、springs、glass、T1/T2/T3/T5 |
