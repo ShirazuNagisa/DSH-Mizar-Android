@@ -2,6 +2,7 @@ package me.shirazu.dshmizar.ui.conversation
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +33,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,6 +47,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -62,6 +67,8 @@ import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.AnchoredPopover
+import me.shirazu.dshmizar.ui.design.Glass
+import me.shirazu.dshmizar.ui.design.Motion
 import me.shirazu.dshmizar.ui.design.NumericText
 import me.shirazu.dshmizar.ui.design.PopoverSize
 import me.shirazu.dshmizar.ui.design.Transitions
@@ -250,7 +257,33 @@ fun SessionScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
+            // The bar is glass at rest, like the composer below. Nothing scrolls under
+            // it, so the edge says so instead: a hairline that comes up once the
+            // transcript has been scrolled away from its top. It follows the state,
+            // not the scroll -- no alpha tracks the finger.
+            val scrolledUnder by remember { derivedStateOf { list.canScrollBackward } }
+            val edge by animateFloatAsState(
+                if (scrolledUnder) 1f else 0f,
+                Motion.pick(Motion.snappy()),
+                label = "topBarEdge",
+            )
+            val hairline = MaterialTheme.colorScheme.outlineVariant
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Glass.fill(),
+                    scrolledContainerColor = Glass.fill(),
+                ),
+                modifier = Modifier.drawWithContent {
+                    drawContent()
+                    if (edge > 0f) {
+                        val h = Glass.Hairline.toPx()
+                        drawRect(
+                            color = hairline.copy(alpha = hairline.alpha * edge.coerceIn(0f, 1f)),
+                            topLeft = Offset(0f, size.height - h),
+                            size = Size(size.width, h),
+                        )
+                    }
+                },
                 title = {
                     Column(
                         modifier = Modifier
