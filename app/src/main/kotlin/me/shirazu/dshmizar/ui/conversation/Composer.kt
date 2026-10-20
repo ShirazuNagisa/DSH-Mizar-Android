@@ -1,6 +1,8 @@
 package me.shirazu.dshmizar.ui.conversation
 
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -324,18 +326,21 @@ private fun ModelPill(
         listOfNotNull(chosen.model, effortName).joinToString(" · ")
     }
 
+    // While the field has the keyboard the pill folds to its icon, a 32 dp circle.
+    // The icon never moves; only the label fades, and the pill's width changes once
+    // (as the label arrives, or once it has gone) instead of being animated frame by
+    // frame and dragging the context pill beside it along.
+    val reduceMotion = LocalReduceMotion.current
+    val labelFade = if (reduceMotion) Motion.fade<Float>() else Motion.smooth()
     Row(
         modifier = modifier
             .height(32.dp)
-            .animateContentSize(Motion.smooth())
             .background(Glass.fill(), Corner.lg)
             .border(Glass.Hairline, MaterialTheme.colorScheme.outlineVariant, Corner.lg)
             .pressable()
             .shapedClickable(Corner.lg, onClick = onClick)
-            .padding(horizontal = if (focused) 0.dp else 11.dp)
-            .then(if (focused) Modifier.width(32.dp) else Modifier),
+            .padding(horizontal = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
     ) {
         Icon(
             Icons.Default.Memory,
@@ -343,14 +348,22 @@ private fun ModelPill(
             modifier = Modifier.size(14.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (!focused) {
-            Spacer(Modifier.width(5.dp))
-            Text(
-                label,
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        AnimatedVisibility(
+            visible = !focused,
+            enter = fadeIn(labelFade),
+            exit = fadeOut(labelFade),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.width(5.dp))
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Spacer(Modifier.width(2.dp))
+            }
         }
     }
 }
