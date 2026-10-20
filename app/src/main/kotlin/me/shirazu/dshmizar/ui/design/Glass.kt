@@ -66,6 +66,10 @@ object Glass {
     /** Over the camera: dark in both themes, so white ink reads over a white frame (5.7:1). */
     val camera: Color = Color.Black.copy(alpha = 0.60f)
 
+    /** The camera glass's edge: a quiet light line -- the themed hairline and rim read
+     *  as a white outline against the dark fill. */
+    val cameraStroke: Color = Color.White.copy(alpha = 0.18f)
+
     /** The hairline stroke around a panel. */
     @Composable
     fun strokeBrush(): Brush {
@@ -110,12 +114,18 @@ fun Modifier.glassCard(
         .border(Glass.Hairline, Glass.rimBrush(), shape)
 }
 
-/** A capsule of glass. [fill] replaces the themed fill -- [Glass.camera] over the viewfinder. */
+/** A capsule of glass. [camera]: over the viewfinder, the dark camera glass with its
+ *  quiet edge, whatever the theme. */
 @Composable
-fun Modifier.glassCapsule(tint: Color? = null, fill: Color? = null): Modifier {
+fun Modifier.glassCapsule(tint: Color? = null, camera: Boolean = false): Modifier {
     val shape = CircleShape
+    if (camera) {
+        return this
+            .background(Glass.camera, shape)
+            .border(Glass.Hairline, Glass.cameraStroke, shape)
+    }
     return this
-        .background(fill ?: Glass.fill(tint), shape)
+        .background(Glass.fill(tint), shape)
         .border(Glass.Hairline, Glass.strokeBrush(), shape)
         .border(Glass.Hairline, Glass.rimBrush(), shape)
 }
@@ -130,13 +140,13 @@ fun Modifier.glassCapsule(tint: Color? = null, fill: Color? = null): Modifier {
 fun GlassCircleLabel(
     size: Dp,
     onClick: (() -> Unit)? = null,
-    fill: Color? = null,
+    camera: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     Box(
         modifier = Modifier
             .size(size)
-            .glassCapsule(fill = fill)
+            .glassCapsule(camera = camera)
             .then(
                 if (onClick != null) {
                     Modifier.pressable(scale = 0.92f).shapedClickable(CircleShape, onClick = onClick)

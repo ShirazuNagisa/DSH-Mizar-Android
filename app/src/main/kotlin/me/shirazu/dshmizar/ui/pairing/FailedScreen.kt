@@ -24,7 +24,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -42,6 +41,7 @@ import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.Format
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.ButtonShape
+import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.mizar.kit.SessionGrouping
 import me.shirazu.mizar.kit.SessionRow
 
@@ -93,14 +93,17 @@ private fun SessionList(
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         state.problem?.let { problem ->
             item {
-                Surface(color = MizarColors.WarningFill, modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(problem, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                        TextButton(onClick = onDismissProblem) { Text(stringResource(R.string.dismiss)) }
-                    }
+                // Painted, not a clipping Surface: this is a list row, and the corner is
+                // continuous.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MizarColors.WarningFill, Corner.sm)
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(problem, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    TextButton(onClick = onDismissProblem) { Text(stringResource(R.string.dismiss)) }
                 }
             }
         }

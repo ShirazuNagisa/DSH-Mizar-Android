@@ -5,8 +5,8 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -46,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -64,10 +65,11 @@ import me.shirazu.dshmizar.ui.CameraScanner
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.ButtonShape
 import me.shirazu.dshmizar.ui.design.Corner
-import me.shirazu.dshmizar.ui.design.Glass
 import me.shirazu.dshmizar.ui.design.GlassCircleLabel
+import me.shirazu.dshmizar.ui.design.LocalReduceMotion
 import me.shirazu.dshmizar.ui.design.MizarMarkSearching
 import me.shirazu.dshmizar.ui.design.Motion
+import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.Transitions
 import me.shirazu.dshmizar.ui.design.glassCapsule
@@ -356,16 +358,20 @@ internal fun ScannerScreen(onCode: (String) -> Unit, onCancel: () -> Unit) {
             }
         }
 
-        // The frame: four corners that close in on the code when it is read.
-        val frameSize by animateDpAsState(
-            if (locked) 200.dp else 250.dp,
-            Motion.pick(Motion.bouncy()),
-            label = "viewfinderSize",
+        // The frame: four corners that close in on the code when it is read. The
+        // frame is laid out once at its open size and closes in by scale alone, so
+        // the lock moves no layout; under Reduce Motion it is simply closed.
+        val reduceMotion = LocalReduceMotion.current
+        val frameScale by animateFloatAsState(
+            if (locked) ViewfinderLocked / ViewfinderOpen else 1f,
+            if (reduceMotion) snap() else Motion.bouncy(),
+            label = "viewfinderScale",
         )
         val frameColor = if (locked) MizarColors.Running else Color.White
         ViewfinderCorners(
             color = frameColor,
-            modifier = Modifier.align(Alignment.Center).size(frameSize),
+            scale = { frameScale },
+            modifier = Modifier.align(Alignment.Center).size(ViewfinderOpen),
         )
 
         // The way out: a glass circle, top trailing, as on iOS.
@@ -374,7 +380,7 @@ internal fun ScannerScreen(onCode: (String) -> Unit, onCancel: () -> Unit) {
                 .align(Alignment.TopEnd)
                 .padding(20.dp),
         ) {
-            GlassCircleLabel(size = 44.dp, onClick = onCancel, fill = Glass.camera) {
+            GlassCircleLabel(size = 44.dp, onClick = onCancel, camera = true) {
                 Icon(
                     Icons.Default.Close,
                     contentDescription = stringResource(R.string.cancel),
@@ -388,7 +394,7 @@ internal fun ScannerScreen(onCode: (String) -> Unit, onCancel: () -> Unit) {
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 40.dp)
-                .glassCapsule(fill = Glass.camera)
+                .glassCapsule(camera = true)
                 .padding(horizontal = 20.dp, vertical = 12.dp),
         ) {
             Text(
@@ -400,13 +406,30 @@ internal fun ScannerScreen(onCode: (String) -> Unit, onCancel: () -> Unit) {
     }
 }
 
-/** Four rounded corners of a square -- iOS `ViewfinderCorners`. */
+/** The viewfinder's two sizes: waiting for a code, and closed in on one. */
+private val ViewfinderOpen = 250.dp
+private val ViewfinderLocked = 200.dp
+
+/**
+ * Four rounded corners of a square -- iOS `ViewfinderCorners`.
+ *
+ * Drawn at [scale] by the layer, not by layout: the arms scale with the frame, as
+ * they always have, while the stroke and the corner are drawn at `1 / scale` so a
+ * frame that has closed in keeps a 4 dp line and the ladder's corner.
+ */
 @Composable
-private fun ViewfinderCorners(color: Color, modifier: Modifier = Modifier) {
-    androidx.compose.foundation.Canvas(modifier) {
+private fun ViewfinderCorners(color: Color, scale: () -> Float, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(
+        modifier.graphicsLayer {
+            val s = scale()
+            scaleX = s
+            scaleY = s
+        },
+    ) {
+        val s = scale().coerceAtLeast(0.01f)
         val arm = size.width * 0.18f
-        val r = 14.dp.toPx()
-        val stroke = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
+        val r = Radius.lg.toPx() / s
+        val stroke = Stroke(width = 4.dp.toPx() / s, cap = StrokeCap.Round)
         val w = size.width
         val h = size.height
 
