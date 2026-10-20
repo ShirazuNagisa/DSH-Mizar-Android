@@ -11,7 +11,7 @@
 import { homedir, hostname } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from './dsh.js'
-import { Config } from './config.js'
+import { Config, listenerBindMode } from './config.js'
 import type { Config as MizarConfig } from './config.js'
 import { registerAnswerers } from './bridge/answerers.js'
 import { DeliveryLedger } from './bridge/delivery.js'
@@ -33,6 +33,7 @@ import {
 import { NoopTransport, RelayTransport, type PushTransport } from './push/transport.js'
 import { MizarStore, resolveMizarHome } from './auth/store.js'
 import {
+  bindPlanForRelay,
   selectBindAddresses,
   snapshotInterfaces,
   type BindPlan,
@@ -42,6 +43,7 @@ import { awaitRequestedPlan, bindKey, isRequested, needsRebind } from './net/wat
 import { PROTOCOL_VERSION } from './protocol/frames.js'
 import { MizarListener } from './server/listener.js'
 import { RelayClient, phoneBaseURL } from './relay/client.js'
+import { sharedMountRegistry, type Mounted } from './mount.js'
 import { loadOrCreateTunnelSecret } from './relay/identity.js'
 import type { RelayClientState } from './relay/client.js'
 import { runSpike } from './spike.js'
@@ -92,7 +94,7 @@ const systemLocale = (() => {
  * code in place and every symptom unchanged. One line at boot turns that from a
  * guess into a fact.
  */
-const MIZAR_VERSION = '0.8.3-attachments.1'
+const MIZAR_VERSION = '0.8.7'
 
 /**
  * Services this plugin must observe before it activates.
@@ -124,6 +126,7 @@ function startBindWatcher(
   holder: { current: MizarListener | null },
   initial: BindPlan,
   signal: AbortSignal,
+  onRebound?: (listener: MizarListener) => void,
 ): void {
   let current = bindKey(initial)
 
@@ -138,6 +141,11 @@ function startBindWatcher(
       try {
         await listener.rebind(next)
         current = bindKey(next)
+        // A rebind that lands on a different port has just moved the tunnel's
+        // replay target, and a network change is exactly when the outbound
+        // tunnel should be redialled from the new address rather than left on a
+        // path the operating system no longer has.
+        onRebound?.(listener)
       } catch (error) {
         report(`rebind failed, staying on [${current}] — ${describe(error)}`)
       }
@@ -159,7 +167,19 @@ function describe(error: unknown): string {
 }
 
 /**
- * Start the listener for one plugin mount and return its disposer.
+ * One running mount: the listener, and everything mounted beside it.
+ *
+ * `dispose` is the single shutdown path. It is idempotent because an unload and
+ * a replacement mount can both ask for it, and awaitable because the
+ * replacement must not bind its port until this one has let go of it.
+ */
+interface ListenerMount extends Mounted {
+  /** The listener this mount serves phones from. */
+  readonly listener: MizarListener
+}
+
+/**
+ * Start the listener for one plugin mount and return it with its disposer.
  *
  * @param ctx - the plugin context, used for the lifecycle effect.
  * @param config - validated plugin configuration.
@@ -169,24 +189,30 @@ async function startListener(
   ctx: Context,
   config: MizarConfig,
   signal: AbortSignal,
-): Promise<MizarListener> {
+): Promise<ListenerMount> {
   const stateDir = resolveMizarHome()
   // The store's survivable failures -- an audit log that stopped accepting
   // lines, for instance -- are the operator's business, not the store's.
   const store = await MizarStore.open(stateDir, (warning) => report(`state: ${warning}`))
 
-  // With a tunnel up, the phone never needs to reach this machine directly, so
-  // the listener goes to loopback and stops exporting itself onto whatever
-  // network the computer happens to be on. The tunnel still connects out normally --
-  // it talks to the listener over loopback, which is always reachable.
-  const bindMode: BindMode =
-    config.relay.enabled && config.relay.preferLoopback ? 'loopback' : config.bind.mode
+  // The relay does not force loopback (see `relay.preferLoopback`): a phone on
+  // the same network should take the direct route, which is what unlocks the LAN
+  // features, so the tunnel keeps whatever `bind.mode` the operator chose. The
+  // decision lives in `listenerBindMode`, next to the two settings it reads.
+  const bindMode: BindMode = listenerBindMode(config)
   if (bindMode !== config.bind.mode) {
     report(`relay enabled: binding ${bindMode} instead of ${config.bind.mode}`)
   }
 
+  // The plan is the configured bind plus the loopback socket the tunnel replays
+  // through. A `lan` bind alone gives the relay nowhere to forward a phone
+  // request to, so the tunnel would connect out and then fail every call.
+  // Loopback exposes nothing beyond this machine.
   const readPlan = (): BindPlan =>
-    selectBindAddresses(snapshotInterfaces(), bindMode, config.bind.addresses)
+    bindPlanForRelay(
+      selectBindAddresses(snapshotInterfaces(), bindMode, config.bind.addresses),
+      config.relay.enabled,
+    )
 
   // Wait for the requested mode to take effect before accepting a fallback. DSH
   // and the network both come up at login with nothing ordering them, and a
@@ -303,6 +329,24 @@ async function startListener(
   // authority when they send one, and this answers the requests that do not.
   const delivery = new DeliveryLedger()
 
+  // A stable handle the rest of the plugin reads through, so a rebind can swap
+  // the listener without every consumer holding a stale reference. Declared
+  // before the method table because `host.info` reports the addresses the
+  // listener is bound to, and the listener is created after the table.
+  const holder: { current: MizarListener | null } = { current: null }
+
+  /** Completions announced to nobody, for the next client that connects. */
+  const missed = new MissedCompletions()
+
+  /**
+   * How long to wait after a client connects before handing it what it missed.
+   *
+   * The client's event collector starts after its own `connect()` returns, so a
+   * frame written with the welcome would be dropped on the floor. Two seconds is
+   * short enough to beat the eye and long enough to cover a slow phone.
+   */
+  const MISSED_FLUSH_DELAY_MS = 2_000
+
   const uploads = await UploadStore.open({
     maxImageBytes: optionalService(ctx, 'attachments')?.imageLimits.maxImageBytes,
     log: report,
@@ -324,28 +368,16 @@ async function startListener(
       hostName: hostname(),
       home: stateDir,
       protocolVersion: PROTOCOL_VERSION,
+      // Read through the holder when `host.info` is answered rather than here,
+      // so a rebind is reported without rebuilding the table.
+      authorities: () => holder.current?.authorities ?? [],
     },
     broker,
     push,
     delivery,
+    undefined,
     attachments,
   )
-
-  // A stable handle the rest of the plugin reads through, so a rebind can swap
-  // the listener without every consumer holding a stale reference.
-  const holder: { current: MizarListener | null } = { current: null }
-
-/** Completions announced to nobody, for the next client that connects. */
-const missed = new MissedCompletions()
-
-/**
- * How long to wait after a client connects before handing it what it missed.
- *
- * The client's event collector starts after its own `connect()` returns, so a
- * frame written with the welcome would be dropped on the floor. Two seconds is
- * short enough to beat the eye and long enough to cover a slow phone.
- */
-const MISSED_FLUSH_DELAY_MS = 2_000
 
   const listener = await MizarListener.start({
     plan,
@@ -419,6 +451,7 @@ const MISSED_FLUSH_DELAY_MS = 2_000
           log: report,
           reconnectBaseMs: config.relay.reconnectBaseMs,
           reconnectMaxMs: config.relay.reconnectMaxMs,
+          watchdogMs: config.relay.watchdogMs,
           onState: (state) => {
             const wasConnected = relayState.connected
             relayState = state
@@ -574,22 +607,37 @@ const MISSED_FLUSH_DELAY_MS = 2_000
     notifier.noteActivity(session.id, event.type)
   })
 
-  startBindWatcher(config, readPlan, holder, plan, signal)
+  startBindWatcher(config, readPlan, holder, plan, signal, (rebound) => {
+    relay?.setLocalPort(rebound.port)
+    relay?.reconnectNow('the network changed')
+  })
 
+  // One shutdown path, idempotent and awaitable. The tunnel goes first: it
+  // exists to carry traffic to the listener, so leaving it up while the listener
+  // closes would produce 502s instead of clean disconnects for whatever is
+  // still connected.
+  let shutdown: Promise<void> | null = null
+  const dispose = (): Promise<void> => {
+    shutdown ??= (async () => {
+      relay?.stop()
+      // A pending notification is about a session that has stopped; on unload
+      // there is nothing left to announce it with.
+      notifier.dispose()
+      // Release anything still waiting before the transport disappears, so no
+      // agent is left holding a turn open for a question nobody can answer.
+      broker.dispose()
+      try {
+        await listener.stop()
+      } catch (error) {
+        report(`listener shutdown failed — ${describe(error)}`)
+      }
+    })()
+    return shutdown
+  }
+  // An unload must not wait for the mount registry's queue to notice: DSH
+  // expects an effect's cleanup to stop the work it started.
   signal.addEventListener('abort', () => {
-    // The tunnel goes first: it exists to carry traffic to the listener, so
-    // leaving it up while the listener closes would produce 502s instead of
-    // clean disconnects for whatever is still connected.
-    relay?.stop()
-    // A pending notification is about a session that has stopped; on unload
-    // there is nothing left to announce it with.
-    notifier.dispose()
-    // Release anything still waiting before the transport disappears, so no
-    // agent is left holding a turn open for a question nobody can answer.
-    broker.dispose()
-    void listener.stop().catch((error: unknown) => {
-      report(`listener shutdown failed — ${describe(error)}`)
-    })
+    void dispose()
   })
 
   if (config.pairing.issueOnStart) {
@@ -597,8 +645,21 @@ const MISSED_FLUSH_DELAY_MS = 2_000
     report(`pairing code: ${issued.display} (valid for ${config.pairing.codeTtlSeconds}s)`)
   }
 
-  return listener
+  return { listener, dispose }
 }
+
+/**
+ * The one mount this process runs at a time.
+ *
+ * DSH may compose or re-apply a bundle more than once, and each apply used to
+ * bind its own listener: three mounts in one process left three ports listening
+ * (19390/19391/19392) and the port in a phone's pairing was from the wrong
+ * generation of them. The plugin cannot order DSH's lifecycle, so it keeps the
+ * invariant it owns: a new mount starts only after the previous one has
+ * finished shutting down, so the port is free and the address a phone saved is
+ * still the address the computer listens on.
+ */
+const mounts = sharedMountRegistry()
 
 /**
  * Mount the Mizar host half.
@@ -629,25 +690,39 @@ export function apply(ctx: Context, config: MizarConfig): void {
 
   ctx.effect(() => {
     const controller = new AbortController()
+    let mounted: ListenerMount | null = null
 
-    void (async () => {
+    void mounts.start(async () => {
+      if (controller.signal.aborted) return null
+      let next: ListenerMount
       try {
-        const listener = await startListener(ctx, config, controller.signal)
-        if (controller.signal.aborted) {
-          await listener.stop()
-          return
-        }
-        report(
-          `ready — pair with the code shown in the DSH Web panel, or reach ${listener.authorities.join(' / ')}`,
-        )
+        next = await startListener(ctx, config, controller.signal)
       } catch (error) {
         // Tear down attachment staging even when the listener never bound a port.
         controller.abort()
         report(`listener failed to start — ${describe(error)}`)
+        return null
       }
-    })()
+      if (controller.signal.aborted) {
+        // Stopped while starting: do not leave a listener behind for the next
+        // mount to find, and do not publish it as the active one.
+        await next.dispose()
+        return null
+      }
+      mounted = next
+      report(
+        `ready — pair with the code shown in the DSH Web panel, or reach ${next.listener.authorities.join(' / ')}`,
+      )
+      return next
+    })
 
-    return () => controller.abort()
+    return () => {
+      // Abort for a fast stop, then queue the awaited disposal: the mount that
+      // replaces this one must bind only after the port is really free.
+      controller.abort()
+      void mounts.stop(mounted)
+      mounted = null
+    }
   }, 'mizar:listener')
 
   if (!config.spike) return

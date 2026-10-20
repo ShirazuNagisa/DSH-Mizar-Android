@@ -11,8 +11,9 @@
  *
  * @module dsh-mizar/bridge
  */
-import type { Context } from '../dsh.js'
+import { join } from 'node:path'
 import type { AttachmentBridge } from '../attachments/bridge.js'
+import type { Context } from '../dsh.js'
 import { isLiveActivityToken } from '../auth/devices.js'
 import { deliverQuestionAnswers } from './answerers.js'
 import type { DeliveryLedger } from './delivery.js'
@@ -23,20 +24,22 @@ import {
   type ClientApprovalOutcome,
   type QuestionAnswerItem,
 } from './interactions.js'
-import { MethodError, optionalBoolean, optionalObject, optionalString, requireString } from './method-error.js'
+import { MethodError, optionalBoolean, optionalObject, optionalString, requireObject, requireString } from './method-error.js'
 import { modelCatalog, selectModel } from './models.js'
 import { permissionCatalog, setPermissionPreset } from './permissions.js'
 import type { PushBinding } from '../push/binding.js'
-import { listWorkspaces } from './workspaces.js'
+import { archiveSession, listWorkspaces } from './workspaces.js'
 import {
   cancelSession,
   createSession,
   listSessions,
   promptSession,
   renameSession,
+  sessionActivity,
   sessionMessages,
   sessionStats,
 } from './sessions.js'
+import { parseUploadBegin, parseUploadChunk, UploadStore } from './uploads.js'
 
 /** Per-connection facts handed to a method. */
 export interface MethodContext {
@@ -57,6 +60,21 @@ export interface HostFacts {
   readonly hostName: string
   readonly home: string
   readonly protocolVersion: number
+  /**
+   * The `host:port` authorities the listener is bound to.
+   *
+   * A function, not an array, because it is read when `host.info` is answered
+   * rather than when the table is built: a rebind moves the listener to a
+   * different set of addresses underneath, and a cached list would keep naming
+   * where the host used to listen -- which is worse than saying nothing, because
+   * a phone probes these directly.
+   *
+   * Optional so compositions and tests from before the field keep compiling.
+   * Absent means the answer carries no `addresses` key at all: "this host cannot
+   * say" and "this host has no usable address" are different answers, and only
+   * the second justifies a phone giving up on the direct route.
+   */
+  readonly authorities?: () => readonly string[]
 }
 
 /**
@@ -86,6 +104,131 @@ function readMode(payload: unknown): 'queue' | 'steer' {
     throw new MethodError('MALFORMED_FRAME', `session.prompt: mode must be "queue" or "steer", got "${mode}"`)
   }
   return mode
+}
+
+/**
+ * Read whether an archive may stop the session's running work.
+ *
+ * Absent is `false`, which is the gesture the phone's long-press menu performs:
+ * archive a session that is not running, and let the host refuse one that is.
+ * Silently killing a turn somebody is watching is not what "归档该会话" means.
+ *
+ * A present value that is not a boolean is a mistake rather than an omission.
+ * This call changes the host, and quietly reading garbage as "do not stop"
+ * would turn a client bug into a refusal an operator cannot explain.
+ *
+ * @param payload - the request payload.
+ * @returns whether the host may stop running work.
+ * @throws MethodError when the field is present but not a boolean.
+ */
+function readStopActivity(payload: unknown): boolean {
+  const record = requireObject(payload, 'session.archive')
+  const value = record['stopActivity']
+  if (value === undefined) return false
+  if (typeof value !== 'boolean') {
+    throw new MethodError(
+      'MALFORMED_FRAME',
+      'session.archive: payload."stopActivity" must be a boolean',
+    )
+  }
+  return value
+}
+
+/**
+ * Read the optional backwards-page cursor for `session.activity`.
+ *
+ * `beforeSeq` changes the read from "the newest window" to "the window before
+ * this position", so the pair is validated rather than treated as hints. A
+ * `beforeSeq` without a `turn` cannot be answered honestly: the page it names
+ * spans earlier turns too, and guessing which one the caller means would append
+ * another turn's rows to a feed. A `turn` without `beforeSeq` is ignored -- a
+ * forward read finds its own running turn.
+ *
+ * A present value that is not a usable number is a mistake, not an omission:
+ * quietly answering the newest page for a scrolling reader would hand them the
+ * wrong end of the log and look like a successful older page.
+ *
+ * @param payload - the request payload.
+ * @returns the cursor, or an empty object for a forward read.
+ * @throws MethodError when `beforeSeq` is present without a usable `turn`.
+ */
+function readActivityCursor(payload: unknown): { beforeSeq?: number; turn?: number } {
+  const fields = requireObject(payload, 'session.activity')
+  const beforeSeq = fields['beforeSeq']
+  if (beforeSeq === undefined) return {}
+  if (typeof beforeSeq !== 'number' || !Number.isFinite(beforeSeq) || beforeSeq < 0) {
+    throw new MethodError(
+      'MALFORMED_FRAME',
+      'session.activity: payload."beforeSeq" must be a non-negative number',
+    )
+  }
+  const turn = fields['turn']
+  if (turn === undefined) {
+    throw new MethodError(
+      'MALFORMED_FRAME',
+      'session.activity: payload."turn" is required when "beforeSeq" is given',
+    )
+  }
+  if (typeof turn !== 'number' || !Number.isFinite(turn) || turn < 0) {
+    throw new MethodError(
+      'MALFORMED_FRAME',
+      'session.activity: payload."turn" must be a non-negative number when "beforeSeq" is given',
+    )
+  }
+  return { beforeSeq, turn }
+}
+
+/**
+ * Read a prompt's text, which is optional when attachments are present.
+ *
+ * Absent and empty both mean "there is no text part". A present value that is
+ * not a string is a mistake rather than an omission: silently dropping it would
+ * send a prompt the client did not mean to send.
+ *
+ * @param payload - the request payload.
+ * @returns the text, or `undefined` when there is none.
+ * @throws MethodError when the field is present but not a string.
+ */
+function readPromptText(payload: unknown): string | undefined {
+  const record = optionalObject(payload, 'session.prompt')
+  const value = record['text']
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'string') {
+    throw new MethodError('MALFORMED_FRAME', 'session.prompt: payload."text" must be a string')
+  }
+  return value === '' ? undefined : value
+}
+
+/**
+ * Read the attachment ids a prompt refers to.
+ *
+ * Shape only -- whether each id names a usable attachment is the upload store's
+ * question, and its answer is a specific code (`ATTACHMENT_UNKNOWN`) rather than
+ * a generic malformed frame.
+ *
+ * @param payload - the request payload.
+ * @returns the ids, empty when the field is absent.
+ * @throws MethodError when the field is present but not an array of non-empty strings.
+ */
+function readAttachmentIds(payload: unknown): string[] {
+  const record = optionalObject(payload, 'session.prompt')
+  const value = record['attachmentIds']
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) {
+    throw new MethodError(
+      'MALFORMED_FRAME',
+      'session.prompt: payload."attachmentIds" must be an array of strings',
+    )
+  }
+  return value.map((entry) => {
+    if (typeof entry !== 'string' || entry === '') {
+      throw new MethodError(
+        'MALFORMED_FRAME',
+        'session.prompt: payload."attachmentIds" must contain non-empty strings',
+      )
+    }
+    return entry
+  })
 }
 
 /**
@@ -217,13 +360,17 @@ function readRegistration(payload: unknown): {
  * Build the method table for one plugin mount.
  *
  * @param ctx - the plugin context, used for every DSH call.
- * @param facts - host identity reported to clients.
+ * @param facts - host identity reported to clients, including the state directory
+ *   the upload staging area lives under and, when the host can say, the bound
+ *   listener addresses.
  * @param broker - the interaction broker holding pending approvals and questions.
  * @param push - where a device's notification endpoint is recorded, when the host
  *   has push at all. Absent in compositions without a relay.
  * @param delivery - what each device has already been sent, when the host keeps
  *   it. Absent leaves every page full: a composition without it still answers,
  *   it just does not save the phone the bytes it already read.
+ * @param uploads - the attachment staging store. Absent builds one under
+ *   `facts.home`; a caller that wants to share or test one may pass it.
  * @returns the table, keyed by wire method name.
  */
 export function createMethodTable(
@@ -232,19 +379,45 @@ export function createMethodTable(
   broker: InteractionBroker,
   push?: PushBinding,
   delivery?: DeliveryLedger,
+  uploadsOrAttachments?: UploadStore | AttachmentBridge,
   attachments?: AttachmentBridge,
 ): Record<string, MethodHandler> {
+  // The attachment extension predates the upload store and used to be passed in
+  // the sixth slot; tests written against that shape still do. Accept either.
+  const attachmentBridge =
+    attachments ??
+    (uploadsOrAttachments !== undefined && typeof (uploadsOrAttachments as AttachmentBridge).capabilities === 'function'
+      ? (uploadsOrAttachments as AttachmentBridge)
+      : undefined)
   const attachmentService = (): AttachmentBridge => {
-    if (!attachments) throw new MethodError('NOT_IMPLEMENTED', 'install the attachment-enabled host plugin')
-    return attachments
+    if (!attachmentBridge) throw new MethodError('NOT_IMPLEMENTED', 'install the attachment-enabled host plugin')
+    return attachmentBridge
   }
+  const uploadStore =
+    (uploadsOrAttachments instanceof UploadStore ? uploadsOrAttachments : undefined) ??
+    new UploadStore({
+      root: join(facts.home, 'uploads'),
+      attachmentsRoot: join(facts.home, 'attachments'),
+    })
+
   const table: Record<string, MethodHandler> = {
-    /** Host identity and protocol facts. */
+    /**
+     * Host identity and protocol facts.
+     *
+     * `addresses`, when present, is the listener's own bound `host:port` list.
+     * It exists so a phone connected through the relay can learn where to try
+     * the computer directly: the relay route never tells it a LAN address, and
+     * probing the paired one again is not a scan.
+     *
+     * Additive and optional, so it needs no protocol version bump -- an old
+     * client ignores the key, and an old host simply does not send it.
+     */
     'host.info': async () => ({
       hostId: facts.hostId,
       hostName: facts.hostName,
       home: facts.home,
       protocolVersion: facts.protocolVersion,
+      ...(facts.authorities === undefined ? {} : { addresses: facts.authorities() }),
     }),
 
     /** Every session DSH would list, newest activity first. */
@@ -310,6 +483,37 @@ export function createMethodTable(
     },
 
     /**
+     * The running turn's compact process detail.
+     *
+     * Separate from `session.messages` because it answers a different question
+     * and changes far more often: a summary refresh is a page of conversation,
+     * this is polled a couple of times a second while a turn runs, and the paid
+     * account's UI draws it as a full-detail feed under the status row. The
+     * answer carries only the running turn's one-line process rows; see
+     * `sessionActivity` for what is mapped and the byte budget it enforces.
+     *
+     * `maxEntries` is a hint, not a promise: the host clamps it to the protocol
+     * ceiling and may return fewer rows when the byte budget fills.
+     *
+     * `beforeSeq` + `turn` ask for the page *before* a position instead of the
+     * newest one. That is how a scrolling reader loads the older rows of a long
+     * turn: the answer's `oldestSeq` is the cursor for the next request. Without
+     * `beforeSeq` the read is exactly what it always was.
+     */
+    'session.activity': async (payload) => {
+      const fields = requireObject(payload, 'session.activity')
+      const maxEntries = fields['maxEntries']
+      const cursor = readActivityCursor(payload)
+      return sessionActivity(
+        ctx,
+        requireString(payload, 'sessionId', 'session.activity'),
+        typeof maxEntries === 'number' && Number.isFinite(maxEntries) ? maxEntries : undefined,
+        cursor.beforeSeq,
+        cursor.turn,
+      )
+    },
+
+    /**
      * Create a session, or adopt/resume one when `sessionId` is supplied.
      *
      * Every argument is optional, so the payload is validated for *type* here:
@@ -330,18 +534,34 @@ export function createMethodTable(
      * Send a prompt. The client should reuse one `requestId` across retries:
      * the host treats it as an idempotency key and will not insert the same
      * message twice.
+     *
+     * `text` is required only when there are no attachments. The ids name
+     * finished uploads from `upload.finish`; each is checked against this
+     * connection's device and this session before anything is read.
      */
     'session.prompt': async (payload, context) => {
-      if (attachments) return attachments.prompt(context.deviceId, payload, readMode(payload))
-      const record = optionalObject(payload, 'session.prompt')
-      // A host without the extension must never silently discard requested files.
-      if (record['attachments'] !== undefined && (!Array.isArray(record['attachments']) || record['attachments'].length > 0)) {
+      if (optionalObject(payload, 'session.prompt')['attachments'] !== undefined) {
         return attachmentService().prompt(context.deviceId, payload, readMode(payload))
       }
+      const sessionId = requireString(payload, 'sessionId', 'session.prompt')
+      const text = readPromptText(payload)
+      const attachmentIds = readAttachmentIds(payload)
+      const mode = readMode(payload)
+      if (text === undefined && attachmentIds.length === 0) {
+        throw new MethodError(
+          'MALFORMED_FRAME',
+          'session.prompt: payload."text" must be a non-empty string when no attachments are given',
+        )
+      }
+      const attachments =
+        attachmentIds.length === 0
+          ? []
+          : await uploadStore.resolveForPrompt(context.deviceId, sessionId, attachmentIds)
       return promptSession(ctx, {
-        sessionId: requireString(payload, 'sessionId', 'session.prompt'),
-        text: requireString(payload, 'text', 'session.prompt'),
-        mode: readMode(payload),
+        sessionId,
+        ...(text === undefined ? {} : { text }),
+        ...(attachments.length === 0 ? {} : { attachments }),
+        mode,
         requestId: optionalString(payload, 'requestId'),
         clientTimeZone: optionalString(payload, 'clientTimeZone'),
       })
@@ -352,6 +572,33 @@ export function createMethodTable(
     'attachment.chunk': async (payload, context) => attachmentService().uploads.chunk(context.deviceId, payload),
     'attachment.finish': async (payload, context) => attachmentService().uploads.finish(context.deviceId, payload),
     'attachment.abort': async (payload, context) => attachmentService().uploads.abort(context.deviceId, payload),
+
+    /**
+     * Start an attachment upload.
+     *
+     * The device comes from the connection, not the payload: an upload is one
+     * phone's, and no field it sends may say otherwise. `chunkBytes` in the
+     * answer is the exact size every chunk but the last must be.
+     */
+    'upload.begin': async (payload, context) =>
+      uploadStore.begin(context.deviceId, parseUploadBegin(payload)),
+
+    /**
+     * Send one chunk of an attachment.
+     *
+     * Idempotent for an index already accepted; refused out of order and when
+     * the bytes for an accepted index differ. See `bridge/uploads.ts`.
+     */
+    'upload.chunk': async (payload, context) =>
+      uploadStore.chunk(context.deviceId, parseUploadChunk(payload)),
+
+    /** Finish an upload and get the attachment id a prompt refers to. */
+    'upload.finish': async (payload, context) =>
+      uploadStore.finish(context.deviceId, requireString(payload, 'uploadId', 'upload.finish')),
+
+    /** Discard a half-sent upload and its bytes. */
+    'upload.abort': async (payload, context) =>
+      uploadStore.abort(context.deviceId, requireString(payload, 'uploadId', 'upload.abort')),
 
     /** Interrupt the running turn. */
     'session.cancel': async (payload) =>
@@ -365,6 +612,27 @@ export function createMethodTable(
         requireString(payload, 'title', 'session.rename'),
       )
       return { renamed: true }
+    },
+
+    /**
+     * Archive a session, so it leaves every list -- here and on the computer.
+     *
+     * Non-destructive: the log stays and so does the session's workspace slot;
+     * the registry-global archive set is what the list methods filter on. A
+     * running session is refused unless `stopActivity` says the caller means to
+     * stop it, which is the behaviour the phone's long-press gesture relies on.
+     *
+     * A composition whose registry cannot archive answers with an error rather
+     * than a success: `{archived: true}` is a claim about the computer, and the
+     * next refresh would contradict it.
+     */
+    'session.archive': async (payload) => {
+      const stopActivity = readStopActivity(payload)
+      await archiveSession(ctx, {
+        sessionId: requireString(payload, 'sessionId', 'session.archive'),
+        stopActivity,
+      })
+      return { archived: true }
     },
 
     /** The model catalog the picker renders, with each model's reasoning levels. */

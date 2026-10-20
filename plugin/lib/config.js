@@ -3,9 +3,11 @@ import z from '@deepseek-ai/schemastery';
  * Bind target selection.
  *
  * `lan` binds every non-internal IPv4 address, which is what makes the plugin
- * work out of the box on a home network. `loopback` binds `127.0.0.1` only --
- * the posture to use with a relay, where the phone never dials this machine
- * directly. `addresses` binds exactly the configured literals.
+ * work out of the box on a home network -- including with the relay on, where a
+ * phone that is nearby should take the direct route instead of the tunnel.
+ * `loopback` binds `127.0.0.1` only: the explicit "nobody dials this machine
+ * directly" posture, put in the ordinary bind setting. `addresses` binds exactly
+ * the configured literals.
  */
 export const BIND_MODES = ['lan', 'loopback', 'addresses'];
 /**
@@ -33,9 +35,18 @@ export const Config = z.object({
         url: z.string().default(PUBLIC_RELAY_URL),
         token: z.string().default(''),
         publicUrl: z.string().default(''),
-        preferLoopback: z.boolean().default(true),
+        preferLoopback: z.boolean().default(false),
         reconnectBaseMs: z.natural().default(1_000),
         reconnectMaxMs: z.natural().default(60_000),
+        /**
+         * How long the relay may stay silent before the tunnel is redialled, in ms.
+         *
+         * The relay pings every tunnel every `tunnelIdleMs / 3` (30 s with the
+         * relay's default 90 s idle window). Four missed pings is longer than any
+         * healthy relay's silence and short enough that a blackholed network cannot
+         * leave a dead room behind for hours. `0` disables the watchdog.
+         */
+        watchdogMs: z.natural().default(120_000),
     }),
     pairing: z.object({
         codeTtlSeconds: z.natural().default(300),
@@ -56,3 +67,22 @@ export const Config = z.object({
     portFallback: z.boolean().default(true),
     spike: z.boolean().default(false),
 });
+/**
+ * The bind mode the listener actually uses for a given config.
+ *
+ * `relay.preferLoopback` is the one way the relay changes the bind, and it is
+ * off by default: a direct route to a phone on the same network is a feature of
+ * the product, not an accident of having no tunnel, so the listener keeps
+ * binding whatever `bind.mode` says while the tunnel is up. An explicit
+ * `bind.mode: loopback` is untouched by this -- it is the operator saying
+ * "nobody dials this machine directly" in the ordinary setting.
+ *
+ * The decision lives here rather than inline in the composition root so the
+ * tests can pin it without starting a listener, and so nobody re-derives it.
+ *
+ * @param config - the validated plugin config.
+ * @returns the mode to bind.
+ */
+export function listenerBindMode(config) {
+    return config.relay.enabled && config.relay.preferLoopback ? 'loopback' : config.bind.mode;
+}

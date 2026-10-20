@@ -26,7 +26,7 @@
 
 ```sh
 dsh plugin --profile desktop add dsh-mizar          # 跟随 npm 最新版
-dsh plugin --profile desktop add dsh-mizar@0.8.3    # 锁定某个版本
+dsh plugin --profile desktop add dsh-mizar@0.8.4    # 锁定某个版本
 ```
 
 两种装法都会把依赖写成 `dsh-mizar@^x.y.z`。升级只要再跑一次 `add dsh-mizar@latest`。
@@ -37,7 +37,7 @@ dsh plugin --profile desktop add dsh-mizar@0.8.3    # 锁定某个版本
 
 | | **npm(推荐)** | GitHub 直装 |
 |---|---|---|
-| 版本 | 有版本号,可锁 `@0.8.3` | 跟随 `main` 最新提交,不可锁 |
+| 版本 | 有版本号,可锁 `@0.8.4` | 跟随 `main` 最新提交,不可锁 |
 | 可追溯 | `npm view dsh-mizar versions`、`npm outdated` | 只有 commit hash |
 | 完整性 | registry **sha512 校验** | 无包完整性校验 |
 | 前提 | 只要能访问 registry | 需要 git + pnpm 的 git 支持 |
@@ -51,7 +51,7 @@ dsh plugin --profile desktop add ShirazuNagisa/DSH-Mizar
 
 # 离线 / 内网:在有网的机器上 npm pack,再把 .tgz 传过去
 npm pack dsh-mizar
-dsh plugin --profile desktop add /path/to/dsh-mizar-0.8.3.tgz
+dsh plugin --profile desktop add /path/to/dsh-mizar-0.8.4.tgz
 ```
 
 ### 装不到最新版 / 镜像同步延迟
@@ -61,7 +61,7 @@ dsh plugin --profile desktop add /path/to/dsh-mizar-0.8.3.tgz
 
 - **加 `--registry` 直连官方源**:
   ```sh
-  dsh plugin --profile desktop add dsh-mizar@0.8.3 --registry=https://registry.npmjs.org
+  dsh plugin --profile desktop add dsh-mizar@0.8.4 --registry=https://registry.npmjs.org
   ```
 - 或者去 [npmmirror 同步页](https://npmmirror.com/sync/dsh-mizar) 点一次「同步」,等镜像更新。
 
@@ -72,13 +72,13 @@ dsh plugin --profile desktop add /path/to/dsh-mizar-0.8.3.tgz
 DSH 会**精确比对**插件声明的 `@deepseek-ai/dsh-*` 与运行时版本，不匹配时安装会被拒绝：
 
 ```
-Plugin dsh-mizar@0.8.3 is incompatible with dsh 0.2.1-rc.2
+Plugin dsh-mizar@0.8.4 is incompatible with dsh 0.2.1-rc.2
 ```
 
 - 正常做法：升级到匹配的插件版本（DSH 每个 rc 发布后，插件跟一个 `+0.0.1`）；
 - 临时跑起来（**有风险**，只在确认没有 API 变更时用）：
   ```sh
-  dsh plugin --profile desktop allow-version dsh-mizar@0.8.3 --dsh-version 0.2.1-rc.2 --accept-risk
+  dsh plugin --profile desktop allow-version dsh-mizar@0.8.4 --dsh-version 0.2.1-rc.2 --accept-risk
   ```
 
 ## 二、配对
@@ -93,8 +93,55 @@ Plugin dsh-mizar@0.8.3 is incompatible with dsh 0.2.1-rc.2
 
 - 把会话列表、对话正文、用量、审批和提问转给手机
 - 手机可以发消息、打断正在跑的 turn、回答审批和提问、切换模型与权限
+- 付费账户可以在会话里发送照片或文件；图片作为 DSH 图片内容，文件作为 DSH 文件内容或可读路径句柄
 - 推送（审批 / 提问 / 跑完）经中继转给 Apple
-- 手机和电脑在同一个 Wi-Fi 时也可以直连，二维码里两条路都带着
+- 手机和电脑在同一个局域网时优先直连（局域网通信），连不上再走中继；中继开着时监听器也会绑局域网地址
+
+### 监听地址:中继开着也绑局域网
+
+监听器默认绑**这台电脑的局域网 IPv4 地址**，中继开着的时候也一样（另外总会绑 `127.0.0.1`，
+中继靠它把手机请求转回本机）。0.9.4 起「局域网通信」是产品承诺的功能：手机和电脑在同一个
+局域网时直连，不占中继带宽，也是手机端解锁付费功能的条件。如果中继一开就把监听器缩回
+loopback，手机永远找不到可直连的地址，这个功能等于不存在。
+
+监听器有设备令牌鉴权和配对频率限制。把它绑到局域网上，只是让同网段的手机能直连，不会把
+DSH 自己的 Web 接口暴露出去（那是 DSH 的安全边界，插件不碰）。
+
+**想退回「只监听本机」的老姿势**（比如这台电脑接在不可信的网络上，只用中继）：
+
+```yaml
+# ~/.dsh/profiles/<profile>/cordis.patch.yml
+- id: mizar
+  config:
+    relay:
+      preferLoopback: true
+```
+
+把 `preferLoopback` 换成 `bind.mode: loopback` 效果相同，两个写一个就够。代价是**没有局域网
+通信**：手机即使和电脑在同一个 Wi-Fi 也走中继，局域网解锁（附件、全量细节）不生效，其余
+功能不变。
+
+### 中继隧道自愈：断线会自己重连
+
+中继方向有两个只有长期运行才会暴露的故障，0.8.6 起都做了兜底：
+
+- **半开隧道。** 电脑换网络（Wi-Fi 切换、VPN 断掉、休眠唤醒）时，本地 socket 可能既收不到
+  中继的 close、也不再有任何流量，而系统仍报 `ESTABLISHED`。中继那边过了 90 秒没收到
+  pong 就把房间摘掉；插件这边却一直显示「已连接」，于是再也不重拨 —— 手机无论直连还是中继
+  都连不上，只能重启 DSH。现在插件自己有**静默看门狗**：超过 `relay.watchdogMs`（默认
+  120 秒，即中继 30 秒一次 ping 的四个周期）没收到中继任何一帧，就强制丢弃这条 socket 并
+  重拨。可用 `relay.watchdogMs: 0` 关掉。
+- **端口漂移。** DSH 可能重复挂载/重载插件；以前每次挂载都绑一个新监听，端口从 19390 一路
+  漂到 19391、19392，手机配对里保存的直连地址就永远失效了。现在一个进程只保留**一个**挂载：
+  新挂载要等旧挂载完全释放监听之后才绑端口；网络变化导致监听地址改变时，隧道也会立刻用新
+  地址重拨，并把监听端口的变化同步给隧道（否则隧道健康、手机请求却全部 502）。
+- **0.8.7 修了 0.8.6 单实例的漏洞。** 0.8.6 的注册表是模块级的，而 DSH 会在同一进程里多次
+  加载插件模块，每份副本各有一张空注册表——实测一个进程因此挂了 8 个监听（19390–19397）。
+  0.8.7 把注册表放到 `globalThis`（`Symbol.for('dsh-mizar.mount-registry')`），所有模块副本
+  共用同一个槽位，一个进程只剩一个监听。
+
+日志里对应 `relay: the tunnel has been silent for …s — redialling it`、
+`relay: the network changed — redialling the tunnel` 和 `relay: the listener moved to port …`。
 
 ### 对话只传总结
 
@@ -202,13 +249,14 @@ MIZAR_CODE=XXXX-XXXX node scripts/smoke-listener.mjs
 ## 常见问题
 
 **手机连不上。**
-面板顶部会写原因。默认走中继，只要电脑和手机都能上网就行，不需要在同一个 Wi-Fi。
+面板顶部会写原因。同一个局域网内会优先直连；不在同一个网络时走中继，只要电脑和手机都能上网就行。
 
 **面板里没有二维码。**
 重启 DSH。装完不重启，插件不会加载。
 
-**想改成局域网直连。**
-默认是「有中继就走中继」。二维码里同时带直连地址，App 会先试直连、失败再走中继。
+**想改成局域网直连 / 为什么没走局域网。**
+默认就会优先走局域网：App 每次刷新先扫一遍本机网络，能直连就直连，连不上才走中继；二维码和 `host.info` 里两条路都带着。
+如果之前为了「只监听本机」手动配过 `bind.mode: loopback` 或 `relay.preferLoopback: true`，把这两项删掉（或改成 `bind.mode: lan` / `preferLoopback: false`），重启 DSH 后监听器就会重新绑局域网地址。
 
 **插件版本对不对。**
 DSH 启动日志里有 `[mizar] dsh-mizar <版本号> · state: … · devices: N live` 这一行。

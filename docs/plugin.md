@@ -37,7 +37,7 @@
 git -C E:\Projects\DSH-Mizar fetch origin
 git -C E:\Projects\DSH-Mizar reset --hard origin/main
 
-# 2. 一条命令重建 plugin/：取 HEAD 的树 → 落增量 → 编译 → 跑 503 项测试
+# 2. 一条命令重建 plugin/：取 HEAD 的树 → 落增量 → 编译 → 跑全套单测
 node scripts/sync-plugin.mjs
 
 # 3. 看一眼被 staged 的 diff，然后提交
@@ -64,8 +64,7 @@ node scripts/sync-plugin.mjs --client        # 连浏览器半边的 bundle 一�
 | 补丁 | 内容 |
 |---|---|
 | `01-turn-settled.patch` | `turn/end` 时向客户端广播 `turn.settled` |
-| `02-missed-completions.patch` | 没有客户端时把完成事件记下来，下一个连上来的客户端补发（`push/missed.ts` + 单测） |
-| `03-attachments.patch` | 附件上传 RPC（`attachments/*`、帧类型、监听器接线、依赖声明与 88 项单测），来自 PR #1 |
+| `02-android-deltas.patch` | Android 侧的两组增量：没有客户端时记下完成事件并补发（`push/missed.ts` + 单测）；附件上传 RPC（`attachments/*`、帧类型、监听器接线、依赖声明与单测） |
 
 ## 宿主的加载方式
 
@@ -79,7 +78,7 @@ node scripts/sync-plugin.mjs --client        # 连浏览器半边的 bundle 一�
 
 ```sh
 curl -s localhost:19390   # 或看插件面板上是否在监听
-grep -c "turn.settled" plugin/lib/index.js   # 应为 1
+grep -c "turn.settled" plugin/lib/index.js   # 应为 2（直播广播 + 断线补发）
 ```
 
 `node_modules/` 不提交；在 `plugin/` 下按 `package-lock.json` 装一次即可（`npm ci`，或本机有的 pnpm）。

@@ -9,7 +9,10 @@
  *
  * @module dsh-mizar/test/bridge
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '../src/dsh.js'
 import { toMethodError } from '../src/bridge/errors.js'
 import { listWorkspaces } from '../src/bridge/workspaces.js'
@@ -21,6 +24,7 @@ import {
   requireString,
 } from '../src/bridge/method-error.js'
 import { createMethodTable } from '../src/bridge/index.js'
+import { UploadStore } from '../src/bridge/uploads.js'
 import { InteractionBroker } from '../src/bridge/interactions.js'
 import { modelCatalog, selectModel } from '../src/bridge/models.js'
 import { permissionCatalog, setPermissionPreset } from '../src/bridge/permissions.js'
@@ -46,14 +50,26 @@ interface Invocation {
  * Only the wire-contract fields are recorded — the real request also carries an
  * `AbortSignal`, which would make every exact comparison fail for no reason.
  * @param result - the value to return, or a function producing it.
+ * @param options - services to expose through `ctx.get`; a service that is
+ *   omitted leaves `ctx.get` itself absent, which is the old composition.
  * @returns the fake context and the recorded invocations.
  */
-function fakeContext(result: unknown | ((request: Invocation) => unknown)): {
+function fakeContext(
+  result: unknown | ((request: Invocation) => unknown),
+  options: { fileUploads?: unknown; workspaceRegistry?: unknown } = {},
+): {
   ctx: Context
   calls: Invocation[]
 } {
   const calls: Invocation[] = []
+  const services: Record<string, unknown> = {}
+  if (options.fileUploads !== undefined) services['fileUploads'] = options.fileUploads
+  if (options.workspaceRegistry !== undefined) services['workspaceRegistry'] = options.workspaceRegistry
   const ctx = {
+    // `get`, not a property read: the plugin reaches for these services without
+    // declaring them in `inject`, so a composition that has one hands it over
+    // and one that does not gets `undefined` rather than a failure.
+    ...(Object.keys(services).length === 0 ? {} : { get: (name: string) => services[name] }),
     typertGateway: {
       invoke: async (request: Invocation) => {
         calls.push({
@@ -572,6 +588,8 @@ describe('method table', () => {
         'push.presence',
         'push.register',
         'push.unregister',
+        'session.activity',
+        'session.archive',
         'session.cancel',
         'session.create',
         'session.list',
@@ -580,11 +598,66 @@ describe('method table', () => {
         'session.prompt',
         'session.rename',
         'question.answer',
+        'upload.abort',
+        'upload.begin',
+        'upload.chunk',
+        'upload.finish',
         'session.messages',
         'session.stats',
         'workspace.list',
       ].sort(),
     )
+  })
+
+  it('reports every address the host is listening on when it can say', async () => {
+    // The relay route tells the phone nothing about where the computer actually
+    // is, so a direct dial from a relayed connection depends on this answer.
+    const { ctx } = fakeContext({})
+    const table = createMethodTable(
+      ctx,
+      { ...facts, authorities: () => ['192.168.1.10:19390', '127.0.0.1:19390'] },
+      new InteractionBroker(),
+    )
+    await expect(table['host.info']?.(undefined, context)).resolves.toEqual({
+      hostId: 'h1',
+      hostName: 'mac',
+      home: '/home',
+      protocolVersion: 1,
+      addresses: ['192.168.1.10:19390', '127.0.0.1:19390'],
+    })
+  })
+
+  it('leaves addresses out entirely when the host cannot say', async () => {
+    // Absent and empty are different answers: absent is an old host, and the
+    // phone falls back to the address pairing gave it. Sending `[]` would be a
+    // claim that there is nowhere to dial.
+    const { ctx } = fakeContext({})
+    const info = (await createMethodTable(ctx, facts, new InteractionBroker())['host.info']?.(
+      undefined,
+      context,
+    )) as Record<string, unknown>
+    expect(info).toEqual({ hostId: 'h1', hostName: 'mac', home: '/home', protocolVersion: 1 })
+    expect('addresses' in info).toBe(false)
+  })
+
+  it('reads the addresses when host.info is answered, not when the table is built', async () => {
+    // A rebind swaps the listener's addresses under a table that is already
+    // built; a cached shape would name where the host used to listen.
+    const { ctx } = fakeContext({})
+    let bound: readonly string[] = ['127.0.0.1:19390']
+    const table = createMethodTable(
+      ctx,
+      { ...facts, authorities: () => bound },
+      new InteractionBroker(),
+    )
+    expect((await table['host.info']?.(undefined, context)) as { addresses?: string[] }).toMatchObject({
+      addresses: ['127.0.0.1:19390'],
+    })
+
+    bound = ['127.0.0.1:19391', '192.168.1.10:19391']
+    expect((await table['host.info']?.(undefined, context)) as { addresses?: string[] }).toMatchObject({
+      addresses: ['127.0.0.1:19391', '192.168.1.10:19391'],
+    })
   })
 
   it('hands push registrations to the binding, and the device id with them', async () => {
@@ -859,6 +932,159 @@ describe('method table', () => {
   })
 })
 
+describe('session.archive (method table)', () => {
+  const context = { deviceId: 'd1', deviceName: 'iPhone', remote: '127.0.0.1' }
+  const facts = { hostId: 'h1', hostName: 'mac', home: '/home', protocolVersion: 1 }
+
+  /**
+   * A registry that records what the bridge asked it to archive.
+   * @param archive - what the registry does when asked.
+   * @returns the fake service and the recorded calls.
+   */
+  function archivingRegistry(
+    archive: (sessionId: string, options?: unknown) => Promise<void> = async () => {},
+  ): { registry: Record<string, unknown>; calls: { sessionId: string; options: unknown }[] } {
+    const calls: { sessionId: string; options: unknown }[] = []
+    const registry = {
+      // `registryOf` recognises the service by `create`; the archive path then
+      // reaches for `archiveSession`.
+      create: async () => ({ id: 'unused' }),
+      archiveSession: async (sessionId: string, options?: unknown) => {
+        calls.push({ sessionId, options })
+        await archive(sessionId, options)
+      },
+    }
+    return { registry, calls }
+  }
+
+  it('archives through the registry and answers {archived: true}', async () => {
+    const { registry, calls } = archivingRegistry()
+    const { ctx } = fakeContext({}, { workspaceRegistry: registry })
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+
+    await expect(table['session.archive']?.({ sessionId: 's1' }, context)).resolves.toEqual({
+      archived: true,
+    })
+    // No options when nothing asked to stop work: the registry then refuses a
+    // running session, and refusing is the point of this gesture.
+    expect(calls).toEqual([{ sessionId: 's1', options: undefined }])
+  })
+
+  it('forwards stopActivity only when the request asks for it', async () => {
+    const { registry, calls } = archivingRegistry()
+    const { ctx } = fakeContext({}, { workspaceRegistry: registry })
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+
+    await table['session.archive']?.({ sessionId: 's1', stopActivity: true }, context)
+    await table['session.archive']?.({ sessionId: 's2', stopActivity: false }, context)
+    expect(calls).toEqual([
+      { sessionId: 's1', options: { stopActivity: true } },
+      { sessionId: 's2', options: undefined },
+    ])
+  })
+
+  it('refuses a running session as an error the app can show', async () => {
+    // What DSH throws when `stopActivity` was not asked for and the session is
+    // still working. The wire answer is an error, never a success the next
+    // refresh would contradict.
+    const { registry } = archivingRegistry(async (sessionId) => {
+      throw new Error(`cannot archive session '${sessionId}': the session is active (turn)`)
+    })
+    const { ctx } = fakeContext({}, { workspaceRegistry: registry })
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+
+    await expect(table['session.archive']?.({ sessionId: 's1' }, context)).rejects.toMatchObject({
+      code: 'REMOTE_ERROR',
+      message: expect.stringContaining('the session is active'),
+    })
+  })
+
+  it('refuses an unknown session the same way', async () => {
+    const { registry } = archivingRegistry(async (sessionId) => {
+      throw new Error(
+        `cannot archive session '${sessionId}': live sessions and session persistence hold no such session`,
+      )
+    })
+    const { ctx } = fakeContext({}, { workspaceRegistry: registry })
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+
+    await expect(table['session.archive']?.({ sessionId: 'gone' }, context)).rejects.toMatchObject({
+      code: 'REMOTE_ERROR',
+      message: expect.stringContaining('no such session'),
+    })
+  })
+
+  it('says so when the composition has no registry to archive in', async () => {
+    // Answering `{archived: true}` would tell the phone to drop a row the
+    // computer still has, and the next refresh would bring it back.
+    const { ctx } = fakeContext({})
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+    await expect(table['session.archive']?.({ sessionId: 's1' }, context)).rejects.toMatchObject({
+      code: 'REMOTE_ERROR',
+    })
+  })
+
+  it('requires a session id and a boolean stopActivity', async () => {
+    const { registry, calls } = archivingRegistry()
+    const { ctx } = fakeContext({}, { workspaceRegistry: registry })
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+
+    await expect(table['session.archive']?.({}, context)).rejects.toMatchObject({
+      code: 'MALFORMED_FRAME',
+    })
+    // Present but not a boolean is a mistake rather than an omission: reading
+    // `"yes"` as "do not stop" would turn a client bug into a refusal nobody can
+    // explain, and reading it as `true` would kill a running turn.
+    await expect(
+      table['session.archive']?.({ sessionId: 's1', stopActivity: 'yes' }, context),
+    ).rejects.toMatchObject({ code: 'MALFORMED_FRAME' })
+    await expect(table['session.archive']?.('s1', context)).rejects.toMatchObject({
+      code: 'MALFORMED_FRAME',
+    })
+    expect(calls).toHaveLength(0)
+  })
+})
+
+describe('archived sessions (method table)', () => {
+  const context = { deviceId: 'd1', deviceName: 'iPhone', remote: '127.0.0.1' }
+  const facts = { hostId: 'h1', hostName: 'mac', home: '/home', protocolVersion: 1 }
+
+  it('leaves archived sessions out of session.list, keeping activity order', async () => {
+    // DSH's own `session/list` still returns them: the archive set is the
+    // workspace registry's, and the computer's sidebar filters it itself. A
+    // phone that drew the raw list would keep rows the operator put away.
+    const { ctx } = fakeContext(
+      {
+        items: [
+          { sessionId: 's-old', updatedAt: 1 },
+          { sessionId: 's-archived', updatedAt: 3 },
+          { sessionId: 's-new', updatedAt: 2 },
+        ],
+      },
+      { workspaceRegistry: { create: async () => ({ id: 'unused' }), archivedSessionIds: ['s-archived'] } },
+    )
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+
+    const listed = (await table['session.list']?.({}, context)) as { items: { sessionId: string }[] }
+    expect(listed.items.map((row) => row.sessionId)).toEqual(['s-new', 's-old'])
+  })
+
+  it('leaves session.list alone when the composition cannot answer the archive question', async () => {
+    // A composition without a registry cannot archive either, so this is the
+    // list it always had -- an old phone on an old host must not change.
+    const { ctx } = fakeContext({
+      items: [
+        { sessionId: 's1', updatedAt: 1 },
+        { sessionId: 's2', updatedAt: 2 },
+      ],
+    })
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+
+    const listed = (await table['session.list']?.({}, context)) as { items: { sessionId: string }[] }
+    expect(listed.items.map((row) => row.sessionId)).toEqual(['s2', 's1'])
+  })
+})
+
 describe('payload helpers', () => {
   it('requires an object payload', () => {
     expect(() => requireObject(null, 'm')).toThrow(MethodError)
@@ -930,3 +1156,766 @@ async function capture(thunk: () => Promise<unknown>): Promise<unknown> {
     return error
   }
 }
+
+/** Temporary directories the attachment tests created, removed after each test. */
+const attachmentTempDirs: string[] = []
+
+afterEach(async () => {
+  await Promise.all(
+    attachmentTempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })),
+  )
+})
+
+/**
+ * A method table whose uploads live under a fresh temporary state directory.
+ *
+ * The real `createMethodTable` builds its own store under `facts.home`; passing
+ * one in here is what lets the tests use a short chunk size and clean up.
+ *
+ * @param result - the scripted gateway answer.
+ * @param options - a `fileUploads` service to expose, and the chunk size.
+ * @returns the table, the recorded gateway calls and the temp directory.
+ */
+async function attachmentTable(
+  result: unknown,
+  options: { fileUploads?: unknown; chunkBytes?: number } = {},
+): Promise<{
+  table: ReturnType<typeof createMethodTable>
+  calls: Invocation[]
+  dir: string
+}> {
+  const dir = await mkdtemp(join(tmpdir(), 'mizar-bridge-uploads-'))
+  attachmentTempDirs.push(dir)
+  const { ctx, calls } = fakeContext(result, {
+    ...(options.fileUploads === undefined ? {} : { fileUploads: options.fileUploads }),
+  })
+  const uploads = new UploadStore({
+    root: join(dir, 'uploads'),
+    attachmentsRoot: join(dir, 'attachments'),
+    chunkBytes: options.chunkBytes ?? 8,
+  })
+  const table = createMethodTable(
+    ctx,
+    { hostId: 'h1', hostName: 'mac', home: dir, protocolVersion: 1 },
+    new InteractionBroker(),
+    undefined,
+    undefined,
+    uploads,
+  )
+  return { table, calls, dir }
+}
+
+/** The prompt request the gateway was last asked to run. */
+function lastPromptRequest(calls: Invocation[]): Record<string, unknown> {
+  const call = calls[calls.length - 1]
+  if (call?.method !== 'prompt') throw new Error('no prompt call was recorded')
+  return (call.args as { request: Record<string, unknown> }).request
+}
+
+/**
+ * Upload a small attachment through the real method table.
+ *
+ * @param table - the method table.
+ * @param device - the connection the frames arrive on.
+ * @param request - what to upload.
+ * @param bytes - the exact bytes, which must fit the table's chunk size.
+ * @returns the finished attachment.
+ */
+async function uploadThroughTable(
+  table: ReturnType<typeof createMethodTable>,
+  device: { deviceId: string; deviceName: string; remote: string },
+  request: {
+    sessionId: string
+    kind: 'image' | 'file'
+    name: string
+    mediaType: string
+    byteSize: number
+  },
+  bytes: Buffer,
+): Promise<{ attachmentId: string; kind: string; name: string; mediaType: string; byteSize: number }> {
+  const begun = (await table['upload.begin']?.(request, device)) as {
+    uploadId: string
+    chunkBytes: number
+  }
+  expect(begun.chunkBytes).toBe(8)
+  await table['upload.chunk']?.(
+    { uploadId: begun.uploadId, index: 0, data: bytes.toString('base64') },
+    device,
+  )
+  return (await table['upload.finish']?.({ uploadId: begun.uploadId }, device)) as {
+    attachmentId: string
+    kind: string
+    name: string
+    mediaType: string
+    byteSize: number
+  }
+}
+
+describe('attachment upload methods', () => {
+  const device = { deviceId: 'd1', deviceName: 'iPhone', remote: '127.0.0.1' }
+  const other = { deviceId: 'd2', deviceName: 'iPad', remote: '127.0.0.2' }
+
+  it('runs begin, chunk and finish, and binds the upload to the connection device', async () => {
+    const { table } = await attachmentTable({})
+    const bytes = Buffer.from('abcdefgh')
+
+    const begun = (await table['upload.begin']?.(
+      { sessionId: 's1', kind: 'file', name: 'a.txt', mediaType: 'text/plain', byteSize: bytes.length },
+      device,
+    )) as { uploadId: string; chunkBytes: number }
+    expect(begun.uploadId).toEqual(expect.any(String))
+    expect(begun.chunkBytes).toBe(8)
+
+    await expect(
+      table['upload.chunk']?.(
+        { uploadId: begun.uploadId, index: 0, data: bytes.toString('base64') },
+        device,
+      ),
+    ).resolves.toEqual({ received: 1 })
+
+    // The device id is the socket's, never the payload's: another connection
+    // cannot finish somebody else's upload.
+    await expect(
+      table['upload.finish']?.({ uploadId: begun.uploadId, deviceId: other.deviceId }, other),
+    ).rejects.toMatchObject({ code: 'UPLOAD_UNKNOWN' })
+
+    await expect(
+      table['upload.finish']?.({ uploadId: begun.uploadId }, device),
+    ).resolves.toEqual({
+      attachmentId: expect.any(String),
+      kind: 'file',
+      name: 'a.txt',
+      mediaType: 'text/plain',
+      byteSize: bytes.length,
+    })
+  })
+
+  it('aborts a half-sent upload through the table', async () => {
+    const { table } = await attachmentTable({})
+    const begun = (await table['upload.begin']?.(
+      { sessionId: 's1', kind: 'file', name: 'a.txt', mediaType: 'text/plain', byteSize: 8 },
+      device,
+    )) as { uploadId: string }
+    await expect(table['upload.abort']?.({ uploadId: begun.uploadId }, device)).resolves.toEqual({
+      aborted: true,
+    })
+    await expect(table['upload.abort']?.({ uploadId: begun.uploadId }, device)).rejects.toMatchObject({
+      code: 'UPLOAD_UNKNOWN',
+    })
+  })
+
+  it('refuses a begin whose kind or media type is not usable', async () => {
+    const { table } = await attachmentTable({})
+    await expect(
+      table['upload.begin']?.(
+        { sessionId: 's1', kind: 'video', name: 'v.mp4', mediaType: 'video/mp4', byteSize: 8 },
+        device,
+      ),
+    ).rejects.toMatchObject({ code: 'MALFORMED_FRAME' })
+    await expect(
+      table['upload.begin']?.(
+        { sessionId: 's1', kind: 'image', name: 'p.tiff', mediaType: 'image/tiff', byteSize: 8 },
+        device,
+      ),
+    ).rejects.toMatchObject({ code: 'ATTACHMENT_UNSUPPORTED' })
+  })
+})
+
+describe('prompt attachments', () => {
+  const device = { deviceId: 'd1', deviceName: 'iPhone', remote: '127.0.0.1' }
+
+  it('keeps a text-only prompt exactly as it was', async () => {
+    const { table, calls } = await attachmentTable({})
+    const result = await table['session.prompt']?.(
+      { sessionId: 's1', text: 'hello', requestId: 'keep-me' },
+      device,
+    )
+    expect(result).toEqual({ accepted: true, requestId: 'keep-me' })
+    const request = lastPromptRequest(calls)
+    expect(request['requestId']).toBe('keep-me')
+    expect(request['content']).toEqual([{ type: 'text', text: 'hello' }])
+    expect(request['mode']).toBe('queue')
+  })
+
+  it('turns a finished image into an inline base64 content part', async () => {
+    const { table, calls } = await attachmentTable({})
+    const bytes = Buffer.from('jpegdata')
+    const finished = await uploadThroughTable(
+      table,
+      device,
+      { sessionId: 's1', kind: 'image', name: 'p.jpg', mediaType: 'image/jpeg', byteSize: bytes.length },
+      bytes,
+    )
+
+    // No text at all: `text` is optional when attachments are present.
+    await expect(
+      table['session.prompt']?.(
+        { sessionId: 's1', attachmentIds: [finished.attachmentId] },
+        device,
+      ),
+    ).resolves.toMatchObject({ accepted: true })
+    expect(lastPromptRequest(calls)['content']).toEqual([
+      {
+        type: 'image',
+        data: bytes.toString('base64'),
+        mediaType: 'image/jpeg',
+        name: 'p.jpg',
+      },
+    ])
+
+    // And the text, when there is one, comes first in the caller's order.
+    await table['session.prompt']?.(
+      { sessionId: 's1', text: 'what is this?', attachmentIds: [finished.attachmentId] },
+      device,
+    )
+    expect(lastPromptRequest(calls)['content']).toEqual([
+      { type: 'text', text: 'what is this?' },
+      {
+        type: 'image',
+        data: bytes.toString('base64'),
+        mediaType: 'image/jpeg',
+        name: 'p.jpg',
+      },
+    ])
+  })
+
+  it('stages a file with fileUploads and sends the receipt', async () => {
+    const staged: { sessionId: string; name?: string; bytes: Buffer }[] = []
+    const fileUploads = {
+      uploadStream: async (request: {
+        sessionId: string
+        name?: string
+        data: AsyncIterable<Uint8Array>
+      }) => {
+        const parts: Buffer[] = []
+        for await (const chunk of request.data) parts.push(Buffer.from(chunk))
+        staged.push({
+          sessionId: request.sessionId,
+          ...(request.name === undefined ? {} : { name: request.name }),
+          bytes: Buffer.concat(parts),
+        })
+        return { receiptId: 'receipt-1' }
+      },
+    }
+    const { table, calls } = await attachmentTable({}, { fileUploads })
+    const bytes = Buffer.from('filebody')
+    const finished = await uploadThroughTable(
+      table,
+      device,
+      { sessionId: 's1', kind: 'file', name: 'notes.txt', mediaType: 'text/plain', byteSize: bytes.length },
+      bytes,
+    )
+
+    await table['session.prompt']?.(
+      { sessionId: 's1', text: 'see attached', attachmentIds: [finished.attachmentId] },
+      device,
+    )
+
+    expect(lastPromptRequest(calls)['content']).toEqual([
+      { type: 'text', text: 'see attached' },
+      { type: 'file', receiptId: 'receipt-1' },
+    ])
+    expect(staged).toHaveLength(1)
+    expect(staged[0]?.sessionId).toBe('s1')
+    expect(staged[0]?.name).toBe('notes.txt')
+    expect(staged[0]?.bytes).toEqual(bytes)
+  })
+
+  it('falls back to a saved path when the host has no fileUploads', async () => {
+    const { table, calls, dir } = await attachmentTable({})
+    const bytes = Buffer.from('filebody')
+    const finished = await uploadThroughTable(
+      table,
+      device,
+      { sessionId: 's1', kind: 'file', name: 'notes.txt', mediaType: 'text/plain', byteSize: bytes.length },
+      bytes,
+    )
+
+    // File-only prompt: no text part of the caller's own, but the fallback adds
+    // a readable handle the agent can act on.
+    await expect(
+      table['session.prompt']?.(
+        { sessionId: 's1', attachmentIds: [finished.attachmentId] },
+        device,
+      ),
+    ).resolves.toMatchObject({ accepted: true })
+
+    const content = lastPromptRequest(calls)['content'] as { type: string; text: string }[]
+    expect(content).toHaveLength(1)
+    expect(content[0]?.type).toBe('text')
+    expect(content[0]?.text.startsWith('[File: notes.txt]\n')).toBe(true)
+    const saved = content[0]?.text.slice('[File: notes.txt]\n'.length) ?? ''
+    expect(saved.startsWith(join(dir, 'attachments'))).toBe(true)
+    await expect(readFile(saved)).resolves.toEqual(bytes)
+  })
+
+  it('reports a fileUploads failure as ATTACHMENT_FAILED', async () => {
+    const failing = {
+      uploadStream: async () => {
+        throw new Error('disk full')
+      },
+    }
+    const { table } = await attachmentTable({}, { fileUploads: failing })
+    const bytes = Buffer.from('filebody')
+    const finished = await uploadThroughTable(
+      table,
+      device,
+      { sessionId: 's1', kind: 'file', name: 'notes.txt', mediaType: 'text/plain', byteSize: bytes.length },
+      bytes,
+    )
+    await expect(
+      table['session.prompt']?.(
+        { sessionId: 's1', attachmentIds: [finished.attachmentId] },
+        device,
+      ),
+    ).rejects.toMatchObject({ code: 'ATTACHMENT_FAILED' })
+  })
+
+  it('reports a receipt-less fileUploads answer as ATTACHMENT_FAILED', async () => {
+    const { table } = await attachmentTable({}, { fileUploads: { uploadStream: async () => ({}) } })
+    const bytes = Buffer.from('filebody')
+    const finished = await uploadThroughTable(
+      table,
+      device,
+      { sessionId: 's1', kind: 'file', name: 'notes.txt', mediaType: 'text/plain', byteSize: bytes.length },
+      bytes,
+    )
+    await expect(
+      table['session.prompt']?.(
+        { sessionId: 's1', attachmentIds: [finished.attachmentId] },
+        device,
+      ),
+    ).rejects.toMatchObject({ code: 'ATTACHMENT_FAILED' })
+  })
+
+  it('refuses a prompt with neither text nor attachments', async () => {
+    const { table } = await attachmentTable({})
+    await expect(table['session.prompt']?.({ sessionId: 's1' }, device)).rejects.toMatchObject({
+      code: 'MALFORMED_FRAME',
+    })
+    await expect(
+      table['session.prompt']?.({ sessionId: 's1', text: '' }, device),
+    ).rejects.toMatchObject({ code: 'MALFORMED_FRAME' })
+  })
+
+  it('refuses a non-string text instead of silently dropping it', async () => {
+    const { table } = await attachmentTable({})
+    await expect(
+      table['session.prompt']?.({ sessionId: 's1', text: 42 }, device),
+    ).rejects.toMatchObject({ code: 'MALFORMED_FRAME' })
+  })
+
+  it('refuses attachmentIds that are not an array of ids', async () => {
+    const { table } = await attachmentTable({})
+    // `null` is read as "absent" (a client encoding nil explicitly), the same
+    // way an absent field is; a value of the wrong shape is a frame error.
+    for (const attachmentIds of ['nope', [42], ['']]) {
+      await expect(
+        table['session.prompt']?.({ sessionId: 's1', text: 'hi', attachmentIds }, device),
+        `attachmentIds ${JSON.stringify(attachmentIds)} was accepted`,
+      ).rejects.toMatchObject({ code: 'MALFORMED_FRAME' })
+    }
+  })
+
+  it('refuses an attachment that is unknown, expired or not this session’s', async () => {
+    const { table } = await attachmentTable({})
+    await expect(
+      table['session.prompt']?.(
+        { sessionId: 's1', attachmentIds: ['not-an-attachment'] },
+        device,
+      ),
+    ).rejects.toMatchObject({ code: 'ATTACHMENT_UNKNOWN' })
+
+    const bytes = Buffer.from('filebody')
+    const finished = await uploadThroughTable(
+      table,
+      device,
+      { sessionId: 's1', kind: 'file', name: 'notes.txt', mediaType: 'text/plain', byteSize: bytes.length },
+      bytes,
+    )
+    await expect(
+      table['session.prompt']?.(
+        { sessionId: 's2', attachmentIds: [finished.attachmentId] },
+        device,
+      ),
+    ).rejects.toMatchObject({ code: 'ATTACHMENT_UNKNOWN' })
+  })
+
+  it('refuses more than eight attachment ids before reading anything', async () => {
+    const { table } = await attachmentTable({})
+    const ids = Array.from({ length: 9 }, (_unused, index) => `attachment-${index}`)
+    await expect(
+      table['session.prompt']?.({ sessionId: 's1', attachmentIds: ids }, device),
+    ).rejects.toMatchObject({ code: 'ATTACHMENT_TOO_LARGE' })
+  })
+
+  it('refuses the same attachment listed twice', async () => {
+    const { table } = await attachmentTable({})
+    const bytes = Buffer.from('filebody')
+    const finished = await uploadThroughTable(
+      table,
+      device,
+      { sessionId: 's1', kind: 'file', name: 'notes.txt', mediaType: 'text/plain', byteSize: bytes.length },
+      bytes,
+    )
+    await expect(
+      table['session.prompt']?.(
+        { sessionId: 's1', attachmentIds: [finished.attachmentId, finished.attachmentId] },
+        device,
+      ),
+    ).rejects.toMatchObject({ code: 'MALFORMED_FRAME' })
+  })
+
+  it('keeps requestId idempotency when attachments are present', async () => {
+    const { table, calls } = await attachmentTable({})
+    const bytes = Buffer.from('filebody')
+    const finished = await uploadThroughTable(
+      table,
+      device,
+      { sessionId: 's1', kind: 'file', name: 'notes.txt', mediaType: 'text/plain', byteSize: bytes.length },
+      bytes,
+    )
+    const result = await table['session.prompt']?.(
+      {
+        sessionId: 's1',
+        text: 'one more time',
+        attachmentIds: [finished.attachmentId],
+        requestId: 'retry-me',
+      },
+      device,
+    )
+    expect(result).toEqual({ accepted: true, requestId: 'retry-me' })
+    expect(lastPromptRequest(calls)['requestId']).toBe('retry-me')
+  })
+})
+
+
+describe('session.activity (method table)', () => {
+  const context = { deviceId: 'd1', deviceName: 'iPhone', remote: '127.0.0.1' }
+  const facts = { hostId: 'h1', hostName: 'mac', home: '/home', protocolVersion: 1 }
+
+  /** One log record in the gateway's shape. */
+  function event(type: string, seq: number, data: Record<string, unknown>): unknown {
+    return { type: 'event', event: { type, seq, time: 1_700_000_000_000 + seq, data } }
+  }
+
+  /**
+   * A context that answers the page read and has no follow stream.
+   *
+   * The missing stream is the older-host path: the cut comes from the
+   * projections read, and both reads are still exercised.
+   *
+   * @param records - the records every page returns.
+   * @param options - the page's `hasMore`, and whether the session has a cut.
+   * @returns the context and the recorded invocations.
+   */
+  function activityContext(
+    records: unknown[],
+    options: { hasMore?: boolean; noCut?: boolean } = {},
+  ): { ctx: Context; calls: Invocation[] } {
+    const calls: Invocation[] = []
+    const ctx = {
+      typertGateway: {
+        stream: async () => {
+          throw new Error('no follow stream in this test')
+        },
+        invoke: async (request: Invocation) => {
+          calls.push({
+            namespace: request.namespace,
+            method: request.method,
+            args: request.args,
+          })
+          if (request.method === 'projections') {
+            return options.noCut === true ? { asOfSeq: null, values: {} } : { asOfSeq: 9, values: {} }
+          }
+          if (request.method === 'page') return { records, hasMore: options.hasMore === true }
+          throw new Error(`unexpected method ${request.method}`)
+        },
+      },
+      effect: () => () => {},
+    } as unknown as Context
+    return { ctx, calls }
+  }
+
+  it('answers the running turn through the method table', async () => {
+    const records = [
+      event('turn/start', 1, { turn: 1 }),
+      event('assistant/attempt', 2, {
+        turn: 1,
+        step: 1,
+        stream: [{ type: 'reasoning-chunks', time0: 1, index: 0, dt: [], texts: ['working on it'] }],
+      }),
+      event('tool/call', 3, {
+        turn: 1,
+        step: 1,
+        callId: 'c1',
+        name: 'bash',
+        arguments: JSON.stringify({ command: 'git status' }),
+      }),
+    ]
+    const { ctx } = activityContext(records)
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+
+    const result = (await table['session.activity']?.(
+      { sessionId: 's1', maxEntries: 10 },
+      context,
+    )) as { sessionId: string; turn: number; entries: { kind: string }[] }
+
+    expect(result).toMatchObject({
+      sessionId: 's1',
+      asOfSeq: 9,
+      turn: 1,
+      hasMore: false,
+      // The page's smallest position: the cursor a later backwards read uses.
+      oldestSeq: 1,
+    })
+    expect(result.entries.map((entry) => entry.kind)).toEqual(['thinking', 'command'])
+  })
+
+  it('asks the host for the bounded activity page window', async () => {
+    const { ctx, calls } = activityContext([])
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+    await table['session.activity']?.({ sessionId: 's1' }, context)
+
+    const page = calls.find((call) => call.method === 'page')
+    expect(page?.args).toMatchObject({
+      request: {
+        address: { kind: 'session', sessionId: 's1' },
+        throughSeq: 9,
+        maxMessages: 200,
+      },
+    })
+    // A forward read is the newest window: no lower bound travels.
+    expect((page?.args as { request: Record<string, unknown> }).request).not.toHaveProperty(
+      'beforeSeq',
+    )
+  })
+
+  it('requires a session id and ignores an unusable maxEntries', async () => {
+    const { ctx } = activityContext([])
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+
+    await expect(table['session.activity']?.('nope', context)).rejects.toMatchObject({
+      code: 'MALFORMED_FRAME',
+    })
+    await expect(table['session.activity']?.({}, context)).rejects.toMatchObject({
+      code: 'MALFORMED_FRAME',
+    })
+    // A non-number hint is the default, not an error: the host's own clamp is
+    // the authority and the client has nothing useful to do with a refusal.
+    await expect(
+      table['session.activity']?.({ sessionId: 's1', maxEntries: 'ten' }, context),
+    ).resolves.toMatchObject({ sessionId: 's1', turn: null, entries: [] })
+  })
+
+  it('widens hasMore on a forward read when the page has older records', async () => {
+    // Every row fitted, so nothing was trimmed -- but the page itself starts
+    // partway into the log, and the running turn may extend before it. The phone
+    // can only find that out by asking, so this answer has to say so.
+    const records = [
+      event('turn/start', 40, { turn: 3 }),
+      event('tool/call', 41, {
+        turn: 3,
+        step: 1,
+        callId: 'c1',
+        name: 'bash',
+        arguments: JSON.stringify({ command: 'npm test' }),
+      }),
+    ]
+    const { ctx } = activityContext(records, { hasMore: true })
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+
+    const result = (await table['session.activity']?.({ sessionId: 's1' }, context)) as {
+      entries: unknown[]
+      hasMore: boolean
+      oldestSeq: number
+    }
+    expect(result.entries).toHaveLength(1)
+    expect(result.hasMore).toBe(true)
+    expect(result.oldestSeq).toBe(40)
+  })
+
+  it('reads the page before beforeSeq when paging back', async () => {
+    const records = [
+      event('tool/call', 20, {
+        turn: 2,
+        step: 1,
+        callId: 'c1',
+        name: 'bash',
+        arguments: JSON.stringify({ command: 'ls' }),
+      }),
+    ]
+    const { ctx, calls } = activityContext(records)
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+
+    const result = (await table['session.activity']?.(
+      { sessionId: 's1', beforeSeq: 42, turn: 2, maxEntries: 10 },
+      context,
+    )) as { turn: number; entries: { id: string }[]; oldestSeq: number; hasMore: boolean }
+
+    expect(result).toMatchObject({ turn: 2, oldestSeq: 20, hasMore: false })
+    expect(result.entries.map((entry) => entry.id)).toEqual(['seq-20'])
+    const page = calls.find((call) => call.method === 'page')
+    expect(page?.args).toMatchObject({
+      request: {
+        address: { kind: 'session', sessionId: 's1' },
+        throughSeq: 9,
+        // The cursor the phone sent is the page's lower bound.
+        beforeSeq: 42,
+        maxMessages: 200,
+      },
+    })
+  })
+
+  it('keeps hasMore true when a backwards page was trimmed by the cap', async () => {
+    // The phone pages from the oldest *returned* row, so rows the cap trimmed
+    // from the old end of this page are still reachable -- but only if this
+    // answer says the walk continues. Reporting just the page's own bound would
+    // end the walk here and drop them silently.
+    const records = [20, 21, 22].map((seq) =>
+      event('tool/call', seq, {
+        turn: 2,
+        step: 1,
+        callId: `c${seq}`,
+        name: 'bash',
+        arguments: JSON.stringify({ command: `step ${seq}` }),
+      }),
+    )
+    const { ctx } = activityContext(records)
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+
+    const result = (await table['session.activity']?.(
+      { sessionId: 's1', beforeSeq: 42, turn: 2, maxEntries: 2 },
+      context,
+    )) as { entries: { id: string }[]; hasMore: boolean; oldestSeq: number }
+
+    // The newest rows fit under the cap; the oldest one did not.
+    expect(result.entries.map((entry) => entry.id)).toEqual(['seq-21', 'seq-22'])
+    expect(result.hasMore).toBe(true)
+    expect(result.oldestSeq).toBe(20)
+  })
+
+  it('keeps only the requested turn out of a backwards page', async () => {
+    // A page is a window cut out of the log, so it normally starts before the
+    // turn the caller asked for. Earlier turns' rows are expected and skipped;
+    // no `turn/start` is needed in the page.
+    const thinking = [
+      { type: 'reasoning-chunks', time0: 1, index: 0, dt: [], texts: ['thinking'] },
+    ]
+    const records = [
+      event('tool/call', 10, {
+        turn: 1,
+        step: 1,
+        callId: 'old',
+        name: 'bash',
+        arguments: JSON.stringify({ command: 'old' }),
+      }),
+      event('assistant/attempt', 11, { turn: 2, step: 1, stream: thinking }),
+      event('tool/call', 12, {
+        turn: 2,
+        step: 1,
+        callId: 'new',
+        name: 'bash',
+        arguments: JSON.stringify({ command: 'new' }),
+      }),
+      event('assistant/attempt', 13, { turn: 3, step: 1, stream: thinking }),
+    ]
+    const { ctx } = activityContext(records, { hasMore: true })
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+
+    const result = (await table['session.activity']?.(
+      { sessionId: 's1', beforeSeq: 100, turn: 2 },
+      context,
+    )) as { turn: number; entries: { id: string }[]; hasMore: boolean; oldestSeq: number }
+
+    expect(result.turn).toBe(2)
+    expect(result.entries.map((entry) => entry.id)).toEqual(['seq-11', 'seq-12'])
+    // The page has older records and it contributed rows of this turn, so
+    // another page may be worth asking for.
+    expect(result.hasMore).toBe(true)
+    expect(result.oldestSeq).toBe(10)
+  })
+
+  it("stops the walk when a backwards page passes the turn's beginning", async () => {
+    // Older records exist -- but none of them is of the requested turn. That is
+    // the definitive "there is no more history for this turn", not "try again",
+    // so the phone must not page for ever on empty answers.
+    const records = [
+      event('tool/call', 5, {
+        turn: 1,
+        step: 1,
+        callId: 'ancient',
+        name: 'bash',
+        arguments: JSON.stringify({ command: 'old' }),
+      }),
+    ]
+    const { ctx } = activityContext(records, { hasMore: true })
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+
+    await expect(
+      table['session.activity']?.({ sessionId: 's1', beforeSeq: 50, turn: 7 }, context),
+    ).resolves.toEqual({
+      sessionId: 's1',
+      asOfSeq: 9,
+      turn: 7,
+      entries: [],
+      hasMore: false,
+      oldestSeq: 5,
+    })
+  })
+
+  it('answers a backwards page for a session with no log as an empty stop', async () => {
+    const { ctx } = activityContext([], { noCut: true })
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+
+    await expect(
+      table['session.activity']?.({ sessionId: 'gone', beforeSeq: 5, turn: 2 }, context),
+    ).resolves.toEqual({
+      sessionId: 'gone',
+      asOfSeq: null,
+      turn: 2,
+      entries: [],
+      hasMore: false,
+      oldestSeq: null,
+    })
+  })
+
+  it('refuses beforeSeq without a turn, and ignores a turn without beforeSeq', async () => {
+    const records = [
+      event('turn/start', 1, { turn: 1 }),
+      event('tool/call', 2, {
+        turn: 1,
+        step: 1,
+        callId: 'c1',
+        name: 'bash',
+        arguments: JSON.stringify({ command: 'npm test' }),
+      }),
+    ]
+    const { ctx, calls } = activityContext(records)
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+
+    // A page read without a turn cannot be answered honestly: the page spans
+    // earlier turns, and guessing which one to keep would append another turn's
+    // rows to the feed.
+    await expect(
+      table['session.activity']?.({ sessionId: 's1', beforeSeq: 42 }, context),
+    ).rejects.toMatchObject({ code: 'MALFORMED_FRAME' })
+    await expect(
+      table['session.activity']?.({ sessionId: 's1', beforeSeq: 42, turn: 'two' }, context),
+    ).rejects.toMatchObject({ code: 'MALFORMED_FRAME' })
+    await expect(
+      table['session.activity']?.({ sessionId: 's1', beforeSeq: -1, turn: 2 }, context),
+    ).rejects.toMatchObject({ code: 'MALFORMED_FRAME' })
+
+    // `turn` alone is not a paging request: a forward read names its own
+    // running turn, so a stray one is ignored like any other unused field.
+    const forward = (await table['session.activity']?.(
+      { sessionId: 's1', turn: 99 },
+      context,
+    )) as { turn: number; entries: { id: string }[] }
+    expect(forward.turn).toBe(1)
+    expect(forward.entries.map((entry) => entry.id)).toEqual(['seq-2'])
+    // None of the refusals read the log; only the forward answer did.
+    expect(calls.filter((call) => call.method === 'page')).toHaveLength(1)
+  })
+})

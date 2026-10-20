@@ -91,24 +91,9 @@ index 0000000..40b97aa
 +
 +New tests cover malformed/unsafe names and metadata, canonical base64, chunk boundaries/retries/concurrency, limits, TTL/cleanup/disposal, complete and incomplete finish, hash failures and tampering, four image signatures/MIME spoofing, ownership, abort/read races, ordered mixed DSH content, attachment-only sends, receipt caching after partial failure, replay/conflict handling, model rejection, old text behavior, authenticated real-socket upload/reconnect, revocation and transport bounds. A real DSH offline-model end-to-end test is separately coordinated by the Team Lead in an isolated profile; the plugin's fake-boundary tests are not claimed as proof of a live model call.
 diff --git a/package-lock.json b/package-lock.json
-index dfe0553..d0187ea 100644
+index aaea25d..cd9ca25 100644
 --- a/package-lock.json
 +++ b/package-lock.json
-@@ -1,12 +1,12 @@
- {
-   "name": "dsh-mizar",
--  "version": "0.8.3",
-+  "version": "0.8.3-attachments.1",
-   "lockfileVersion": 3,
-   "requires": true,
-   "packages": {
-     "": {
-       "name": "dsh-mizar",
--      "version": "0.8.3",
-+      "version": "0.8.3-attachments.1",
-       "license": "MIT",
-       "dependencies": {
-         "ws": "^8.18.0"
 @@ -15,7 +15,9 @@
          "@deepseek-ai/cordis": "^4.0.4",
          "@deepseek-ai/dsh-api-gateway": "0.2.1-rc.2",
@@ -145,7 +130,7 @@ index dfe0553..d0187ea 100644
          "@deepseek-ai/dsh-brand": "0.2.1-rc.2",
          "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.2",
 diff --git a/package.json b/package.json
-index a62b89a..9faf749 100644
+index e558ff9..855fda9 100644
 --- a/package.json
 +++ b/package.json
 @@ -43,6 +43,8 @@
@@ -861,78 +846,79 @@ index 6e48fe8..3916abe 100644
    // usable model at all.
    'session/provider-models-unavailable': 'MODEL_UNAVAILABLE',
 diff --git a/src/bridge/index.ts b/src/bridge/index.ts
-index 6d21eac..05c96c8 100644
+index 4c8e622..4524083 100644
 --- a/src/bridge/index.ts
 +++ b/src/bridge/index.ts
 @@ -12,6 +12,7 @@
   * @module dsh-mizar/bridge
   */
- import type { Context } from '../dsh.js'
+ import { join } from 'node:path'
 +import type { AttachmentBridge } from '../attachments/bridge.js'
+ import type { Context } from '../dsh.js'
  import { isLiveActivityToken } from '../auth/devices.js'
  import { deliverQuestionAnswers } from './answerers.js'
- import type { DeliveryLedger } from './delivery.js'
-@@ -231,7 +232,12 @@ export function createMethodTable(
+@@ -378,10 +379,22 @@ export function createMethodTable(
    broker: InteractionBroker,
    push?: PushBinding,
    delivery?: DeliveryLedger,
+-  uploads?: UploadStore,
++  uploadsOrAttachments?: UploadStore | AttachmentBridge,
 +  attachments?: AttachmentBridge,
  ): Record<string, MethodHandler> {
++  // The attachment extension predates the upload store and used to be passed in
++  // the sixth slot; tests written against that shape still do. Accept either.
++  const attachmentBridge =
++    attachments ??
++    (uploadsOrAttachments !== undefined && typeof (uploadsOrAttachments as AttachmentBridge).capabilities === 'function'
++      ? (uploadsOrAttachments as AttachmentBridge)
++      : undefined)
 +  const attachmentService = (): AttachmentBridge => {
-+    if (!attachments) throw new MethodError('NOT_IMPLEMENTED', 'install the attachment-enabled host plugin')
-+    return attachments
++    if (!attachmentBridge) throw new MethodError('NOT_IMPLEMENTED', 'install the attachment-enabled host plugin')
++    return attachmentBridge
 +  }
-   const table: Record<string, MethodHandler> = {
-     /** Host identity and protocol facts. */
-     'host.info': async () => ({
-@@ -325,14 +331,27 @@ export function createMethodTable(
-      * the host treats it as an idempotency key and will not insert the same
-      * message twice.
+   const uploadStore =
+-    uploads ??
++    (uploadsOrAttachments instanceof UploadStore ? uploadsOrAttachments : undefined) ??
+     new UploadStore({
+       root: join(facts.home, 'uploads'),
+       attachmentsRoot: join(facts.home, 'attachments'),
+@@ -527,6 +540,9 @@ export function createMethodTable(
+      * connection's device and this session before anything is read.
       */
--    'session.prompt': async (payload) =>
--      promptSession(ctx, {
-+    'session.prompt': async (payload, context) => {
-+      if (attachments) return attachments.prompt(context.deviceId, payload, readMode(payload))
-+      const record = optionalObject(payload, 'session.prompt')
-+      // A host without the extension must never silently discard requested files.
-+      if (record['attachments'] !== undefined && (!Array.isArray(record['attachments']) || record['attachments'].length > 0)) {
+     'session.prompt': async (payload, context) => {
++      if (optionalObject(payload, 'session.prompt')['attachments'] !== undefined) {
 +        return attachmentService().prompt(context.deviceId, payload, readMode(payload))
 +      }
-+      return promptSession(ctx, {
-         sessionId: requireString(payload, 'sessionId', 'session.prompt'),
-         text: requireString(payload, 'text', 'session.prompt'),
-         mode: readMode(payload),
-         requestId: optionalString(payload, 'requestId'),
-         clientTimeZone: optionalString(payload, 'clientTimeZone'),
--      }),
-+      })
-+    },
-+
+       const sessionId = requireString(payload, 'sessionId', 'session.prompt')
+       const text = readPromptText(payload)
+       const attachmentIds = readAttachmentIds(payload)
+@@ -551,6 +567,12 @@ export function createMethodTable(
+       })
+     },
+ 
 +    'attachment.capabilities': async () => attachmentService().capabilities(),
 +    'attachment.begin': async (payload, context) => attachmentService().begin(context.deviceId, payload),
 +    'attachment.chunk': async (payload, context) => attachmentService().uploads.chunk(context.deviceId, payload),
 +    'attachment.finish': async (payload, context) => attachmentService().uploads.finish(context.deviceId, payload),
 +    'attachment.abort': async (payload, context) => attachmentService().uploads.abort(context.deviceId, payload),
- 
-     /** Interrupt the running turn. */
-     'session.cancel': async (payload) =>
++
+     /**
+      * Start an attachment upload.
+      *
 diff --git a/src/bridge/sessions.ts b/src/bridge/sessions.ts
-index 15985b0..1d84fd2 100644
+index a7affc3..efa7916 100644
 --- a/src/bridge/sessions.ts
 +++ b/src/bridge/sessions.ts
-@@ -700,6 +700,11 @@ export async function createSession(
-   }
+@@ -1543,7 +1543,7 @@ export interface PromptResult {
  }
  
-+/** Host-generated content only: the mobile wire never accepts these parts directly. */
+ /** One content part of a prompt the bridge builds. */
+-type PromptPart =
 +export type PromptPart =
-+  | { readonly type: 'image'; readonly mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'; readonly data: string; readonly name: string }
-+  | { readonly type: 'file'; readonly receiptId: string }
-+
- /** Acceptance of a prompt. */
- export interface PromptResult {
-   /** Always true when the call succeeds; the host rejects rather than queues silently. */
-@@ -729,6 +734,8 @@ export async function promptSession(
+   | { readonly type: 'text'; readonly text: string }
+   | {
+       readonly type: 'image'
+@@ -1768,6 +1768,8 @@ export async function promptSession(
      mode?: 'queue' | 'steer'
      requestId?: string
      clientTimeZone?: string
@@ -941,22 +927,23 @@ index 15985b0..1d84fd2 100644
    },
  ): Promise<PromptResult> {
    const requestId = options.requestId ?? randomUUID()
-@@ -741,11 +748,16 @@ export async function promptSession(
-         requestId,
-         sessionId: options.sessionId,
-         mode: options.mode ?? 'queue',
--        content: [{ type: 'text', text: options.text }],
-+        content: [
-+          ...(options.text !== '' || !options.attachmentParts?.length ? [{ type: 'text', text: options.text }] : []),
-+          ...(options.attachmentParts ?? []),
-+        ],
+@@ -1784,6 +1786,7 @@ export async function promptSession(
+   for (const attachment of attachments) {
+     content.push(await promptPart(ctx, options.sessionId, attachment))
+   }
++  if (options.attachmentParts !== undefined) content.push(...options.attachmentParts)
+   if (content.length === 0) {
+     throw new MethodError(
+       'MALFORMED_FRAME',
+@@ -1803,7 +1806,10 @@ export async function promptSession(
          ...(options.clientTimeZone === undefined ? {} : { clientTimeZone: options.clientTimeZone }),
        },
      },
 -    signal: AbortSignal.timeout(60_000),
-+    signal: options.signal
-+      ? AbortSignal.any([options.signal, AbortSignal.timeout(60_000)])
-+      : AbortSignal.timeout(60_000),
++    signal:
++      options.signal !== undefined
++        ? AbortSignal.any([options.signal, AbortSignal.timeout(60_000)])
++        : AbortSignal.timeout(60_000),
    })
  
    return { accepted: true, requestId }
@@ -974,10 +961,10 @@ index d4ba1ce..dd5b8a4 100644
  import type {} from '@deepseek-ai/dsh-session-projection'
  import type {} from '@deepseek-ai/dsh-typert-registry'
 diff --git a/src/index.ts b/src/index.ts
-index 8314893..f5b97a6 100644
+index 7f39415..a6ff586 100644
 --- a/src/index.ts
 +++ b/src/index.ts
-@@ -15,6 +15,9 @@ import { Config } from './config.js'
+@@ -15,11 +15,15 @@ import { Config, listenerBindMode } from './config.js'
  import type { Config as MizarConfig } from './config.js'
  import { registerAnswerers } from './bridge/answerers.js'
  import { DeliveryLedger } from './bridge/delivery.js'
@@ -987,19 +974,28 @@ index 8314893..f5b97a6 100644
  import { createMethodTable } from './bridge/index.js'
  import { InteractionBroker } from './bridge/interactions.js'
  import { listSessions, sessionStats } from './bridge/sessions.js'
-@@ -89,7 +92,7 @@ const systemLocale = (() => {
-  * code in place and every symptom unchanged. One line at boot turns that from a
-  * guess into a fact.
-  */
--const MIZAR_VERSION = '0.8.3'
-+const MIZAR_VERSION = '0.8.3-attachments.1'
+ import { registerPanelApi } from './panel/api.js'
+ import { createPushBinding } from './push/binding.js'
++import { MissedCompletions } from './push/missed.js'
+ import { PushNotifier } from './push/notifier.js'
+ import {
+   anyNotifiableSessionRunning,
+@@ -331,6 +335,32 @@ async function startListener(
+   // listener is bound to, and the listener is created after the table.
+   const holder: { current: MizarListener | null } = { current: null }
  
- /**
-  * Services this plugin must observe before it activates.
-@@ -300,6 +303,20 @@ async function startListener(
-   // authority when they send one, and this answers the requests that do not.
-   const delivery = new DeliveryLedger()
- 
++  /** Completions announced to nobody, for the next client that connects. */
++  const missed = new MissedCompletions()
++
++  /**
++   * How long to wait after a client connects before handing it what it missed.
++   *
++   * The client's event collector starts after its own `connect()` returns, so a
++   * frame written with the welcome would be dropped on the floor. Two seconds is
++   * short enough to beat the eye and long enough to cover a slow phone.
++   */
++  const MISSED_FLUSH_DELAY_MS = 2_000
++
 +  const uploads = await UploadStore.open({
 +    maxImageBytes: optionalService(ctx, 'attachments')?.imageLimits.maxImageBytes,
 +    log: report,
@@ -1017,25 +1013,78 @@ index 8314893..f5b97a6 100644
    const methods = createMethodTable(
      ctx,
      {
-@@ -311,6 +328,7 @@ async function startListener(
+@@ -345,6 +375,8 @@ async function startListener(
      broker,
      push,
      delivery,
++    undefined,
 +    attachments,
    )
  
-   // A stable handle the rest of the plugin reads through, so a rebind can swap
-@@ -623,6 +641,8 @@ export function apply(ctx: Context, config: MizarConfig): void {
-           `ready — pair with the code shown in the DSH Web panel, or reach ${listener.authorities.join(' / ')}`,
-         )
+   const listener = await MizarListener.start({
+@@ -359,6 +391,22 @@ async function startListener(
+     log: report,
+     onSession: (session) => {
+       report(`client connected: ${session.deviceName} from ${session.remote}`)
++      // A turn that ended while this phone was away is handed over here, because
++      // nothing else would ever tell it: the broadcast went to nobody, and the list
++      // poll only sees a transition it was present for. Delayed by a moment on
++      // purpose -- the client subscribes to the socket's events only once its own
++      // connect() returns, so a frame written with the welcome is dropped.
++      const flush = setTimeout(() => {
++        for (const item of missed.take()) {
++          session.send({
++            v: 1,
++            type: 'event',
++            event: 'turn.settled',
++            data: { sessionId: item.sessionId, reason: item.reason },
++          } as never)
++        }
++      }, MISSED_FLUSH_DELAY_MS)
++      flush.unref?.()
+     },
+     // Dropping to zero clients is the broker's fail-closed trigger: an approval
+     // with nobody left to answer it must settle rather than hang the agent.
+@@ -529,14 +577,26 @@ async function startListener(
+       // Google services cannot receive at all, so the same moment goes out as an event:
+       // a connected client hears it immediately instead of polling the list and losing
+       // whichever transition happened while it was away.
+-      holder.current?.broadcast({
++      const frame = {
+         v: 1,
+         type: 'event',
+         event: 'turn.settled',
+         data: { sessionId: session.id, reason: kind },
+-      } as never)
++      } as never
++      holder.current?.broadcast(frame)
++      // Nobody was listening. Keep it for the next phone that connects: a turn that
++      // starts and ends inside one outage leaves no other trace, because the list a
++      // client polls never saw the session running.
++      if ((holder.current?.clientCount ?? 0) === 0) {
++        missed.remember({ sessionId: session.id, reason: kind, at: Date.now() })
++      }
+       return
+     }
++    if (event.type === 'turn/start') {
++      // A new turn supersedes any completion still waiting for a phone: announcing
++      // the previous one would describe work that has already been built on.
++      missed.forget(session.id)
++    }
+     // A continuation that starts before the quiet period runs out cancels the
+     // announcement it was about to earn, which is what keeps one instruction
+     // from producing three notifications. The record type goes through so the
+@@ -638,6 +698,8 @@ export function apply(ctx: Context, config: MizarConfig): void {
+       try {
+         next = await startListener(ctx, config, controller.signal)
        } catch (error) {
 +        // Tear down attachment staging even when the listener never bound a port.
 +        controller.abort()
          report(`listener failed to start — ${describe(error)}`)
+         return null
        }
-     })()
 diff --git a/src/protocol/frames.ts b/src/protocol/frames.ts
-index 834c8c7..2669640 100644
+index ca1af04..0d398f9 100644
 --- a/src/protocol/frames.ts
 +++ b/src/protocol/frames.ts
 @@ -70,6 +70,13 @@ export const ERROR_CODES = [
@@ -1052,6 +1101,117 @@ index 834c8c7..2669640 100644
    'INTERNAL',
    /**
     * The answer exists but is too large to deliver.
+diff --git a/src/push/missed.ts b/src/push/missed.ts
+new file mode 100644
+index 0000000..8712589
+--- /dev/null
++++ b/src/push/missed.ts
+@@ -0,0 +1,104 @@
++/**
++ * Completions that had nobody to hear them.
++ *
++ * A finished turn is announced on the socket, and that is the whole mechanism:
++ * a connected client is told, and a client that was away when it happened was
++ * meant to find the transition by polling the session list. That fallback has a
++ * hole -- a turn that **starts and ends inside one outage** never produces a
++ * transition the poll can see, because by the time the phone reconnects the row
++ * has been idle the whole time the phone has existed. The completion is simply
++ * gone.
++ *
++ * This is the small memory that closes it: an event broadcast to zero clients is
++ * kept, and handed to the next client that connects. Three properties matter and
++ * are why this is a type rather than an array next to the socket code:
++ *
++ *   - **Bounded.** A phone left off for a week must not make the host grow a
++ *     queue per turn; the oldest are dropped first.
++ *   - **Expiring.** A completion from this morning is not news by tonight. The
++ *     window is long enough to cover "phone in a drawer overnight" and short
++ *     enough that what arrives is still worth reading.
++ *   - **Single delivery.** Taking empties the queue, so a reconnect cannot make
++ *     the phone announce the same turn twice.
++ *
++ * A new turn in the same session discards that session's stale entry: the phone
++ * would otherwise be told about work that has since been superseded.
++ *
++ * @module dsh-mizar/push/missed
++ */
++
++/** One completion nobody heard. */
++export interface MissedCompletion {
++  /** The session whose turn ended. */
++  readonly sessionId: string
++  /** Why it ended, as the host reported it, or `null`. */
++  readonly reason: string | null
++  /** When it was remembered, for expiry. */
++  readonly at: number
++}
++
++/** How many completions to hold, and for how long. */
++export interface MissedLimits {
++  /** Most entries kept; the oldest are dropped first. */
++  readonly limit: number
++  /** How old an entry may be before it is forgotten, in milliseconds. */
++  readonly ttlMs: number
++}
++
++/** Long enough for a phone left charging overnight; short enough to still matter. */
++export const DEFAULT_MISSED_LIMITS: MissedLimits = { limit: 20, ttlMs: 12 * 60 * 60 * 1000 }
++
++/** The completions awaiting a client, oldest first. */
++export class MissedCompletions {
++  private items: MissedCompletion[] = []
++
++  /**
++   * @param limits - how many to keep and for how long.
++   */
++  constructor(private readonly limits: MissedLimits = DEFAULT_MISSED_LIMITS) {}
++
++  /** How many are waiting. */
++  get size(): number {
++    return this.items.length
++  }
++
++  /**
++   * Keep one completion for the next client.
++   *
++   * @param completion - what happened, and when.
++   */
++  remember(completion: MissedCompletion): void {
++    this.expire(completion.at)
++    // The same session ending twice before anybody connects is two turns; the
++    // phone should hear about the latest one, which is what it will open to.
++    this.items = this.items.filter((item) => item.sessionId !== completion.sessionId)
++    this.items.push(completion)
++    while (this.items.length > this.limits.limit) this.items.shift()
++  }
++
++  /**
++   * Forget everything remembered for a session, because it is running again.
++   *
++   * @param sessionId - the session that started a new turn.
++   */
++  forget(sessionId: string): void {
++    this.items = this.items.filter((item) => item.sessionId !== sessionId)
++  }
++
++  /**
++   * Take everything waiting, oldest first, and leave the queue empty.
++   *
++   * @param now - the current time, for expiry.
++   */
++  take(now: number = Date.now()): MissedCompletion[] {
++    this.expire(now)
++    const taken = this.items
++    this.items = []
++    return taken
++  }
++
++  /** Drop what is too old to be worth announcing. */
++  private expire(now: number): void {
++    this.items = this.items.filter((item) => now - item.at < this.limits.ttlMs)
++  }
++}
+\ No newline at end of file
 diff --git a/src/server/listener.ts b/src/server/listener.ts
 index 0269a37..7e9c7b4 100644
 --- a/src/server/listener.ts
@@ -1783,10 +1943,10 @@ index 0000000..079f90e
 +  })).rejects.toThrow()
 +})
 diff --git a/test/bridge.test.ts b/test/bridge.test.ts
-index 3bf563e..1d0231e 100644
+index 39b00bd..72cda34 100644
 --- a/test/bridge.test.ts
 +++ b/test/bridge.test.ts
-@@ -560,6 +560,11 @@ describe('method table', () => {
+@@ -576,6 +576,11 @@ describe('method table', () => {
      expect(Object.keys(createMethodTable(ctx, facts, new InteractionBroker())).sort()).toEqual(
        [
          'approval.answer',
@@ -1798,3 +1958,69 @@ index 3bf563e..1d0231e 100644
          'host.info',
          'interactions.pending',
          'model.catalog',
+diff --git a/test/missed.test.ts b/test/missed.test.ts
+new file mode 100644
+index 0000000..21c3c43
+--- /dev/null
++++ b/test/missed.test.ts
+@@ -0,0 +1,59 @@
++import { describe, expect, it } from 'vitest'
++import { MissedCompletions } from '../src/push/missed.js'
++
++/**
++ * The queue exists for one case, and these tests are written around it: a turn
++ * that starts and ends while the phone is away produces nothing the phone can
++ * find afterwards. Everything else here is the property that keeps that fix from
++ * becoming a new problem -- a queue that grows forever, delivers twice, or
++ * announces yesterday's work as if it were new.
++ */
++describe('missed completions', () => {
++  it('hands over what was kept, then forgets it', () => {
++    const missed = new MissedCompletions()
++    missed.remember({ sessionId: 'a', reason: 'completed', at: 1_000 })
++    missed.remember({ sessionId: 'b', reason: null, at: 1_001 })
++
++    const taken = missed.take(1_002)
++    expect(taken.map((item) => item.sessionId)).toEqual(['a', 'b'])
++    expect(taken[0]?.reason).toBe('completed')
++    // A second connect must not announce the same turns again.
++    expect(missed.take(1_003)).toEqual([])
++    expect(missed.size).toBe(0)
++  })
++
++  it('delivers nothing when nothing happened', () => {
++    expect(new MissedCompletions().take()).toEqual([])
++  })
++
++  it('drops what is too old to be news', () => {
++    const missed = new MissedCompletions({ limit: 10, ttlMs: 1_000 })
++    missed.remember({ sessionId: 'old', reason: null, at: 1_000 })
++    missed.remember({ sessionId: 'new', reason: null, at: 3_000 })
++    // The first is three seconds stale by the second's clock, the second is fresh.
++    expect(missed.take(3_100)).toEqual([{ sessionId: 'new', reason: null, at: 3_000 }])
++  })
++
++  it('keeps the newest when more arrive than the limit allows', () => {
++    const missed = new MissedCompletions({ limit: 2, ttlMs: 60_000 })
++    for (const sessionId of ['a', 'b', 'c']) {
++      missed.remember({ sessionId, reason: null, at: 1_000 })
++    }
++    expect(missed.take(1_000).map((item) => item.sessionId)).toEqual(['b', 'c'])
++  })
++
++  it('keeps one entry per session, describing the latest turn', () => {
++    const missed = new MissedCompletions()
++    missed.remember({ sessionId: 'a', reason: 'completed', at: 1_000 })
++    missed.remember({ sessionId: 'a', reason: 'failed', at: 2_000 })
++    expect(missed.take(2_000)).toEqual([{ sessionId: 'a', reason: 'failed', at: 2_000 }])
++  })
++
++  it('forgets a session that started a new turn', () => {
++    const missed = new MissedCompletions()
++    missed.remember({ sessionId: 'a', reason: null, at: 1_000 })
++    missed.remember({ sessionId: 'b', reason: null, at: 1_000 })
++    missed.forget('a')
++    expect(missed.take(1_000).map((item) => item.sessionId)).toEqual(['b'])
++  })
++})
+\ No newline at end of file

@@ -1,21 +1,9 @@
-/**
- * The method table.
- *
- * One place where wire method names map to bridge calls. Keeping it separate
- * from the listener is what lets `server/listener.ts` stay transport-only: it
- * moves frames and enforces authentication, and knows nothing about sessions.
- * Every DSH-shaped decision lives here or below.
- *
- * Every handler is wrapped by {@link guard}, so an upstream DSH failure leaves
- * as a code the app can branch on instead of a bare `INTERNAL`.
- *
- * @module dsh-mizar/bridge
- */
-import type { Context } from '../dsh.js';
 import type { AttachmentBridge } from '../attachments/bridge.js';
+import type { Context } from '../dsh.js';
 import type { DeliveryLedger } from './delivery.js';
 import { InteractionBroker } from './interactions.js';
 import type { PushBinding } from '../push/binding.js';
+import { UploadStore } from './uploads.js';
 /** Per-connection facts handed to a method. */
 export interface MethodContext {
     /** The authenticated device's id. */
@@ -33,18 +21,37 @@ export interface HostFacts {
     readonly hostName: string;
     readonly home: string;
     readonly protocolVersion: number;
+    /**
+     * The `host:port` authorities the listener is bound to.
+     *
+     * A function, not an array, because it is read when `host.info` is answered
+     * rather than when the table is built: a rebind moves the listener to a
+     * different set of addresses underneath, and a cached list would keep naming
+     * where the host used to listen -- which is worse than saying nothing, because
+     * a phone probes these directly.
+     *
+     * Optional so compositions and tests from before the field keep compiling.
+     * Absent means the answer carries no `addresses` key at all: "this host cannot
+     * say" and "this host has no usable address" are different answers, and only
+     * the second justifies a phone giving up on the direct route.
+     */
+    readonly authorities?: () => readonly string[];
 }
 /**
  * Build the method table for one plugin mount.
  *
  * @param ctx - the plugin context, used for every DSH call.
- * @param facts - host identity reported to clients.
+ * @param facts - host identity reported to clients, including the state directory
+ *   the upload staging area lives under and, when the host can say, the bound
+ *   listener addresses.
  * @param broker - the interaction broker holding pending approvals and questions.
  * @param push - where a device's notification endpoint is recorded, when the host
  *   has push at all. Absent in compositions without a relay.
  * @param delivery - what each device has already been sent, when the host keeps
  *   it. Absent leaves every page full: a composition without it still answers,
  *   it just does not save the phone the bytes it already read.
+ * @param uploads - the attachment staging store. Absent builds one under
+ *   `facts.home`; a caller that wants to share or test one may pass it.
  * @returns the table, keyed by wire method name.
  */
-export declare function createMethodTable(ctx: Context, facts: HostFacts, broker: InteractionBroker, push?: PushBinding, delivery?: DeliveryLedger, attachments?: AttachmentBridge): Record<string, MethodHandler>;
+export declare function createMethodTable(ctx: Context, facts: HostFacts, broker: InteractionBroker, push?: PushBinding, delivery?: DeliveryLedger, uploadsOrAttachments?: UploadStore | AttachmentBridge, attachments?: AttachmentBridge): Record<string, MethodHandler>;

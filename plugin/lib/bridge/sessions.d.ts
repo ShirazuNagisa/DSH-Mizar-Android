@@ -1,5 +1,6 @@
 import type { Context } from '../dsh.js';
 import { type SessionStatsFrame } from './stats.js';
+import { type PromptAttachment } from './uploads.js';
 /** One row in the session list. */
 export interface SessionRow {
     readonly sessionId: string;
@@ -30,6 +31,16 @@ export declare const SESSION_PROJECTION_KEYS: readonly ["tokenUsage", "contextPr
 /**
  * List the sessions DSH would show, newest activity first.
  *
+ * Sessions DSH has archived are left out. DSH's `session/list` does not know
+ * about the archive set -- that lives in the workspace registry, and the
+ * computer's own sidebar filters it itself -- so a phone drawing the raw list
+ * would keep showing rows the operator has already put away on the computer.
+ * The set is read at this boundary rather than inside the registry because
+ * archiving deliberately keeps the session everywhere else (log, workspace
+ * slot) and only hides it from the surfaces that draw lists. A composition
+ * without a registry keeps the unfiltered list it had before: it cannot archive
+ * either.
+ *
  * @param ctx - a context observing `ctx.typertGateway`.
  * @returns the rows.
  */
@@ -49,21 +60,10 @@ export declare function sessionStats(ctx: Context, sessionId: string): Promise<S
 /**
  * Read a page of a session's log.
  *
- * The two-step shape is not optional. `session/page` is keyed by `address` and a
- * `throughSeq` cut, not by session id, and the cut comes from opening the
- * session's follow stream and reading one frame -- so a caller cannot ask "give
- * me the last N messages" without first asking "what is the log at".
- * `session.maxMessages` counts messages rather than raw events, so a page that
- * spans a long tool run still returns the requests around it rather than a
- * window of deltas.
- *
- * The cut comes from {@link followCursor}, and from {@link projectionsCut} when
- * that cannot answer. The reply is narrowed by {@link summaryRecords} to what
- * the conversation screen draws, filtered to what the phone does not already
- * hold, and then trimmed to what fits by {@link withinBudget}.
- *
- * Works for a cold session: neither read activates an agent, which was measured
- * for the follow path before it was adopted here.
+ * See {@link readLogPage} for the two reads behind the cut. The reply is
+ * narrowed by {@link summaryRecords} to what the conversation screen draws,
+ * filtered to what the phone does not already hold, and then trimmed to what
+ * fits by {@link withinBudget}.
  *
  * @param ctx - a context observing `ctx.typertGateway`.
  * @param sessionId - the session to read.
@@ -98,6 +98,88 @@ export interface SessionMessagesResult {
     readonly records: readonly unknown[];
     readonly hasMore: boolean;
 }
+/** One compact line of a running turn's process. */
+export interface SessionActivityEntry {
+    /** Stable across polls: `seq-<n>` when the record has a log position. */
+    readonly id: string;
+    /** The record's log position, or `null` when the host numbered nothing. */
+    readonly seq: number | null;
+    /** When the record was written, epoch milliseconds. */
+    readonly at: number;
+    /** Narration (`thinking`), a shell-like `command`, its `output`, or another `tool`. */
+    readonly kind: 'thinking' | 'command' | 'output' | 'tool';
+    /** The tool name for command/tool rows, the matching name for output; may be empty. */
+    readonly title: string;
+    /** Compact one-line detail, at most {@link ACTIVITY_TEXT_CHARS} characters. */
+    readonly text: string;
+}
+/** What `session.activity` answers: the running turn's compact process detail. */
+export interface SessionActivityResult {
+    readonly sessionId: string;
+    /** The log cut the page was taken at; `null` when the session is unknown. */
+    readonly asOfSeq: number | null;
+    /** The currently running turn, or `null` when nothing is running. */
+    readonly turn: number | null;
+    /**
+     * Only the running turn's process rows, oldest first.
+     *
+     * No committed user/assistant messages and no step markers: the summary page
+     * already carries those, and this feed exists to answer "what is it doing
+     * right now" without repeating the conversation.
+     */
+    readonly entries: readonly SessionActivityEntry[];
+    /**
+     * Whether older rows may still be read.
+     *
+     * Wider than "this answer was trimmed", because a long turn extends before
+     * the page window even when every row fitted. On a forward read this is
+     * "rows were dropped" OR "the log page has older records"; on a backwards
+     * read it is "the page has older records" AND "this page had rows of the
+     * requested turn" -- false there means the walk has passed the turn's
+     * beginning, and asking again would only return empty pages.
+     */
+    readonly hasMore: boolean;
+    /**
+     * The smallest log position in the page the host read; `null` when nothing
+     * was read or no record in it named a position.
+     *
+     * The cursor for paging back: the phone sends this value back as
+     * `beforeSeq`. It is the page's own lower bound rather than the oldest
+     * *returned* row, so it says where reading stopped rather than how many rows
+     * survived the caps.
+     */
+    readonly oldestSeq: number | null;
+}
+/**
+ * The running turn's compact process detail.
+ *
+ * A paid-account feature, but a read-only host method: it reads a log page (see
+ * {@link readLogPage}), narrows it to one turn and maps it to one-line rows. The
+ * conversation itself does not travel here -- committed user/assistant
+ * messages, step markers and every unrecognised event are skipped -- because
+ * the conversation screen already drew them from the summary page.
+ *
+ * Two reads share that mapping. Without a cursor this is the newest page and
+ * finds the turn that has not ended yet. With `beforeSeq` + `turn` it reads the
+ * window before a position and keeps only that turn's rows, which is how a
+ * scrolling reader lazily loads the older part of a long turn. The answer's
+ * `oldestSeq` is the cursor for the next such request.
+ *
+ * Everything about the answer is bounded so it stays a small frame: at most
+ * {@link ACTIVITY_MAX_ENTRIES} rows, a byte budget of
+ * {@link ACTIVITY_MAX_BYTES}, 240-character text and one line each.
+ *
+ * @param ctx - a context observing `ctx.typertGateway`.
+ * @param sessionId - the session to inspect.
+ * @param maxEntries - how many rows the client wants; capped, default 200.
+ * @param beforeSeq - read the page before this log position instead of the
+ *   newest one. Requires `turn`.
+ * @param turn - the running turn a backwards page belongs to. Ignored without
+ *   `beforeSeq`, because a forward read names its own turn.
+ * @returns the running turn's rows, or an empty feed when nothing runs.
+ * @throws MethodError when `beforeSeq` is given without `turn`.
+ */
+export declare function sessionActivity(ctx: Context, sessionId: string, maxEntries?: number, beforeSeq?: number, turn?: number): Promise<SessionActivityResult>;
 /** A newly created or resumed session. */
 export interface CreateSessionResult {
     readonly sessionId: string;
@@ -135,16 +217,6 @@ export declare function createSession(ctx: Context, options: {
     sessionId?: string;
     agentPreset?: string;
 }): Promise<CreateSessionResult>;
-/** Host-generated content only: the mobile wire never accepts these parts directly. */
-export type PromptPart = {
-    readonly type: 'image';
-    readonly mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
-    readonly data: string;
-    readonly name: string;
-} | {
-    readonly type: 'file';
-    readonly receiptId: string;
-};
 /** Acceptance of a prompt. */
 export interface PromptResult {
     /** Always true when the call succeeds; the host rejects rather than queues silently. */
@@ -152,6 +224,19 @@ export interface PromptResult {
     /** The idempotency key the host recorded, echoed for the client's own retry bookkeeping. */
     readonly requestId: string;
 }
+/** One content part of a prompt the bridge builds. */
+export type PromptPart = {
+    readonly type: 'text';
+    readonly text: string;
+} | {
+    readonly type: 'image';
+    readonly data: string;
+    readonly mediaType: string;
+    readonly name?: string;
+} | {
+    readonly type: 'file';
+    readonly receiptId: string;
+};
 /**
  * Send a prompt.
  *
@@ -161,13 +246,23 @@ export interface PromptResult {
  * generate it once and reuse it across retries — which is why the optional
  * `requestId` argument exists rather than being minted here every call.
  *
+ * ### Attachments
+ *
+ * `text` may be absent when there is at least one attachment, and the resulting
+ * content preserves the caller's order: the text first (when there is one), then
+ * each attachment in the order its id was listed. A prompt with neither is
+ * refused before any host call -- DSH itself requires one of the two, and saying
+ * so here keeps the failure a clear `MALFORMED_FRAME` rather than an upstream
+ * error.
+ *
  * @param ctx - a context observing `ctx.typertGateway`.
- * @param options - target session, text, delivery mode and idempotency key.
+ * @param options - target session, text and/or attachments, delivery mode and idempotency key.
  * @returns the acceptance.
  */
 export declare function promptSession(ctx: Context, options: {
     sessionId: string;
-    text: string;
+    text?: string;
+    attachments?: readonly PromptAttachment[];
     mode?: 'queue' | 'steer';
     requestId?: string;
     clientTimeZone?: string;
