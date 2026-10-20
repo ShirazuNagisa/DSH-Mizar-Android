@@ -196,6 +196,7 @@ private fun TypewriterAgentText(text: String) {
             revealed = text.length
             return@LaunchedEffect
         }
+        android.util.Log.i("mizar-notify", "typewriter start: ${text.length} chars")
         val start = System.nanoTime()
         while (true) {
             val elapsedMicros = (System.nanoTime() - start) / 1_000L
@@ -203,6 +204,7 @@ private fun TypewriterAgentText(text: String) {
             if (plan.isFinished(elapsedMicros)) break
             delay(16)
         }
+        android.util.Log.i("mizar-notify", "typewriter done")
     }
     Text(
         text = text.take(revealed),
