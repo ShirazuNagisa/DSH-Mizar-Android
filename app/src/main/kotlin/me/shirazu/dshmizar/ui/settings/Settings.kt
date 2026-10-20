@@ -85,6 +85,7 @@ fun SettingsDialog(
     onNotifyQuestions: (Boolean) -> Unit,
     onNotifyApprovals: (Boolean) -> Unit,
     onHaptics: (Boolean) -> Unit,
+    onSlowTypewriter: (Boolean) -> Unit,
     onLocalNetworkFirst: (Boolean) -> Unit,
     onExportLogs: ((File?) -> Unit) -> Unit,
     onRename: (String, String?) -> Unit = { _, _ -> },
@@ -310,6 +311,7 @@ fun SettingsDialog(
         )
 
         SectionLabel(stringResource(R.string.diagnostics))
+        SettingToggle(stringResource(R.string.slow_typewriter), state.slowTypewriter, onSlowTypewriter)
         TextButton(
             onClick = {
                 onExportLogs { file ->

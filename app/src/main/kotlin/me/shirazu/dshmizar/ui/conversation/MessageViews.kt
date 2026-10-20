@@ -54,6 +54,7 @@ import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.ContinuousCornerShape
 import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.LocalReduceMotion
+import me.shirazu.dshmizar.ui.design.LocalSlowTypewriter
 import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.mizar.kit.ConversationItem
@@ -189,7 +190,13 @@ private fun AgentText(text: String, typing: Boolean, onCopy: (String) -> Unit) {
 @Composable
 private fun TypewriterAgentText(text: String) {
     val reduceMotion = LocalReduceMotion.current
-    val plan = remember(text) { TypewriterPlan.forText(text) }
+    val slow = LocalSlowTypewriter.current
+    val plan = remember(text, slow) {
+        TypewriterPlan.forText(
+            text,
+            maximumDurationMillis = if (slow) 8_000L else TypewriterPlan.DEFAULT_MAXIMUM_DURATION_MILLIS,
+        )
+    }
     var revealed by remember(text) { mutableIntStateOf(if (reduceMotion) text.length else 0) }
     LaunchedEffect(text) {
         if (reduceMotion) {

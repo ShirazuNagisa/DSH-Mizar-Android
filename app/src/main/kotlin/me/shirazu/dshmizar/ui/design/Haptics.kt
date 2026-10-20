@@ -2,7 +2,6 @@ package me.shirazu.dshmizar.ui.design
 
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.hapticfeedback.HapticFeedback
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 
 /**
@@ -14,6 +13,9 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
  * already captured and calls [mizarPerform].
  */
 val LocalHapticsEnabled = staticCompositionLocalOf { true }
+
+/** Diagnostic: the typewriter runs long enough to watch on a real screen. */
+val LocalSlowTypewriter = staticCompositionLocalOf { false }
 
 object MizarHapticsState {
     @Volatile

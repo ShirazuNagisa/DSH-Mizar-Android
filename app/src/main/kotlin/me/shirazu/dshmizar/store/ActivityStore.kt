@@ -92,6 +92,10 @@ class ActivityStore(context: Context) {
     fun hapticsEnabled(): Boolean = prefs.getBoolean(HAPTICS, true)
     fun setHapticsEnabled(on: Boolean) { prefs.edit().putBoolean(HAPTICS, on).apply() }
 
+    /** Slower typewriter, for watching the reveal on a real screen. */
+    fun slowTypewriter(): Boolean = prefs.getBoolean(SLOW_TYPEWRITER, false)
+    fun setSlowTypewriter(on: Boolean) { prefs.edit().putBoolean(SLOW_TYPEWRITER, on).apply() }
+
     /**
      * Whether the operator wants the LAN tried before the relay.
      *
@@ -115,6 +119,7 @@ class ActivityStore(context: Context) {
         const val NOTIFY_QUESTIONS = "notify-questions"
         const val NOTIFY_APPROVALS = "notify-approvals"
         const val HAPTICS = "haptics"
+        const val SLOW_TYPEWRITER = "slow-typewriter"
         const val LAN_FIRST = "lan-first"
     }
 }

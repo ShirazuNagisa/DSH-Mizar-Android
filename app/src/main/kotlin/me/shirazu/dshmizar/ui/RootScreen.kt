@@ -72,7 +72,10 @@ fun RootScreen(model: AppViewModel, incomingPairUri: String?, onPairUriHandled: 
     }
 
     SideEffect { MizarHapticsState.enabled = state.hapticsEnabled }
-    CompositionLocalProvider(LocalHapticsEnabled provides state.hapticsEnabled) {
+    CompositionLocalProvider(
+        LocalHapticsEnabled provides state.hapticsEnabled,
+        me.shirazu.dshmizar.ui.design.LocalSlowTypewriter provides state.slowTypewriter,
+    ) {
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             // Above both screens on purpose: a lost connection matters whether the

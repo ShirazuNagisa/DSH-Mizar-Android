@@ -169,6 +169,8 @@ data class UiState(
     val notifyApprovals: Boolean = true,
     /** Master switch for every haptic in the app. */
     val hapticsEnabled: Boolean = true,
+    /** Diagnostic: stretch the typewriter to eight seconds so it can be watched. */
+    val slowTypewriter: Boolean = false,
     /** Prefer a direct LAN socket over the relay when one can be found. */
     val localNetworkFirst: Boolean = false,
     /** The live link is a direct/LAN socket rather than the relay. */
@@ -224,6 +226,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             notifyQuestions = activity.notifyQuestions(),
             notifyApprovals = activity.notifyApprovals(),
             hapticsEnabled = activity.hapticsEnabled(),
+            slowTypewriter = activity.slowTypewriter(),
         ),
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -1967,6 +1970,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setHapticsEnabled(on: Boolean) {
         activity.setHapticsEnabled(on)
         _state.update { it.copy(hapticsEnabled = on) }
+    }
+
+    fun setSlowTypewriter(on: Boolean) {
+        activity.setSlowTypewriter(on)
+        _state.update { it.copy(slowTypewriter = on) }
     }
 
     /**
