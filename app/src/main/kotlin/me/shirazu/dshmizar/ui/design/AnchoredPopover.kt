@@ -67,8 +67,9 @@ import kotlin.math.roundToInt
  * wears the console's clothes: a hairline stroke, the medium corner, and a fill
  * that lets the work behind it breathe through, like the composer it floats beside.
  *
- * [width] may be [Dp.Unspecified]: the window then takes its widest row, as a
- * dropdown menu does.
+ * [width] may be [Dp.Unspecified]: the window then takes a dropdown menu's measure --
+ * as wide as its widest row, and Material's 8 dp of padding top and bottom with
+ * none of the windows' own trailing breath under the last row.
  *
  * Mount it inside the `Box` that wraps the trigger -- the anchor is the parent.
  */
@@ -214,13 +215,17 @@ private fun PopoverSurface(
                 .width(IntrinsicSize.Max)
                 .verticalScroll(rememberScrollState()),
         ) {
-            PopoverBody(title = title, content = content)
+            PopoverBody(title = title, trailingBreath = width != Dp.Unspecified, content = content)
         }
     }
 }
 
 @Composable
-private fun ColumnScope.PopoverBody(title: String?, content: @Composable ColumnScope.() -> Unit) {
+private fun ColumnScope.PopoverBody(
+    title: String?,
+    trailingBreath: Boolean,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     if (title != null) {
         Text(
             text = title.uppercase(),
@@ -233,7 +238,7 @@ private fun ColumnScope.PopoverBody(title: String?, content: @Composable ColumnS
         )
     }
     content()
-    Spacer(Modifier.height(8.dp))
+    if (trailingBreath) Spacer(Modifier.height(8.dp))
 }
 
 /**
