@@ -5,8 +5,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.indication
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,6 +56,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -71,7 +71,6 @@ import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.Motion
 import me.shirazu.dshmizar.ui.design.NumericText
 import me.shirazu.dshmizar.ui.design.Radius
-import me.shirazu.dshmizar.ui.design.ShapedIndication
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.glassCapsule
 import me.shirazu.dshmizar.ui.design.glassCard
@@ -281,7 +280,6 @@ private fun Deck(
                     count = all.size,
                     titles = titles,
                     selectedSessionId = selectedSessionId,
-                    onNext = onNext,
                 )
             }
             // Scrolls only once it is taller than the dock may be.
@@ -299,6 +297,22 @@ private fun Deck(
                 }
             }
         }
+        // The Next target lives at the card level, not in the header: the header's
+        // own layout shrinks to keep the card height unchanged, and a target inside
+        // it would be clipped back to the pill's height. This box is a sibling of
+        // the card, so the parent does not clip it, and it does not change layout.
+        if (all.size > 1) {
+            val nextLabel = stringResource(R.string.next_card)
+            Spacer(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = (-16).dp, y = 1.dp)
+                    .size(width = 80.dp, height = 48.dp)
+                    .zIndex(2f)
+                    .clickable(role = Role.Button, onClick = onNext)
+                    .semantics { contentDescription = nextLabel },
+            )
+        }
     }
 }
 
@@ -310,12 +324,10 @@ private fun DeckHeader(
     count: Int,
     titles: Map<String, String>,
     selectedSessionId: String?,
-    onNext: () -> Unit,
 ) {
-    val nextInteractions = remember { MutableInteractionSource() }
-    // The Next target is 48 dp tall where its pill is 26: the header gives back the
-    // 11 dp the target adds above the pill, so the card is exactly as tall as before
-    // and the pending-card re-anchor sees the same dock.
+    // The header keeps its old height (and the card its old size) by shrinking the
+    // row back by the Next target's overhang; the target itself lives at the card
+    // level in Deck, where that shrunk parent cannot clip it.
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -351,40 +363,30 @@ private fun DeckHeader(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             )
             Spacer(Modifier.width(8.dp))
-            // A 26 dp pill to look at and a 48 dp target to hit: the touch area is
-            // the whole minimum-size box around the pill, and the pill is drawn in
-            // its middle, so the header keeps its compact look.
+            // The 26 dp pill, drawn where it always was; the 48 dp target is the
+            // card-level Spacer in Deck.
             Box(
-                modifier = Modifier
-                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                    .pressable()
-                    .clickable(
-                        interactionSource = nextInteractions,
-                        indication = null,
-                        role = Role.Button,
-                        onClick = onNext,
-                    ),
+                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp),
                 contentAlignment = Alignment.Center,
             ) {
-            Row(
-                modifier = Modifier
-                    .height(26.dp)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, ButtonShape.Inline)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, ButtonShape.Inline)
-                    .indication(nextInteractions, ShapedIndication(ButtonShape.Inline))
-                    .padding(horizontal = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    stringResource(R.string.next_card),
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                )
-                Icon(
-                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = null,
-                    modifier = Modifier.size(12.dp),
-                )
-            }
+                Row(
+                    modifier = Modifier
+                        .height(26.dp)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh, ButtonShape.Inline)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, ButtonShape.Inline)
+                        .padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.next_card),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                    )
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
             }
         }
     }
