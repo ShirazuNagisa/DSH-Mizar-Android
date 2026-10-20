@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Folder
@@ -29,19 +28,31 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.Format
@@ -51,6 +62,7 @@ import me.shirazu.dshmizar.ui.design.LocalReduceMotion
 import me.shirazu.dshmizar.ui.design.Motion
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.TwinStar
+import me.shirazu.dshmizar.ui.design.rememberTravelingHighlight
 import me.shirazu.dshmizar.ui.design.shapedClickable
 import me.shirazu.mizar.kit.SessionGrouping
 import me.shirazu.mizar.kit.SessionRow
@@ -62,7 +74,8 @@ private const val PAGE_SIZE = 10
 /**
  * The workspace-grouped session rows, ported from iOS `Views/Shell/SidebarRows.swift`:
  * collapsed by default, staggered rise on expand, ten at a time, and the selected
- * row marked by a sheet of paper that slides between rows.
+ * row marked by one highlight, drawn behind the rows, that travels to the row the
+ * operator taps.
  */
 @Composable
 fun WorkspaceGroups(
@@ -109,7 +122,59 @@ fun WorkspaceGroups(
         if (visibleIds.isNotEmpty()) onLoadTitles(visibleIds)
     }
 
-    LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
+    // The selection is drawn once, behind the rows, where the selected row is laid out
+    // this frame: the fill and its leading bar travel from the row that was selected
+    // to the one just tapped, and a scroll carries them with their row.
+    val selectedId = state.selectedSessionId
+    val highlight = rememberTravelingHighlight()
+    val reduceMotion = LocalReduceMotion.current
+    val density = LocalDensity.current
+    val inset = with(density) { Space.md.toPx() }
+    val gap = with(density) { 1.dp.toPx() }
+    fun rowRect(key: String?): Rect? {
+        val info = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key } ?: return null
+        val width = listState.layoutInfo.viewportSize.width.toFloat()
+        return Rect(inset, info.offset + gap, width - inset, info.offset + info.size - gap)
+    }
+    // The travel outlives the selection that started it: a second tap retargets it
+    // from where it is rather than cancelling it back to a standing start.
+    val travelScope = rememberCoroutineScope()
+    var lastSelected by remember { mutableStateOf(selectedId) }
+    LaunchedEffect(selectedId) {
+        if (selectedId == lastSelected) return@LaunchedEffect
+        val from = rowRect(lastSelected)?.let(highlight::place)
+        val to = rowRect(selectedId)
+        lastSelected = selectedId
+        travelScope.launch { highlight.moveTo(from, to, reduceMotion) }
+    }
+    val fill = MizarColors.SelectionFill
+    val bar = MaterialTheme.colorScheme.primary
+
+    LazyColumn(
+        state = listState,
+        modifier = modifier.fillMaxSize().drawBehind {
+            val target = rowRect(selectedId) ?: return@drawBehind
+            val r = highlight.place(target)
+            val a = highlight.alpha
+            clipRect {
+                translate(r.left, r.top) {
+                    drawOutline(Corner.sm.createOutline(r.size, layoutDirection, this), fill, alpha = a)
+                    // The leading bar, 2 x 20 dp, centred in the row's first 16 dp --
+                    // the row's start, which is its right edge in RTL.
+                    val bw = 2.dp.toPx()
+                    val bh = 20.dp.toPx()
+                    val cx = if (layoutDirection == LayoutDirection.Rtl) r.width - 8.dp.toPx() else 8.dp.toPx()
+                    drawRoundRect(
+                        color = bar,
+                        topLeft = Offset(cx - bw / 2f, (r.height - bh) / 2f),
+                        size = Size(bw, bh),
+                        cornerRadius = CornerRadius(bw / 2f),
+                        alpha = a,
+                    )
+                }
+            }
+        },
+    ) {
             if (groups.isEmpty()) {
                 item(key = "empty") {
                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -147,7 +212,10 @@ fun WorkspaceGroups(
                                 selected = session.sessionId == state.selectedSessionId,
                                 waiting = session.sessionId in waitingSessions,
                                 query = query,
-                                onClick = { onOpen(session.sessionId) },
+                                onClick = {
+                                    highlight.arm()
+                                    onOpen(session.sessionId)
+                                },
                             )
                         }
                     }
@@ -274,30 +342,15 @@ private fun SessionRowButton(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // The selection -- a whisper of the accent with a leading bar -- is
+            // drawn by the list behind the rows, so it can travel between them.
             .padding(horizontal = Space.md, vertical = 1.dp)
-            .then(
-                if (selected) {
-                    // The console's selection is a whisper of the accent with a
-                    // leading bar, not a lifted sheet of paper.
-                    Modifier.background(MizarColors.SelectionFill, Corner.sm)
-                } else {
-                    Modifier
-                },
-            )
             .shapedClickable(Corner.sm, onClick = onClick)
             .padding(top = 9.dp, bottom = 9.dp, end = Space.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(modifier = Modifier.width(28.dp - Space.md), contentAlignment = Alignment.Center) {
-            if (selected) {
-                Box(
-                    Modifier
-                        .width(2.dp)
-                        .height(20.dp)
-                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(1.dp)),
-                )
-            }
-        }
+        // Where the leading bar is drawn.
+        Spacer(Modifier.width(28.dp - Space.md))
         Box(modifier = Modifier.width(14.dp), contentAlignment = Alignment.Center) {
             if (session.running) {
                 TwinStar(size = 13.dp)

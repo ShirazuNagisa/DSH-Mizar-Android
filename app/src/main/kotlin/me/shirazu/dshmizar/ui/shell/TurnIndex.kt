@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,6 +38,7 @@ import me.shirazu.dshmizar.ui.Format
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.NumericText
+import me.shirazu.dshmizar.ui.design.SegmentedControl
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.shapedClickable
 import me.shirazu.mizar.kit.ConversationItem
@@ -104,16 +104,17 @@ fun TurnIndex(
         SessionStrip(turns = turns, now = now, onPick = onPick)
 
         // Narrowing to the turns that did not finish: the reason to open this list is
-        // usually "which one went wrong", not "list everything".
-        Row(
+        // usually "which one went wrong", not "list everything". Two segments rather
+        // than a toggle chip, so both states are named and the fill shows which.
+        SegmentedControl(
+            options = listOf(
+                stringResource(R.string.turn_index_all),
+                stringResource(R.string.unfinished),
+            ),
+            selected = if (onlyUnfinished) 1 else 0,
+            onSelect = { onlyUnfinished = it == 1 },
             modifier = Modifier.fillMaxWidth().padding(horizontal = Space.lg, vertical = Space.xs),
-        ) {
-            FilterChip(
-                selected = onlyUnfinished,
-                onClick = { onlyUnfinished = !onlyUnfinished },
-                label = { Text(stringResource(R.string.turn_index_unfinished), style = MaterialTheme.typography.labelMedium) },
-            )
-        }
+        )
 
         val visible = if (onlyUnfinished) {
             turns.withIndex().filter { (_, turn) -> turn.failed || turn.isRunning || turn.isPending }
