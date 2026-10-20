@@ -20,10 +20,10 @@ Copy-Item app\build\outputs\apk\release\app-release.apk dist\dsh-mizar-<版本>.
 
 ```powershell
 # 版本名/版本号
-& "$env:ANDROID_HOME\build-tools\<ver>\aapt2.exe" dump badging dist\dsh-mizar-0.9.2.apk | Select-String 'versionName|versionCode'
+& "$env:ANDROID_HOME\build-tools\<ver>\aapt2.exe" dump badging dist\dsh-mizar-0.10.1.apk | Select-String 'versionName|versionCode'
 
 # 签名（应当报 CN=DSH-Mizar）
-& "$env:ANDROID_HOME\build-tools\<ver>\apksigner.bat" verify --print-certs dist\dsh-mizar-0.9.2.apk
+& "$env:ANDROID_HOME\build-tools\<ver>\apksigner.bat" verify --print-certs dist\dsh-mizar-0.10.1.apk
 ```
 
 ## 安装到手机
@@ -33,7 +33,7 @@ release 包和 debug 包**签名不同**，覆盖安装会报 `INSTALL_FAILED_UP
 ```powershell
 # 正式安装（会清掉配对，重新扫码配对一次）
 adb uninstall me.shirazu.dshmizar
-adb install dist\dsh-mizar-0.9.2.apk
+adb install dist\dsh-mizar-0.10.1.apk
 
 # 只是想在开发机上继续验证（保留配对与设置），装 debug 包即可：
 .\gradlew.bat :app:assembleDebug
@@ -46,20 +46,21 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 |---|---|---|---|
 | 0.9.0 | 38 | `dist/dsh-mizar-0.9.0.apk` | CI 出包（tag `v0.9.0`） |
 | 0.9.1 | 39 | `dist/dsh-mizar-0.9.1.apk` | CI 出包（tag `v0.9.1`） |
-| 0.9.2 | 40 | — | 早期本地构建（未发布） |
-| 0.10.0 | 41 | `dist/dsh-mizar-0.10.0.apk` | GUI 重构内部版本 |
-| 0.10.1 | 42 | `dist/dsh-mizar-0.10.1.apk` | Next pill 触区修复内部版本 |
-| **0.9.2** | **43** | `dist/dsh-mizar-0.9.2.apk` | **对外发布版本**：GUI 重构 + Next 触区修复；按要求复用 0.9.2 版本名，versionCode 43 高于内部版本 |
+| 0.9.2 | 40 | — | 重构前的早期本地构建（未发布；名称后来被 0.10.1 取代） |
+| 0.10.0 | 41 | `dist/dsh-mizar-0.10.0.apk` | GUI 重构内部版本（tag `v0.10.0`） |
+| 0.10.1 | 42 | — | Next pill 触区修复的内部构建；tag `v0.10.1` 已移到 43 版提交，42 的资产被替换 |
+| **0.10.1** | **43** | `dist/dsh-mizar-0.10.1.apk` | **对外发布版本**：GUI 重构 + Next 触区修复（原 0.9.2 命名已撤回） |
 
 ### 0.9.2 / 0.10.x 版本沿革（2026-10）
 
 重构期间版本号走了一段弯路，记录如下，避免以后误判新旧：
 
-- `0.9.2 (40)`：重构前最后一个本地签名构建，未发布、没有 tag；后因发布命名被复用。
+- `0.9.2 (40)`：重构前的本地签名构建，未发布；只有提交，没有 tag。
 - `0.10.0 (41)`：GUI 重构的内部验收构建，对应 tag `v0.10.0`（提交 `e6077d1`）。
-- `0.10.1 (42)`：重构后的 Next pill 触区修复版，对应 tag `v0.10.1`（提交 `6b2fe25`）。
-- `0.9.2 (43)`：最终对外发布版，对应 tag `v0.9.2`（提交 `1cde59b`），包含完整重构 + 触区修复，也是唯一建议分发的安装包。
+- `0.10.1 (42)`：Next pill 触区修复的内部构建，原 tag `v0.10.1`（提交 `6b2fe25`）已移到 43 版。
+- `0.10.1 (43)`：最终对外发布版，tag `v0.10.1`（新提交），包含完整重构 + 触区修复，也是唯一建议分发的安装包。
+- `0.9.2 (43)` 的临时命名已撤回：`v0.9.2` tag 与 release 已删除；相关提交仍留在 git 历史里。
 
-判断新旧**只看 versionCode**（43 > 42 > 41 > 40），不要用 versionName 比较：版本名在这里被复用了一次，`0.10.1` 的字典序大于 `0.9.2`，但它的 versionCode 更小、时间也更早。GitHub 上 `v0.10.0` / `v0.10.1` 仅作内部快照，正式版本以 `v0.9.2` 为准。
+判断新旧**只看 versionCode**（43 > 42 > 41 > 40），不要用 versionName 比较。GitHub 上只有 `v0.10.0` 作为内部快照保留，正式版本以 `v0.10.1`（43）为准。
 
-从下一个版本起恢复单向递增（建议 `0.9.3 (44)`，具体版本名待定）：不再复用版本名；只在版本 bump 提交上打 tag；tag 必须与 `versionName` 完全一致（CI 会校验）。
+从下一个版本起（建议 `0.10.2 (44)`）恢复单向递增：不再复用版本名；只在版本 bump 提交上打 tag；tag 必须与 `versionName` 完全一致（CI 会校验）。
