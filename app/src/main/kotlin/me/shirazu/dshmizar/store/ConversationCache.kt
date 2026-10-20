@@ -1,6 +1,7 @@
 package me.shirazu.dshmizar.store
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -37,7 +38,12 @@ class ConversationCache(context: Context) {
 
     suspend fun load(hostId: String, sessionId: String): CachedConversation? = withContext(Dispatchers.IO) {
         runCatching { fileFor(hostId, sessionId).takeIf { it.isFile }?.readText() }
-            .getOrNull()?.let { text -> runCatching { json.decodeFromString<CachedConversation>(text) }.getOrNull() }
+            .getOrNull()?.let { text ->
+                runCatching { json.decodeFromString<CachedConversation>(text) }
+                    .onFailure { Log.i(TAG, "cache decode failed: ${it.message}") }
+                    .getOrNull()
+                    .also { Log.i(TAG, "cache load ${it?.messages?.records?.size ?: 0} records for $sessionId") }
+            } ?: run { Log.i(TAG, "cache miss for $sessionId"); null }
     }
 
     /** Fold one page of records into the cache, keeping the newest [MAX_RECORDS]. */
@@ -50,7 +56,8 @@ class ConversationCache(context: Context) {
                 stats = previous?.stats,
             )
             write(hostId, sessionId, snapshot)
-        }
+            Log.i(TAG, "cache wrote ${merged.size} records for $sessionId")
+        }.onFailure { Log.i(TAG, "cache write failed for $sessionId: $it") }
     }
 
     suspend fun recordStats(hostId: String, sessionId: String, stats: SessionStatsResult) = withContext(Dispatchers.IO) {
@@ -77,8 +84,8 @@ class ConversationCache(context: Context) {
     }
 
     private fun write(hostId: String, sessionId: String, snapshot: CachedConversation) {
-        directory.mkdirs()
         val target = fileFor(hostId, sessionId)
+        target.parentFile?.mkdirs()
         val temporary = File(target.parentFile, target.name + ".tmp")
         temporary.writeText(json.encodeToString(snapshot))
         if (!temporary.renameTo(target)) {
@@ -93,6 +100,7 @@ class ConversationCache(context: Context) {
     private fun safe(value: String): String = value.replace(Regex("[^A-Za-z0-9._-]"), "_")
 
     private companion object {
+        const val TAG = "mizar-notify"
         const val MAX_RECORDS = 400
     }
 }

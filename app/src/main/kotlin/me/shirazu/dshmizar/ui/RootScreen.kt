@@ -18,6 +18,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -33,6 +34,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.shirazu.dshmizar.AppViewModel
+import me.shirazu.dshmizar.PairingStage
 import me.shirazu.dshmizar.Phase
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.ui.pairing.FailedScreen
@@ -96,20 +98,60 @@ fun RootScreen(model: AppViewModel, incomingPairUri: String?, onPairUriHandled: 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator()
                             Spacer(Modifier.height(12.dp))
-                            Text(stringResource(R.string.connecting))
+                            Text(
+                                stringResource(
+                                    when (state.pairingStage) {
+                                        PairingStage.PAIRING -> R.string.pairing_stage_pairing
+                                        PairingStage.SYNCING -> R.string.pairing_stage_syncing
+                                        null -> R.string.connecting
+                                    },
+                                ),
+                            )
                         }
                     }
 
                     Phase.READY -> MizarShell(model, state)
-                    Phase.FAILED -> FailedScreen(
-                        state,
-                        onRetry = { model.retry() },
-                        onPairAgain = { model.startPairing() },
-                    )
+                    Phase.FAILED -> if (state.offlineBrowser) {
+                        Column(Modifier.fillMaxSize()) {
+                            OfflineBanner(onRetry = { model.retry() })
+                            Box(Modifier.weight(1f)) { MizarShell(model, state) }
+                        }
+                    } else {
+                        FailedScreen(
+                            state,
+                            onRetry = { model.retry() },
+                            onPairAgain = { model.startPairing() },
+                            onBrowseOffline = { model.browseOffline() },
+                        )
+                    }
                 }
             }
         }
     }
+    }
+}
+
+/**
+ * A quiet strip over the shell while it shows cached data, with the one action that
+ * matters: try the host again.
+ */
+@Composable
+private fun OfflineBanner(onRetry: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.offline_banner),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onRetry) { Text(stringResource(R.string.retry)) }
     }
 }
 

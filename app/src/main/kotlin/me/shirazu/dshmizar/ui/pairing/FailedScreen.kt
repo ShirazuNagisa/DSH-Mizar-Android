@@ -51,7 +51,12 @@ import me.shirazu.mizar.kit.SessionRow
  * to hide what the phone already knows.
  */
 @Composable
-fun FailedScreen(state: UiState, onRetry: () -> Unit, onPairAgain: () -> Unit) {
+fun FailedScreen(
+    state: UiState,
+    onRetry: () -> Unit,
+    onPairAgain: () -> Unit,
+    onBrowseOffline: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -76,6 +81,7 @@ fun FailedScreen(state: UiState, onRetry: () -> Unit, onPairAgain: () -> Unit) {
         }
         if (state.sessions.isNotEmpty()) {
             Text(stringResource(R.string.stored_sessions_kept), style = MaterialTheme.typography.labelMedium)
+            TextButton(onClick = onBrowseOffline) { Text(stringResource(R.string.browse_offline)) }
             SessionList(state = state, onDismissProblem = {})
         }
     }

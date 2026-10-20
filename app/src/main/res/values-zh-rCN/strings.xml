@@ -85,6 +85,10 @@
     <string name="poll_lan">每 3 秒（局域网）</string>
     <string name="poll_relay">每 10 秒（中继）</string>
     <string name="connection_latency_history">最近往返</string>
+    <string name="pairing_stage_pairing">正在配对…</string>
+    <string name="pairing_stage_syncing">正在读取会话…</string>
+    <string name="browse_offline">浏览本地历史</string>
+    <string name="offline_banner">离线模式 · 仅显示本地缓存</string>
     <string name="no_sessions">还没有会话。在电脑上新建一个，然后刷新。</string>
     <string name="workspace_count">%1$d 个会话</string>
     <string name="show_more">再显示 %1$d 个</string>

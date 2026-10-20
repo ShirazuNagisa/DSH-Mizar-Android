@@ -112,6 +112,10 @@
     <string name="poll_lan">Every 3 seconds (local network)</string>
     <string name="poll_relay">Every 10 seconds (relay)</string>
     <string name="connection_latency_history">Recent round trips</string>
+    <string name="pairing_stage_pairing">Pairing…</string>
+    <string name="pairing_stage_syncing">Reading sessions…</string>
+    <string name="browse_offline">Browse offline</string>
+    <string name="offline_banner">Offline · showing cached data</string>
     <string name="no_sessions">No sessions yet. Start one on your computer, then refresh.</string>
     <string name="workspace_count">%1$d sessions</string>
     <string name="show_more">Show %1$d more</string>

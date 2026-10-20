@@ -93,9 +93,16 @@ import java.util.UUID
 /** Which screen the app is on, which is a property of the connection rather than of navigation. */
 enum class Phase { LAUNCHING, UNPAIRED, CONNECTING, READY, FAILED }
 
+/** Which part of the first pairing is running, for the connecting screen. */
+enum class PairingStage { PAIRING, SYNCING }
+
 /** Everything the UI draws. */
 data class UiState(
     val phase: Phase = Phase.LAUNCHING,
+    /** Set while a fresh pairing is between its steps; null once connected. */
+    val pairingStage: PairingStage? = null,
+    /** Showing the cached session list while the host is unreachable. */
+    val offlineBrowser: Boolean = false,
     val hosts: List<PairedHost> = emptyList(),
     val host: PairedHost? = null,
     val welcome: ServerFrame.Welcome? = null,
@@ -311,7 +318,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Redeem a scanned or typed pairing code. */
     fun pair(target: PairingTarget, deviceName: String) {
         viewModelScope.launch {
-            _state.update { it.copy(phase = Phase.CONNECTING, problem = null) }
+            _state.update { it.copy(phase = Phase.CONNECTING, problem = null, pairingStage = PairingStage.PAIRING) }
             val client = PairingClient(appVersion = appVersion)
             try {
                 val paired = client.pair(
@@ -323,10 +330,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 credentials.save(paired)
                 val hosts = credentials.loadAll().sortedBy { it.pairedAtMillis }
-                _state.update { it.copy(hosts = hosts, host = paired, pendingNameHostId = paired.hostId) }
+                _state.update {
+                    it.copy(hosts = hosts, host = paired, pendingNameHostId = paired.hostId, pairingStage = PairingStage.SYNCING)
+                }
                 connect(paired)
             } catch (error: Throwable) {
-                _state.update { it.copy(phase = Phase.FAILED, problem = messageOf(error, target.authority ?: target.baseUrl)) }
+                _state.update {
+                    it.copy(phase = Phase.FAILED, problem = messageOf(error, target.authority ?: target.baseUrl), pairingStage = null)
+                }
             }
         }
     }
@@ -351,6 +362,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         welcome = welcome,
                         problem = null,
                         needsPairing = false,
+                        pairingStage = null,
+                        offlineBrowser = false,
                         seenAt = activity.seenAt(host.hostId),
                         isLocalNetwork = endpoint is MizarConnection.Endpoint.Direct,
                         connectedAtMillis = System.currentTimeMillis(),
@@ -387,6 +400,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 phase = Phase.FAILED,
                 problem = messageOf(failure ?: IOException("no address answered"), address),
                 needsPairing = failure?.isRepairNeeded() == true,
+                pairingStage = null,
             )
         }
         publishLinkFailure()
@@ -699,9 +713,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
-            _state.update { it.copy(phase = Phase.CONNECTING, problem = null) }
+            _state.update { it.copy(phase = Phase.CONNECTING, problem = null, offlineBrowser = false) }
             connect(host)
         }
+    }
+
+    /**
+     * Read the sessions the phone already knows while the host is away.
+     *
+     * The session list and the transcript cache are on disk; an unreachable computer
+     * is not a reason to make them unreadable. Sending still fails, which is what the
+     * shell's own error surfaces say.
+     */
+    fun browseOffline() {
+        _state.update { it.copy(offlineBrowser = true) }
     }
 
     /**
