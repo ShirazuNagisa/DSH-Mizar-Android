@@ -24,6 +24,10 @@ discovered while verifying the new UI.
 - Expected sibling behaviour: DSH fail-closes a pending approval when the phone answerer goes
   away; that part is by design, not a bug.
 - Touches the pending/reconnect path in `AppViewModel`, out of scope for this UI refactor.
+- A local harness, `scripts/ki2-host.mjs`, composes the plugin's own listener and broker (fake
+  sessions, a localhost control endpoint, hold/release for a second client, and a settle log) so
+  an approval or question can be created on cue; use it to reproduce this without the real DSH
+  host. It needs the vendored plugin's `node_modules` installed.
 
 ## KI-3 — a send at the bottom does not follow when the previous item is taller than the viewport
 

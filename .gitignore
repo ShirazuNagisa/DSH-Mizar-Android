@@ -33,3 +33,6 @@ dist/
 plugin/node_modules/
 # Screenshots and emulator logs from local verification runs.
 .devstate/
+
+# Background runner logs from local verification runs.
+.zwork/
