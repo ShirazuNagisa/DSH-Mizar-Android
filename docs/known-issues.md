@@ -1,4 +1,4 @@
-# Known issues after the 0.10.0 UI refactor
+# Known issues after the 0.10.x UI refactor
 
 These are tracked so the knowledge survives the local `.devstate/` evidence directory. None of
 them was introduced by the refactor unless stated; the first three predate it and were only
@@ -17,6 +17,10 @@ discovered while verifying the new UI.
 
 - Seen during the dock capture: a question was still pending on the host, but after the app was
   reinstalled/restarted and reconnected the dock was empty.
+- Reproduced on the operator's phone during the 0.10.1 verification: an approval asked at 13:08:06
+  while the app's relay link was churning never appeared in the dock, and tapping the session
+  refresh button did not bring it back. A fresh request made while the app was foreground arrived
+  live, so this is the reconnect/pending path, not the dock UI.
 - Expected sibling behaviour: DSH fail-closes a pending approval when the phone answerer goes
   away; that part is by design, not a bug.
 - Touches the pending/reconnect path in `AppViewModel`, out of scope for this UI refactor.
@@ -31,13 +35,18 @@ discovered while verifying the new UI.
 
 ## Open verification items
 
-- **Interactions after-dock**: the Interactions pass changed the deck's Next pill and card
-  height; the after frame and the >=48 dp touch-target measurement are still to be captured the
-  next time a real pending approval/question appears (the pre-change measurements are recorded in
-  `.devstate/`).
+- **Interactions after-dock** — verified on the operator's phone in 0.10.1: the Next pill's
+  effective target is 80 x 48 dp (0.10.0 measured 66 x 37 dp because the header layout clipped the
+  target); taps 20 px outside the target do nothing, taps just inside its overhang cycle the deck,
+  and the approval buttons stay 48 dp with the card height unchanged.
+- **Background completion notification on a real phone** is not verified. The emulator run covers
+  the logic, but the real-device automation kept the app foreground around turn settle (and the
+  relay link churned), so no clean background-settle-to-notification run was captured.
 - **Path clipping below API 33** is not verified on a device.
-- **Real-device pass** (ColorOS foreground-service behaviour, FCM push where configured, real
-  screen-corner radius, haptics) is deferred to a separate session on the operator's phone.
+- **Real-device pass** is partially done: install/upgrade from a differently signed build,
+  re-pairing, relay, cold start, drawer, real screen-corner radius, foreground-suppression and the
+  approval/question deck all passed. Still open: background completion notification, FCM push
+  where configured, haptics feel, long-running ColorOS foreground-service behaviour.
 
 ## Accepted deviations
 
