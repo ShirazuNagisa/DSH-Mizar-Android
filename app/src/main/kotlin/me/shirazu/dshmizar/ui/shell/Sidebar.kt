@@ -48,7 +48,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
@@ -70,13 +69,16 @@ import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.AnchoredPopover
 import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.GlassCircleLabel
+import me.shirazu.dshmizar.ui.design.LightUp
 import me.shirazu.dshmizar.ui.design.LocalReduceMotion
+import me.shirazu.dshmizar.ui.design.MizarMark
 import me.shirazu.dshmizar.ui.design.Motion
 import me.shirazu.dshmizar.ui.design.PopoverSize
 import me.shirazu.dshmizar.ui.design.Radius
 import me.shirazu.dshmizar.ui.design.RefreshSpinner
 import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.glassCapsule
+import me.shirazu.dshmizar.ui.design.searchPulse
 import me.shirazu.dshmizar.ui.design.glassCard
 import me.shirazu.dshmizar.ui.design.pressable
 import me.shirazu.dshmizar.ui.design.shapedClickable
@@ -419,7 +421,7 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
                     .padding(horizontal = Space.lg, vertical = Space.sm),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ConnectionDot(connected = state.phase == me.shirazu.dshmizar.Phase.READY && !state.reconnecting)
+                ConnectionMark(connected = state.phase == me.shirazu.dshmizar.Phase.READY && !state.reconnecting)
                 Spacer(Modifier.width(Space.md))
                 Column {
                     Text(
@@ -495,37 +497,31 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
     }
 }
 
-/** A dot that breathes while the socket is up. */
+/**
+ * The connection, as the icon's own mark: lit and still while the socket is up,
+ * pulsing in the neutral ink while it looks for the computer, and on the edge
+ * from looking to found, lit dot-outward once before it rests. Being up needs no
+ * motion to say so; only looking moves. 24 dp across, in the box the dot had, so
+ * the text beside it never moves; the lighting is read as it draws.
+ */
 @Composable
-private fun ConnectionDot(connected: Boolean) {
-    if (!connected) {
-        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-            Box(Modifier.size(10.dp).background(MaterialTheme.colorScheme.outline, CircleShape))
+private fun ConnectionMark(connected: Boolean) {
+    val reduceMotion = LocalReduceMotion.current
+    // Composed already up -- the sidebar opened on a live link -- the mark starts lit
+    // and stays: the light-up belongs to the moment the link comes back.
+    val lit = remember { Animatable(if (connected) 3f else 0.6f) }
+    LaunchedEffect(connected, reduceMotion) {
+        when {
+            reduceMotion -> lit.snapTo(3f)
+            connected -> if (lit.value < 3f) {
+                lit.snapTo(0f)
+                lit.animateTo(3f, LightUp)
+            }
+            else -> searchPulse(lit)
         }
-        return
     }
-    val running = MizarColors.Running
-    if (LocalReduceMotion.current) {
-        // Under Reduce Motion the dot is simply lit: being up needs no motion to say so.
-        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-            Box(Modifier.size(10.dp).background(running, CircleShape))
-        }
-        return
+    val tint = if (connected) MizarColors.Running else MaterialTheme.colorScheme.outline
+    Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+        MizarMark(Modifier.width(24.dp), lit = { lit.value }, accent = tint, ink = tint)
     }
-    val pulse = rememberInfiniteTransition(label = "connDot").animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1600)),
-        label = "connDotPulse",
-    )
-    // A fixed box, so the text beside the dot never moves. The ring is drawn, not
-    // laid out: it grows and fades over 1.6 s by being painted larger, and the pulse
-    // is read as it draws, so the loop redraws the dot and recomposes nothing.
-    Box(
-        Modifier.size(24.dp).drawBehind {
-            val p = pulse.value
-            drawCircle(running.copy(alpha = (1f - p) * 0.4f), radius = (5.dp + 7.dp * p).toPx())
-            drawCircle(running, radius = 5.dp.toPx())
-        },
-    )
 }

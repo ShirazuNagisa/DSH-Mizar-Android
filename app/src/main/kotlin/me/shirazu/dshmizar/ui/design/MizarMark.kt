@@ -1,6 +1,7 @@
 package me.shirazu.dshmizar.ui.design
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.keyframes
@@ -38,8 +39,21 @@ fun MizarMark(
     lit: Float = 3f,
     accent: Color = MaterialTheme.colorScheme.primary,
     ink: Color = MaterialTheme.colorScheme.onSurface,
+) = MizarMark(modifier, lit = { lit }, accent = accent, ink = ink)
+
+/**
+ * The mark, lit by a number read as it draws: a mark that is animating redraws
+ * each frame and recomposes nothing.
+ */
+@Composable
+fun MizarMark(
+    modifier: Modifier = Modifier,
+    lit: () -> Float,
+    accent: Color = MaterialTheme.colorScheme.primary,
+    ink: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     Canvas(modifier.aspectRatio(68f / 46f)) {
+        val lit = lit()
         val scale = min(size.width / 68f, size.height / 46f)
         // The arc centre: the dot's position, (34, 38) in mark units.
         val center = Offset(size.width / 2f, size.height / 2f - 23f * scale + 38f * scale)
@@ -74,10 +88,10 @@ fun MizarMarkConnecting(
     LaunchedEffect(reduceMotion) {
         if (!reduceMotion && lit.value == 0f) {
             kotlinx.coroutines.delay(150)
-            lit.animateTo(3f, tween(900, easing = CubicBezierEasing(0f, 0f, 0.58f, 1f)))
+            lit.animateTo(3f, LightUp)
         }
     }
-    MizarMark(modifier, lit = lit.value, accent = accent, ink = ink)
+    MizarMark(modifier, lit = { lit.value }, accent = accent, ink = ink)
 }
 
 /**
@@ -97,13 +111,20 @@ fun MizarMarkSearching(
         return
     }
     val lit = remember { Animatable(0.6f) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            lit.animateTo(3f, tween(1100, easing = CubicBezierEasing(0.33f, 0f, 0.67f, 1f)))
-            lit.animateTo(3f, tween(500, easing = LinearEasing))
-            lit.animateTo(0.6f, tween(600, easing = CubicBezierEasing(0.33f, 0f, 0.67f, 1f)))
-            lit.animateTo(0.6f, tween(700, easing = LinearEasing))
-        }
-    }
-    MizarMark(modifier, lit = lit.value, accent = accent, ink = ink)
+    LaunchedEffect(Unit) { searchPulse(lit) }
+    MizarMark(modifier, lit = { lit.value }, accent = accent, ink = ink)
 }
+
+/** The searching beat, for ever: arcs up in turn (1.1 s), hold (0.5 s), fall away
+ *  together (0.6 s), rest (0.7 s). */
+internal suspend fun searchPulse(lit: Animatable<Float, AnimationVector1D>) {
+    while (true) {
+        lit.animateTo(3f, tween(1100, easing = CubicBezierEasing(0.33f, 0f, 0.67f, 1f)))
+        lit.animateTo(3f, tween(500, easing = LinearEasing))
+        lit.animateTo(0.6f, tween(600, easing = CubicBezierEasing(0.33f, 0f, 0.67f, 1f)))
+        lit.animateTo(0.6f, tween(700, easing = LinearEasing))
+    }
+}
+
+/** The lighting of [MizarMarkConnecting]: dot-outward, once. */
+internal val LightUp = tween<Float>(900, easing = CubicBezierEasing(0f, 0f, 0.58f, 1f))
