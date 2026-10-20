@@ -30,6 +30,13 @@ import me.shirazu.dshmizar.store.FileSessionIndexStore
 import me.shirazu.mizar.kit.AcceptanceResult
 import me.shirazu.mizar.kit.ApprovalOutcome
 import me.shirazu.mizar.kit.ArchiveSessionResult
+import me.shirazu.mizar.kit.AttachmentCapabilities
+import me.shirazu.mizar.kit.AttachmentCheckpoint
+import me.shirazu.mizar.kit.AttachmentScope
+import me.shirazu.mizar.kit.AttachmentSource
+import me.shirazu.mizar.kit.AttachmentUploader
+import me.shirazu.mizar.kit.attachmentDisplayName
+import me.shirazu.mizar.kit.attachmentRpc
 import me.shirazu.mizar.kit.Backoff
 import me.shirazu.mizar.kit.Conversation
 import me.shirazu.mizar.kit.ConversationItem
@@ -38,6 +45,8 @@ import me.shirazu.mizar.kit.CreateSessionResult
 import me.shirazu.mizar.kit.CredentialStore
 import me.shirazu.mizar.kit.Diagnosis
 import me.shirazu.mizar.kit.Diagnoses
+import me.shirazu.mizar.kit.HostInfo
+import me.shirazu.mizar.kit.probeHostId
 import me.shirazu.dshmizar.ui.Format
 import me.shirazu.mizar.kit.MizarConnection
 import me.shirazu.mizar.kit.ModelCatalog
@@ -49,6 +58,7 @@ import me.shirazu.mizar.kit.PendingInteractions
 import me.shirazu.mizar.kit.PermissionCatalog
 import me.shirazu.mizar.kit.PromptResult
 import me.shirazu.mizar.kit.QuestionAnswer
+import me.shirazu.mizar.kit.SessionActivityResult
 import me.shirazu.mizar.kit.SessionIndex
 import me.shirazu.mizar.kit.SessionIndexStore
 import me.shirazu.mizar.kit.SessionGrouping
@@ -70,6 +80,8 @@ import me.shirazu.mizar.kit.jsonString
 import me.shirazu.mizar.kit.mergeConversations
 import me.shirazu.mizar.kit.mergeTurns
 import java.io.IOException
+import java.io.File
+import java.security.MessageDigest
 import java.util.UUID
 
 /** Which screen the app is on, which is a property of the connection rather than of navigation. */
@@ -130,6 +142,24 @@ data class UiState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /** Silence finished-turn notices at night; the settings dialog owns the switch. */
     val quietHours: Boolean = false,
+    /** Prefer a direct LAN socket over the relay when one can be found. */
+    val localNetworkFirst: Boolean = false,
+    /** The live link is a direct/LAN socket rather than the relay. */
+    val isLocalNetwork: Boolean = false,
+    /** A LAN scan is in flight, so the connection panel can say so. */
+    val lanScanning: Boolean = false,
+    /** The open turn's compact activity feed; only requested on a LAN link. */
+    val activity: SessionActivityResult? = null,
+    val activityExpanded: Boolean = false,
+    val activityLoading: Boolean = false,
+    val activityLoadingOlder: Boolean = false,
+    val activityError: String? = null,
+    /** Attachments staged for the next prompt, uploaded in the background. */
+    val attachments: List<DraftAttachment> = emptyList(),
+    /** The host's advertised attachment limits, read once per connection. */
+    val attachmentCapabilities: AttachmentCapabilities? = null,
+    /** An upload is still running; send is refused until every draft is ready. */
+    val attachmentBusy: Boolean = false,
     /** When each session was last on screen, so the list can mark what is new. */
     val seenAt: Map<String, Long> = emptyMap(),
 )
@@ -160,6 +190,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         UiState(
             themeMode = activity.themeMode().toThemeMode(),
             quietHours = activity.quietHours(),
+            localNetworkFirst = activity.localNetworkFirst(),
         ),
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -202,6 +233,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Signature of the pending set already announced, so a batch buzzes once. */
     private var lastNotified: String? = null
     private var watchers: Job? = null
+
+    /** The one poll that reads the running turn's activity while its detail is open. */
+    private var activityJob: Job? = null
+
+    /** One LAN discovery at a time; a second trigger reuses the first. */
+    private var lanSwitchJob: Job? = null
 
     /**
      * The one in-flight re-read of the open conversation after a turn ended.
@@ -289,6 +326,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         problem = null,
                         needsPairing = false,
                         seenAt = activity.seenAt(host.hostId),
+                        isLocalNetwork = endpoint is MizarConnection.Endpoint.Direct,
                     )
                 }
                 // The notice says who we are talking to and how far away it is; the
@@ -299,6 +337,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 note("connected to $endpoint")
                 refreshSessions()
                 registerPush(candidate)
+                // A relay socket is the fallback, not the goal: when the operator asked
+                // for LAN-first, look for the computer's own addresses now that a socket
+                // exists to ask `host.info` over.
+                if (endpoint !is MizarConnection.Endpoint.Direct && _state.value.localNetworkFirst) {
+                    maybeSwitchToLan(host, candidate, welcome)
+                }
                 return
             } catch (error: Throwable) {
                 note("endpoint $endpoint failed: ${error.message}")
@@ -722,6 +766,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // ── sessions ────────────────────────────────────────────────────────────
 
     fun refreshSessions() {
+        // A manual refresh is also a natural moment to look for the LAN again: the
+        // operator pulled because something looked stale, often after moving onto the
+        // same Wi-Fi as the computer.
+        val host = _state.value.host
+        val socket = connection
+        val welcome = _state.value.welcome
+        if (host != null && socket != null && welcome != null) maybeSwitchToLan(host, socket, welcome)
         if (_state.value.refreshing) return
         _state.update { it.copy(refreshing = true) }
         viewModelScope.launch {
@@ -824,8 +875,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 statsError = null,
                 pending = null,
                 newestSeq = null,
+                activity = null,
+                activityExpanded = false,
+                activityLoading = false,
+                activityLoadingOlder = false,
+                activityError = null,
             )
         }
+        activityJob?.cancel()
+        activityJob = null
+        clearAttachments()
         if (sessionId == null) return
         viewModelScope.launch {
             reload()
@@ -1064,7 +1123,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun sendPrompt(text: String) {
-        if (text.isBlank()) return
+        val current = _state.value
+        val ready = current.attachments.filter { it.readyId != null }
+        if (text.isBlank() && ready.isEmpty()) return
+        if (current.attachments.any { it.readyId == null && it.error == null }) {
+            _state.update { it.copy(problem = getApplication<Application>().getString(R.string.attachment_still_uploading)) }
+            return
+        }
+        current.attachments.firstNotNullOfOrNull { it.error }?.let { message ->
+            _state.update { it.copy(problem = message) }
+            return
+        }
         viewModelScope.launch {
             val socket = connection ?: return@launch
             val sessionId = _state.value.selectedSessionId ?: return@launch
@@ -1074,22 +1143,145 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val result = socket.call<PromptResult>(
                     "session.prompt",
-                    payload(
-                        "sessionId" to jsonString(sessionId),
-                        "text" to jsonString(text),
-                        "requestId" to jsonString(requestId),
-                    ),
+                    buildJsonObject {
+                        put("sessionId", sessionId)
+                        put("requestId", requestId)
+                        // The attached-prompt path requires a string for text even
+                        // when the file is the whole message: an omitted key is a
+                        // malformed frame, not "no text".
+                        put("text", text)
+                        if (ready.isNotEmpty()) {
+                            putJsonArray("attachments") {
+                                ready.forEach { add(requireNotNull(it.readyId)) }
+                            }
+                        }
+                    },
                 )
                 if (!result.accepted) {
                     _state.update { it.copy(problem = "the host did not accept the message") }
                     return@launch
                 }
-                awaitPromptRecorded(text)
+                // The host owns the bytes once the prompt is accepted; the staging
+                // files have done their job and any retry would be a new prompt.
+                clearAttachments()
+                if (text.isNotBlank()) awaitPromptRecorded(text)
                 reload()
             } catch (error: Throwable) {
                 _state.update { it.copy(problem = messageOf(error, addressOf())) }
             }
         }
+    }
+
+    /**
+     * Stage one attachment and upload it for the next prompt.
+     *
+     * The picker and image re-encode happen on the UI side; this keeps the state and
+     * the transport. The host advertises its own limits, read once and lowered to
+     * this app's own caps by the kit.
+     */
+    fun addAttachment(file: File, name: String, kind: String, mediaType: String?) {
+        val host = _state.value.host ?: return
+        val sessionId = _state.value.selectedSessionId ?: return
+        if (!_state.value.isLocalNetwork) {
+            file.delete()
+            _state.update { it.copy(problem = getApplication<Application>().getString(R.string.attachment_lan_only)) }
+            return
+        }
+        val context = getApplication<Application>()
+        val displayName = attachmentDisplayName(name)
+        val size = file.length()
+        // The host accepts a media type for images only; a document is identified
+        // by its name, and sending a type is a malformed frame.
+        val effectiveMediaType = mediaType.takeIf { kind == "image" }
+        if (size <= 0L) {
+            file.delete()
+            _state.update { it.copy(problem = context.getString(R.string.attachment_unreadable)) }
+            return
+        }
+        val key = UUID.randomUUID().toString()
+        _state.update {
+            it.copy(
+                attachments = it.attachments + DraftAttachment(
+                    key = key,
+                    name = displayName,
+                    bytes = size,
+                    kind = kind,
+                    mediaType = effectiveMediaType,
+                    file = file,
+                ),
+                attachmentBusy = true,
+            )
+        }
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                note("attachment: staging $displayName ($size bytes, $kind)")
+                val socket = connection ?: error("not connected")
+                val caps = _state.value.attachmentCapabilities
+                    ?: AttachmentUploader(socket.attachmentRpc()).capabilities().also { limits ->
+                        _state.update { it.copy(attachmentCapabilities = limits) }
+                    }
+                if (_state.value.attachments.size > caps.maxAttachments) error(context.getString(R.string.attachment_too_many))
+                val max = if (kind == "image") caps.maxImageBytes else caps.maxFileBytes
+                if (size > max) error(context.getString(R.string.attachment_too_large))
+                val sha = MessageDigest.getInstance("SHA-256").digest(file.readBytes())
+                    .joinToString("") { byte -> "%02x".format(byte) }
+                val source = AttachmentSource(
+                    file = file,
+                    name = displayName,
+                    bytes = size,
+                    sha256 = sha,
+                    kind = kind,
+                    mediaType = effectiveMediaType,
+                )
+                val scope = AttachmentScope(host.hostId, host.deviceId, sessionId)
+                val ready = AttachmentUploader(socket.attachmentRpc()).upload(
+                    scope = scope,
+                    source = source,
+                    limits = caps,
+                    checkpoint = AttachmentCheckpoint(scope),
+                    onProgress = { offset ->
+                        _state.update { current ->
+                            current.copy(attachments = current.attachments.map {
+                                if (it.key == key) it.copy(progress = offset) else it
+                            })
+                        }
+                    },
+                )
+                note("attachment: ready ${ready.attachmentId} for $displayName")
+                _state.update { current ->
+                    current.copy(attachments = current.attachments.map {
+                        if (it.key == key) it.copy(progress = size, readyId = ready.attachmentId) else it
+                    })
+                }
+            } catch (error: Throwable) {
+                note("attachment: failed for $displayName: ${error.message}")
+                _state.update { current ->
+                    current.copy(attachments = current.attachments.map {
+                        if (it.key == key) it.copy(error = error.message ?: context.getString(R.string.attachment_failed)) else it
+                    })
+                }
+            } finally {
+                _state.update { current ->
+                    current.copy(attachmentBusy = current.attachments.any { it.readyId == null && it.error == null })
+                }
+            }
+        }
+    }
+
+    /** Drop one staged attachment, and its local copy. */
+    fun removeAttachment(key: String) {
+        val draft = _state.value.attachments.firstOrNull { it.key == key } ?: return
+        draft.file.delete()
+        _state.update { current ->
+            current.copy(attachments = current.attachments.filterNot { it.key == key })
+        }
+    }
+
+    /** Drop every staged attachment after a send, or when the session changes. */
+    fun clearAttachments() {
+        val files = _state.value.attachments.map { it.file }
+        _state.update { it.copy(attachments = emptyList(), attachmentBusy = false) }
+        files.forEach { file -> runCatching { file.delete() } }
     }
 
     /**
@@ -1116,6 +1308,82 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val sessionId = _state.value.selectedSessionId ?: return@launch
             runCatching { socket.call<AcceptanceResult>("session.cancel", payload("sessionId" to jsonString(sessionId))) }
             reload()
+        }
+    }
+
+    /**
+     * Open or close the running turn's detail.
+     *
+     * The detail is a paid feature on iOS; this client has no account tier, so the
+     * LAN link is the gate iOS also accepts. On a relay socket the control is not
+     * drawn at all and the host is never asked.
+     */
+    fun toggleActivity() {
+        if (_state.value.activityExpanded) {
+            activityJob?.cancel()
+            activityJob = null
+            _state.update { it.copy(activityExpanded = false) }
+            return
+        }
+        if (!_state.value.isLocalNetwork) return
+        _state.update { it.copy(activityExpanded = true, activityError = null) }
+        activityJob?.cancel()
+        startActivityPolling()
+    }
+
+    private fun startActivityPolling() {
+        activityJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            while (isActive && _state.value.activityExpanded) {
+                val socket = connection ?: break
+                val sessionId = _state.value.selectedSessionId ?: break
+                if (_state.value.activity == null) _state.update { it.copy(activityLoading = true) }
+                runCatching {
+                    socket.call<SessionActivityResult>(
+                        "session.activity",
+                        payload(
+                            "sessionId" to jsonString(sessionId),
+                            "maxEntries" to me.shirazu.mizar.kit.jsonInt(60),
+                        ),
+                    )
+                }.onSuccess { page ->
+                    _state.update { it.copy(activity = page, activityError = null, activityLoading = false) }
+                }.onFailure { error ->
+                    _state.update { it.copy(activityError = messageOf(error, addressOf()), activityLoading = false) }
+                }
+                delay(ACTIVITY_POLL_MILLIS)
+            }
+        }
+    }
+
+    /** Fetch the page before the oldest activity line on screen. */
+    fun loadOlderActivity() {
+        val current = _state.value.activity ?: return
+        val turn = current.turn ?: return
+        val oldest = current.oldestSeq ?: return
+        if (!current.hasMore || _state.value.activityLoadingOlder) return
+        viewModelScope.launch {
+            val socket = connection ?: return@launch
+            _state.update { it.copy(activityLoadingOlder = true) }
+            runCatching {
+                socket.call<SessionActivityResult>(
+                    "session.activity",
+                    payload(
+                        "sessionId" to jsonString(current.sessionId),
+                        "maxEntries" to me.shirazu.mizar.kit.jsonInt(100),
+                        "beforeSeq" to me.shirazu.mizar.kit.jsonInt(oldest.toInt()),
+                        "turn" to me.shirazu.mizar.kit.jsonInt(turn),
+                    ),
+                )
+            }.onSuccess { page ->
+                _state.update {
+                    val merged = (page.entries + (it.activity?.entries.orEmpty()))
+                        .distinctBy { entry -> entry.id }
+                        .takeLast(MAX_ACTIVITY_ENTRIES)
+                    it.copy(activity = page.copy(entries = merged), activityLoadingOlder = false)
+                }
+            }.onFailure { error ->
+                _state.update { it.copy(activityLoadingOlder = false, activityError = messageOf(error, addressOf())) }
+            }
         }
     }
 
@@ -1429,6 +1697,97 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(quietHours = on) }
     }
 
+    /**
+     * Prefer the local network over the relay, like iOS 0.9.4's transfer setting.
+     *
+     * Off by default. Turning it on while on a relay socket starts a scan at once,
+     * because the operator's intent is the current session, not the next one.
+     */
+    fun setLocalNetworkFirst(on: Boolean) {
+        activity.setLocalNetworkFirst(on)
+        _state.update { it.copy(localNetworkFirst = on) }
+        if (!on) return
+        val host = _state.value.host ?: return
+        val socket = connection ?: return
+        val welcome = _state.value.welcome ?: return
+        maybeSwitchToLan(host, socket, welcome)
+    }
+
+    /**
+     * Ask the host where it is reachable, and move to a direct socket if one answers.
+     *
+     * The relay cannot tell a phone its LAN address, so `host.info` is asked over the
+     * relay socket that is already up. Each candidate is confirmed with the same
+     * unauthenticated `hello` the pairing screen uses: the id must equal the host the
+     * phone is already talking to, or a stranger on the network would be adopted.
+     */
+    private fun maybeSwitchToLan(
+        host: PairedHost,
+        socket: MizarConnection,
+        welcome: me.shirazu.mizar.kit.ServerFrame.Welcome,
+    ) {
+        if (!_state.value.localNetworkFirst || _state.value.isLocalNetwork) return
+        if (lanSwitchJob?.isActive == true) return
+        lanSwitchJob = viewModelScope.launch {
+            _state.update { it.copy(lanScanning = true) }
+            try {
+                val info = runCatching {
+                    socket.call<HostInfo>("host.info", timeoutMillis = LAN_PROBE_TIMEOUT_MILLIS)
+                }.getOrNull() ?: return@launch
+                val addresses = info.addresses ?: return@launch
+                for (address in addresses.distinct()) {
+                    if (address.isBlank()) continue
+                    if (address.startsWith("127.") || address.startsWith("localhost") || address.startsWith("[::1]")) continue
+                    if (address == host.authority) continue
+                    val probed = probeHostId(address, LAN_PROBE_TIMEOUT_MILLIS)
+                    if (probed != welcome.hostId) continue
+                    val updated = host.copy(authority = address)
+                    val candidateWelcome = runCatching {
+                        val candidate = MizarConnection(
+                            updated.configurationFor(MizarConnection.Endpoint.Direct(address), appVersion, deviceModel),
+                        )
+                        val hello = candidate.connect()
+                        if (hello.hostId != welcome.hostId) {
+                            runCatching { candidate.disconnect() }
+                            null
+                        } else {
+                            candidate
+                        }
+                    }.getOrNull() ?: continue
+                    // Replace the connection before closing the old socket: a failed
+                    // state on a socket that is no longer `connection` must not start a
+                    // reconnect loop for the relay we just left.
+                    stopWatchers()
+                    connectionObserver?.cancel()
+                    connectionObserver = null
+                    connection = candidateWelcome
+                    runCatching { socket.disconnect() }
+                    credentials.save(updated)
+                    _state.update { current ->
+                        current.copy(
+                            host = updated,
+                            hosts = current.hosts.map { if (it.hostId == updated.hostId) updated else it },
+                            welcome = candidateWelcome.welcome,
+                            phase = Phase.READY,
+                            isLocalNetwork = true,
+                            problem = null,
+                        )
+                    }
+                    publishLinkNotice(linkConnectedText(updated, _state.value.latencyMillis))
+                    startWatchers(candidateWelcome)
+                    watchConnection(candidateWelcome, updated)
+                    refreshSessions()
+                    registerPush(candidateWelcome)
+                    note("switched to LAN at $address")
+                    return@launch
+                }
+                note("LAN scan found no address for ${welcome.hostId}")
+            } finally {
+                _state.update { it.copy(lanScanning = false) }
+            }
+        }
+    }
+
     fun setPresence(foreground: Boolean) {
         // Remembered, because a reconnect has to re-assert it: the host forgets which
         // client is on screen the moment the socket drops, and a phone that looks
@@ -1439,6 +1798,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // quiet refresh, throttled so a quick app switch does not cost a round trip.
         if (foreground && System.currentTimeMillis() - lastRefreshAt > STALE_MILLIS) {
             refreshConversation()
+        }
+        if (foreground) {
+            val host = _state.value.host
+            val socket = connection
+            val welcome = _state.value.welcome
+            if (host != null && socket != null && welcome != null) maybeSwitchToLan(host, socket, welcome)
         }
         viewModelScope.launch {
             val socket = connection ?: return@launch
@@ -1475,7 +1840,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             var ticks = 0
             try {
                 while (true) {
-                    delay(INTERACTION_POLL_MILLIS)
+                    // The relay has to survive the internet; a LAN socket is a round trip
+                    // on the same wire, so the interaction poll can be three seconds
+                    // instead of ten without making the radio work harder than the UI.
+                    delay(if (_state.value.isLocalNetwork) LAN_INTERACTION_POLL_MILLIS else INTERACTION_POLL_MILLIS)
                     // The poll is a round trip, so it is also the clock: timing the one
                     // request the app already makes is how the notice learns the distance
                     // without a second protocol message invented for it.
@@ -1735,6 +2103,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
          * will wait through.
          */
         const val INTERACTION_POLL_MILLIS = 10_000L
+        /** Same-wire polling: three seconds instead of ten, like iOS on a LAN link. */
+        const val LAN_INTERACTION_POLL_MILLIS = 3_000L
+        /** How long one LAN probe gets before the next address is tried. */
+        const val LAN_PROBE_TIMEOUT_MILLIS = 4_000L
+        /** The open activity detail polls once a second, like iOS. */
+        const val ACTIVITY_POLL_MILLIS = 1_000L
+        /** Older pages accumulate up to this many lines before the oldest are dropped. */
+        const val MAX_ACTIVITY_ENTRIES = 1500
 
         /**
          * How long a poll waits before deciding the host is not there.

@@ -71,6 +71,7 @@ fun SettingsDialog(
     onAddHost: () -> Unit,
     onTheme: (ThemeMode) -> Unit,
     onQuietHours: (Boolean) -> Unit,
+    onLocalNetworkFirst: (Boolean) -> Unit,
     onRename: (String, String?) -> Unit = { _, _ -> },
 ) {
     // The whole window scrolls as one: the header is part of it, because a settings
@@ -164,6 +165,32 @@ fun SettingsDialog(
                 modifier = Modifier.weight(1f),
             )
             Switch(checked = state.quietHours, onCheckedChange = onQuietHours)
+        }
+
+        // Where the bytes travel, and what that unlocks. The relay works from
+        // anywhere; the LAN is faster and is what makes the running-turn detail and
+        // attachments available without an account.
+        SectionLabel(stringResource(R.string.transfer))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, Corner.md)
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.local_network_first),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    stringResource(R.string.local_network_first_note),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = state.localNetworkFirst, onCheckedChange = onLocalNetworkFirst)
         }
 
         SectionLabel(stringResource(R.string.hosts_section))

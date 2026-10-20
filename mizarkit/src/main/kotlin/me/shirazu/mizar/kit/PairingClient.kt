@@ -191,3 +191,22 @@ class PairingClient(
 /** The JSON body of a pairing request, exposed for tests that assert its shape. */
 fun pairRequestBody(request: PairRequest): JsonObject =
     WIRE_JSON.encodeToJsonElement(PairRequest.serializer(), request) as JsonObject
+
+/**
+ * Ask one direct address who it is, with a short deadline.
+ *
+ * LAN discovery probes addresses the phone has not paired with yet, so this
+ * deliberately throws nothing: an address that is empty, slow, speaks something
+ * else or is not a Mizar host simply is not the machine being looked for. The
+ * returned id is compared by the caller with the host it is already connected to.
+ */
+suspend fun probeHostId(authority: String, timeoutMillis: Long = 4_000): String? {
+    val client = OkHttpClient.Builder()
+        .connectTimeout(timeoutMillis, TimeUnit.MILLISECONDS)
+        .readTimeout(timeoutMillis, TimeUnit.MILLISECONDS)
+        .retryOnConnectionFailure(false)
+        .build()
+    return runCatching {
+        PairingClient(OkHttpHttpTransport(client)).hello(authority = authority).hostId
+    }.getOrNull()
+}

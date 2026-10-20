@@ -74,6 +74,17 @@ class ActivityStore(context: Context) {
     fun quietHours(): Boolean = prefs.getBoolean(QUIET, false)
     fun setQuietHours(on: Boolean) { prefs.edit().putBoolean(QUIET, on).apply() }
 
+    /**
+     * Whether the operator wants the LAN tried before the relay.
+     *
+     * Off by default, like iOS 0.9.4: the relay is the path that works from
+     * anywhere, and a scan on every resume costs a little battery and a few
+     * probes. Turning it on is what unlocks the faster poll and the two
+     * transfer features that do not go through the relay.
+     */
+    fun localNetworkFirst(): Boolean = prefs.getBoolean(LAN_FIRST, false)
+    fun setLocalNetworkFirst(on: Boolean) { prefs.edit().putBoolean(LAN_FIRST, on).apply() }
+
     private fun key(hostId: String, suffix: String) = "$hostId/$suffix"
 
 
@@ -81,5 +92,6 @@ class ActivityStore(context: Context) {
         const val FILE = "mizar-activity"
         const val THEME = "theme"
         const val QUIET = "quiet"
+        const val LAN_FIRST = "lan-first"
     }
 }

@@ -116,12 +116,15 @@ internal fun Composer(
     /** Whether the stop button's companion may go round: it is the one running
      *  mark in view. Otherwise it parks. */
     orbit: Boolean = false,
+    /** A ready attachment can be sent without text; the send key must know. */
+    hasAttachments: Boolean = false,
     /** Reported upward so the interactions dock can tuck itself away while typing. */
     onFocusChanged: (Boolean) -> Unit = {},
 ) {
     var focused by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val haptics = LocalHapticFeedback.current
+    val sendable = draft.isNotBlank() || hasAttachments
     // Each window grows out of the chip that opens it; the chips own their
     // windows, so the screen above never has to know they exist.
     var showingModel by remember { mutableStateOf(false) }
@@ -166,7 +169,7 @@ internal fun Composer(
                     // possible -- the field grows -- but the key that people expect to
                     // submit is the one that submits.
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { if (draft.isNotBlank()) onSend() }),
+                    keyboardActions = KeyboardActions(onSend = { if (sendable) onSend() }),
                     textStyle = MaterialTheme.typography.bodyLarge.copy(
                         color = MaterialTheme.colorScheme.onSurface,
                     ),
@@ -188,7 +191,7 @@ internal fun Composer(
                 PrimaryButton(
                     running = running,
                     orbit = orbit,
-                    draftBlank = draft.isBlank(),
+                    draftBlank = !sendable,
                     onSend = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         onSend()

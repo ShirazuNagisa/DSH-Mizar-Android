@@ -20,6 +20,12 @@ data class HostInfo(
     val hostName: String,
     val home: String,
     val protocolVersion: Int,
+    /**
+     * The addresses the listener is actually bound to, when the host plugin is new
+     * enough to answer. Absent is "this host cannot tell us" — not an empty list,
+     * which would mean "there is nowhere to dial".
+     */
+    val addresses: List<String>? = null,
 )
 
 /** `session.list`. */
@@ -381,3 +387,32 @@ data class RenameResult(val renamed: Boolean = false)
 /** `session.archive`. The host archives without stopping work; a running session is refused. */
 @Serializable
 data class ArchiveSessionResult(val archived: Boolean = false)
+
+/**
+ * `session.activity` — the compact feed of the turn that is running now.
+ *
+ * Only the running turn is described; `turn` is `null` when nothing is running.
+ * `entries` are one line each and already truncated by the host. The cursor pair
+ * exists for paging backwards: `beforeSeq` without its `turn` would name a page
+ * spanning earlier turns and cannot be answered honestly.
+ */
+@Serializable
+data class SessionActivityResult(
+    val sessionId: String,
+    val asOfSeq: Double? = null,
+    val turn: Int? = null,
+    val entries: List<ActivityEntry> = emptyList(),
+    val hasMore: Boolean = false,
+    val oldestSeq: Double? = null,
+)
+
+/** One line of a running turn: thought, command, its output, or a tool call. */
+@Serializable
+data class ActivityEntry(
+    val id: String,
+    val seq: Double,
+    val at: Double? = null,
+    val kind: String,
+    val title: String,
+    val text: String? = null,
+)

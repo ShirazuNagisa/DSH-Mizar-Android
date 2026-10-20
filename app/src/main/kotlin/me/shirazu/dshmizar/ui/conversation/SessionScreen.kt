@@ -1,6 +1,8 @@
 package me.shirazu.dshmizar.ui.conversation
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -20,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
@@ -46,6 +49,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -65,6 +69,7 @@ import kotlinx.coroutines.launch
 import me.shirazu.dshmizar.AppViewModel
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
+import me.shirazu.dshmizar.stageAttachment
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.AnchoredPopover
 import me.shirazu.dshmizar.ui.design.Glass
@@ -103,6 +108,21 @@ fun SessionScreen(
     drawerOpen: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    // The photo picker returns with no permission prompt; files go through the
+    // document picker. Both stage into the app cache before the upload starts.
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) scope.launch {
+            val staged = stageAttachment(context, uri, image = true) ?: return@launch
+            model.addAttachment(staged.file, staged.name, staged.kind, staged.mediaType)
+        }
+    }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) scope.launch {
+            val staged = stageAttachment(context, uri, image = false) ?: return@launch
+            model.addAttachment(staged.file, staged.name, staged.kind, staged.mediaType)
+        }
+    }
     val snackbar = remember { SnackbarHostState() }
     val clipboard = LocalClipboardManager.current
     val copiedMessage = stringResource(R.string.copied)
@@ -314,6 +334,19 @@ fun SessionScreen(
                     }
                 },
                 actions = {
+                    // The running turn's process is the answer to "what is it doing?";
+                    // on a relay socket it is not requested (iOS gates it the same way,
+                    // on a paid account or the LAN).
+                    if (running && state.isLocalNetwork) {
+                        IconButton(onClick = { model.toggleActivity() }) {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = stringResource(R.string.running_detail),
+                                tint = if (state.activityExpanded) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     // The screen follows pushed events, but a phone whose process was
                     // paused -- or a host that restarted -- can be stale. The button says
                     // when it is working: a refresh whose progress is invisible reads as
@@ -407,6 +440,13 @@ fun SessionScreen(
                         }
                     }
                 }
+                if (state.activityExpanded) {
+                    ActivityDetailPanel(
+                        state = state,
+                        onLoadOlder = { model.loadOlderActivity() },
+                        onClose = { model.toggleActivity() },
+                    )
+                }
                 InteractionsDock(
                     pending = state.pending,
                     titles = state.titles,
@@ -416,11 +456,20 @@ fun SessionScreen(
                     onApproval = { id, outcome -> model.answerApproval(id, outcome) },
                     onQuestions = { callId, answers -> model.answerQuestions(callId, answers) },
                 )
+                if (state.isLocalNetwork) {
+                    AttachmentBar(
+                        attachments = state.attachments,
+                        onPickPhoto = { photoPicker.launch("image/*") },
+                        onPickFile = { filePicker.launch("*/*") },
+                        onRemove = { key -> model.removeAttachment(key) },
+                    )
+                }
                 Composer(
                     state = state,
                     draft = draft,
                     onDraft = { draft = it },
                     running = running,
+                    hasAttachments = state.attachments.any { it.readyId != null },
                     onChooseModel = { selection -> model.setModel(selection) },
                     onCommand = { slash ->
                         // Into the draft: the operator finishes the sentence.
