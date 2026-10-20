@@ -46,6 +46,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 |---|---|---|---|
 | 0.9.0 | 38 | `dist/dsh-mizar-0.9.0.apk` | CI 出包（tag `v0.9.0`） |
 | 0.9.1 | 39 | — | 仅本地/调试包 |
-| 0.9.2 | 40 | `dist/dsh-mizar-0.9.2.apk` | 首个本地签名的正式包，不再走 CI |
-| 0.10.0 | 41 | `dist/dsh-mizar-0.10.0.apk` | GUI 重构：continuous corners、springs、glass、T1/T2/T3/T5 |
-| 0.10.1 | 42 | `dist/dsh-mizar-0.10.1.apk` | 真机回归修复：Next pill 的有效触区从 37dp 修正到 48dp（0.10.0 的 header 布局把 48dp 目标裁掉了） |
+| 0.9.2 | 40 | — | 早期本地构建（未发布） |
+| 0.10.0 | 41 | `dist/dsh-mizar-0.10.0.apk` | GUI 重构内部版本 |
+| 0.10.1 | 42 | `dist/dsh-mizar-0.10.1.apk` | Next pill 触区修复内部版本 |
+| **0.9.2** | **43** | `dist/dsh-mizar-0.9.2.apk` | **对外发布版本**：GUI 重构 + Next 触区修复；按要求复用 0.9.2 版本名，versionCode 43 高于内部版本 |
