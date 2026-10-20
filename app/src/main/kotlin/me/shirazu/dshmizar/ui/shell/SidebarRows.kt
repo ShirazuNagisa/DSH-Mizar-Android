@@ -358,7 +358,7 @@ private fun SessionRowButton(
     // The menu hangs off the row's trailing edge, not its leading one: it belongs
     // to the row but should not cover the titles to its left, and the thumb that
     // opened it is on the right half of the screen.
-    val menuWidth = 200.dp
+    val menuWidth = 160.dp
     val menuOffset = if (layoutDirection == LayoutDirection.Ltr) {
         DpOffset(x = (with(density) { rowWidthPx.toDp() } - menuWidth).coerceAtLeast(0.dp), y = 0.dp)
     } else {
