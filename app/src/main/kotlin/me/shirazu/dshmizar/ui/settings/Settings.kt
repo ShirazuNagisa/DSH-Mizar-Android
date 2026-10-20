@@ -1,5 +1,11 @@
 package me.shirazu.dshmizar.ui.settings
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.app.NotificationManagerCompat
+import me.shirazu.dshmizar.BuildConfig
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -71,9 +77,14 @@ fun SettingsDialog(
     onAddHost: () -> Unit,
     onTheme: (ThemeMode) -> Unit,
     onQuietHours: (Boolean) -> Unit,
+    onNotifyCompleted: (Boolean) -> Unit,
+    onNotifyInterrupted: (Boolean) -> Unit,
+    onNotifyQuestions: (Boolean) -> Unit,
+    onNotifyApprovals: (Boolean) -> Unit,
     onLocalNetworkFirst: (Boolean) -> Unit,
     onRename: (String, String?) -> Unit = { _, _ -> },
 ) {
+    val context = LocalContext.current
     // The whole window scrolls as one: the header is part of it, because a settings
     // list that grows must not make the rows below the fold unreachable. Drawn like
     // the workspace list -- one column, dragged vertically.
@@ -151,21 +162,37 @@ fun SettingsDialog(
         )
 
         SectionLabel(stringResource(R.string.notifications))
+        // The system can still veto every one of the switches below; saying so here
+        // is the difference between "the app is broken" and "notifications are off".
+        val allowed = remember { NotificationManagerCompat.from(context).areNotificationsEnabled() }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp)
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh, Corner.md)
-                .padding(horizontal = 10.dp, vertical = 2.dp),
+                .clickable {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+                        )
+                    }
+                }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                stringResource(R.string.quiet_hours),
-                style = MaterialTheme.typography.bodyMedium,
+                stringResource(if (allowed) R.string.system_notifications_on else R.string.system_notifications_off),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (allowed) MaterialTheme.colorScheme.onSurfaceVariant else MizarColors.Warning,
                 modifier = Modifier.weight(1f),
             )
-            Switch(checked = state.quietHours, onCheckedChange = onQuietHours)
         }
+        SettingToggle(stringResource(R.string.quiet_hours), state.quietHours, onQuietHours)
+        SettingToggle(stringResource(R.string.notify_completed), state.notifyCompleted, onNotifyCompleted)
+        SettingToggle(stringResource(R.string.notify_interrupted), state.notifyInterrupted, onNotifyInterrupted)
+        SettingToggle(stringResource(R.string.notify_questions), state.notifyQuestions, onNotifyQuestions)
+        SettingToggle(stringResource(R.string.notify_approvals), state.notifyApprovals, onNotifyApprovals)
 
         // Where the bytes travel, and what that unlocks. The relay works from
         // anywhere; the LAN is faster and is what makes the running-turn detail and
@@ -245,6 +272,35 @@ fun SettingsDialog(
             Spacer(Modifier.width(4.dp))
             Text(stringResource(R.string.add_mac))
         }
+
+        SectionLabel(stringResource(R.string.about))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(stringResource(R.string.app_version, BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.bodySmall)
+        }
+        Text(
+            text = stringResource(R.string.source_code),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .clickable {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ShirazuNagisa/DSH-Mizar-Android")),
+                        )
+                    }
+                }
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+        )
+        Text(
+            text = stringResource(R.string.acknowledgements),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
+        )
+
         Text(
             text = stringResource(R.string.settings_note),
             style = MaterialTheme.typography.bodySmall,
@@ -255,9 +311,28 @@ fun SettingsDialog(
 }
 
 
+/** One compact switch row in the notifications section. */
 @Composable
-private fun SectionLabel(text: String) {
-    Text(
+private fun SettingToggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, Corner.md)
+            .padding(horizontal = 10.dp, vertical = 1.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {    Text(
         text = text.uppercase(),
         style = MaterialTheme.typography.labelSmall.copy(
             fontWeight = FontWeight.SemiBold,

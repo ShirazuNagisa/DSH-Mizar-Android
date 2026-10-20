@@ -92,6 +92,16 @@
     <string name="attachment_too_many">Too many attachments.</string>
     <string name="attachment_too_large">That file is too large for this host.</string>
     <string name="attachment_failed">The attachment could not be uploaded.</string>
+    <string name="notify_completed">Completed turns</string>
+    <string name="notify_interrupted">Interrupted turns</string>
+    <string name="notify_questions">Questions waiting</string>
+    <string name="notify_approvals">Approvals waiting</string>
+    <string name="system_notifications_on">System notifications are allowed</string>
+    <string name="system_notifications_off">System notifications are off — tap to open settings</string>
+    <string name="about">About</string>
+    <string name="app_version">Version %2$s (%1$d)</string>
+    <string name="source_code">Source code</string>
+    <string name="acknowledgements">GPLv3. iOS and Android share MizarKit and the same host plugin.</string>
     <string name="no_sessions">No sessions yet. Start one on your computer, then refresh.</string>
     <string name="workspace_count">%1$d sessions</string>
     <string name="show_more">Show %1$d more</string>

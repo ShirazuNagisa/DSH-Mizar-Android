@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.shirazu.dshmizar.MainActivity
 import me.shirazu.dshmizar.R
+import me.shirazu.dshmizar.store.ActivityStore
 import java.util.concurrent.TimeUnit
 
 /**
@@ -203,6 +204,15 @@ class MizarMessagingService : FirebaseMessagingService() {
         // Both keys are strings by protocol: FCM refuses a data payload whose values
         // are not, so the host stringifies them.
         val sessionId = message.data["sessionId"]?.takeIf { it.isNotEmpty() }
+        // The relay pushes the same four categories the local paths produce. The
+        // operator's switches must silence these too, or a category turned off still
+        // arrives whenever the app happens to be suspended.
+        val store = ActivityStore(this)
+        when (message.data["kind"]) {
+            "approval" -> if (!store.notifyApprovals()) return
+            "question" -> if (!store.notifyQuestions()) return
+            "turn-complete" -> if (!store.notifyCompleted() && !store.notifyInterrupted()) return
+        }
         Notifications.ensureChannel(this)
         Notifications.show(this, title, body, sessionId)
     }

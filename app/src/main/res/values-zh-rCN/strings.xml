@@ -65,6 +65,16 @@
     <string name="attachment_too_many">附件数量过多。</string>
     <string name="attachment_too_large">文件超过主机允许的大小。</string>
     <string name="attachment_failed">附件上传失败。</string>
+    <string name="notify_completed">已完成</string>
+    <string name="notify_interrupted">被中断</string>
+    <string name="notify_questions">待回答问题</string>
+    <string name="notify_approvals">待处理审批</string>
+    <string name="system_notifications_on">系统通知已允许</string>
+    <string name="system_notifications_off">系统通知已关闭——点击打开设置</string>
+    <string name="about">关于</string>
+    <string name="app_version">版本 %2$s（%1$d）</string>
+    <string name="source_code">源代码</string>
+    <string name="acknowledgements">GPLv3。iOS 与 Android 共用 MizarKit 与同一套宿主插件。</string>
     <string name="no_sessions">还没有会话。在电脑上新建一个，然后刷新。</string>
     <string name="workspace_count">%1$d 个会话</string>
     <string name="show_more">再显示 %1$d 个</string>

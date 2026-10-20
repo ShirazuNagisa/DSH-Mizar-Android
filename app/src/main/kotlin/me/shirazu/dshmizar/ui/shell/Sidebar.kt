@@ -492,6 +492,10 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
             },
             onTheme = { mode -> model.setTheme(mode) },
             onQuietHours = { on -> model.setQuietHours(on) },
+            onNotifyCompleted = { on -> model.setNotifyCompleted(on) },
+            onNotifyInterrupted = { on -> model.setNotifyInterrupted(on) },
+            onNotifyQuestions = { on -> model.setNotifyQuestions(on) },
+            onNotifyApprovals = { on -> model.setNotifyApprovals(on) },
             onLocalNetworkFirst = { on -> model.setLocalNetworkFirst(on) },
             onRename = { hostId, label -> model.renameHost(hostId, label) },
         )

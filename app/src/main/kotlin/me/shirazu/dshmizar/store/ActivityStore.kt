@@ -74,6 +74,20 @@ class ActivityStore(context: Context) {
     fun quietHours(): Boolean = prefs.getBoolean(QUIET, false)
     fun setQuietHours(on: Boolean) { prefs.edit().putBoolean(QUIET, on).apply() }
 
+    // Four independent notice categories, as in iOS. A category that is off is
+    // dropped where it arrives -- not hidden by a system setting the app cannot see.
+    fun notifyCompleted(): Boolean = prefs.getBoolean(NOTIFY_COMPLETED, true)
+    fun setNotifyCompleted(on: Boolean) { prefs.edit().putBoolean(NOTIFY_COMPLETED, on).apply() }
+
+    fun notifyInterrupted(): Boolean = prefs.getBoolean(NOTIFY_INTERRUPTED, true)
+    fun setNotifyInterrupted(on: Boolean) { prefs.edit().putBoolean(NOTIFY_INTERRUPTED, on).apply() }
+
+    fun notifyQuestions(): Boolean = prefs.getBoolean(NOTIFY_QUESTIONS, true)
+    fun setNotifyQuestions(on: Boolean) { prefs.edit().putBoolean(NOTIFY_QUESTIONS, on).apply() }
+
+    fun notifyApprovals(): Boolean = prefs.getBoolean(NOTIFY_APPROVALS, true)
+    fun setNotifyApprovals(on: Boolean) { prefs.edit().putBoolean(NOTIFY_APPROVALS, on).apply() }
+
     /**
      * Whether the operator wants the LAN tried before the relay.
      *
@@ -92,6 +106,10 @@ class ActivityStore(context: Context) {
         const val FILE = "mizar-activity"
         const val THEME = "theme"
         const val QUIET = "quiet"
+        const val NOTIFY_COMPLETED = "notify-completed"
+        const val NOTIFY_INTERRUPTED = "notify-interrupted"
+        const val NOTIFY_QUESTIONS = "notify-questions"
+        const val NOTIFY_APPROVALS = "notify-approvals"
         const val LAN_FIRST = "lan-first"
     }
 }

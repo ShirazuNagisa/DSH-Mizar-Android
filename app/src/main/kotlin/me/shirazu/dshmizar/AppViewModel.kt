@@ -24,6 +24,7 @@ import me.shirazu.dshmizar.push.PushTokens
 import me.shirazu.dshmizar.push.ConnectionService
 import me.shirazu.dshmizar.push.Notifications
 import me.shirazu.dshmizar.store.ActivityStore
+import me.shirazu.dshmizar.store.ConversationCache
 import me.shirazu.dshmizar.ui.ThemeMode
 import me.shirazu.dshmizar.store.EncryptedCredentialStore
 import me.shirazu.dshmizar.store.FileSessionIndexStore
@@ -142,6 +143,11 @@ data class UiState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /** Silence finished-turn notices at night; the settings dialog owns the switch. */
     val quietHours: Boolean = false,
+    /** Four independent notice categories, as in iOS. */
+    val notifyCompleted: Boolean = true,
+    val notifyInterrupted: Boolean = true,
+    val notifyQuestions: Boolean = true,
+    val notifyApprovals: Boolean = true,
     /** Prefer a direct LAN socket over the relay when one can be found. */
     val localNetworkFirst: Boolean = false,
     /** The live link is a direct/LAN socket rather than the relay. */
@@ -185,12 +191,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val credentials: CredentialStore = EncryptedCredentialStore(application)
     private val activity = ActivityStore(application)
     private val indexStore: SessionIndexStore = FileSessionIndexStore(application)
+    private val conversationCache = ConversationCache(application)
 
     private val _state = MutableStateFlow(
         UiState(
             themeMode = activity.themeMode().toThemeMode(),
             quietHours = activity.quietHours(),
             localNetworkFirst = activity.localNetworkFirst(),
+            notifyCompleted = activity.notifyCompleted(),
+            notifyInterrupted = activity.notifyInterrupted(),
+            notifyQuestions = activity.notifyQuestions(),
+            notifyApprovals = activity.notifyApprovals(),
         ),
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -579,6 +590,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (activity.quietHours() && isQuietNow()) { note("list: ${row.sessionId} quiet hours"); continue }
 
             val detail = describeFinished(row.sessionId)
+            if ((detail.failed && !_state.value.notifyInterrupted) || (!detail.failed && !_state.value.notifyCompleted)) {
+                note("list: ${row.sessionId} notice category off")
+                continue
+            }
             val title = context.getString(
                 if (detail.failed) R.string.turn_failed_notice_title else R.string.turn_completed_title,
             )
@@ -887,6 +902,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         clearAttachments()
         if (sessionId == null) return
         viewModelScope.launch {
+            // What was on screen last time, before the first round trip: opening a
+            // session offline shows its conversation rather than an empty card.
+            val activeHost = _state.value.host?.hostId ?: hostId
+            if (activeHost != null) {
+                conversationCache.load(activeHost, sessionId)?.let { cached ->
+                    if (_state.value.selectedSessionId == sessionId) {
+                        applyPage(cached.messages)
+                        cached.stats?.let { stats ->
+                            _state.update { it.copy(stats = stats.stats, statsError = null) }
+                        }
+                    }
+                }
+            }
             reload()
             refreshInteractions()
         }
@@ -982,6 +1010,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 newestSeq = listOfNotNull(current.newestSeq, page.asOfSeq).maxOrNull(),
             )
         }
+        val hostId = _state.value.host?.hostId
+        val sessionId = _state.value.selectedSessionId
+        if (hostId != null && sessionId != null) {
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                conversationCache.record(hostId, sessionId, page)
+            }
+        }
     }
 
     /**
@@ -1027,7 +1062,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return false
         }
         applyPage(bundle.messages)
-        bundle.stats?.let { stats -> _state.update { it.copy(stats = stats.stats, statsError = null) } }
+        bundle.stats?.let { stats ->
+            _state.update { it.copy(stats = stats.stats, statsError = null) }
+            val hostId = _state.value.host?.hostId
+            if (hostId != null) {
+                viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    conversationCache.recordStats(hostId, sessionId, stats)
+                }
+            }
+        }
         bundle.pending?.let { pending -> _state.update { it.copy(pending = pending) } }
         return true
     }
@@ -1067,6 +1110,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         try {
             val stats = socket.call<SessionStatsResult>("session.stats", payload("sessionId" to jsonString(sessionId)))
             _state.update { it.copy(stats = stats.stats, statsError = null) }
+            val hostId = _state.value.host?.hostId
+            if (hostId != null) {
+                viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    conversationCache.recordStats(hostId, sessionId, stats)
+                }
+            }
         } catch (error: Throwable) {
             _state.update { it.copy(statsError = messageOf(error, addressOf())) }
         }
@@ -1506,14 +1555,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (signature == lastNotified) return true
             lastNotified = signature
             val app = getApplication<Application>()
+            // Only the categories the operator left on. An agent blocked on a
+            // question the phone has been told not to surface is not a notice the
+            // app is entitled to ignore, so the count is filtered rather than the
+            // whole batch.
+            val shownApprovals = if (_state.value.notifyApprovals) pending.approvals.size else 0
+            val shownQuestions = if (_state.value.notifyQuestions) pending.questions.size else 0
+            if (shownApprovals == 0 && shownQuestions == 0) {
+                note("pending: notice categories off")
+                return true
+            }
             // Counted from the catalogue, not spelled here: the hardcoded English was
             // the one notification that stayed English on a Chinese phone. Parity over
             // grammar, like the rest of the catalogue, so a count of one reads
             // "1 approvals" rather than inventing plural rules the iOS client lacks.
             val counts = listOfNotNull(
-                pending.approvals.size.takeIf { it > 0 }
+                pending.approvals.size.takeIf { shownApprovals > 0 }
                     ?.let { app.getString(R.string.pending_approvals, it) },
-                pending.questions.size.takeIf { it > 0 }
+                pending.questions.size.takeIf { shownQuestions > 0 }
                     ?.let { app.getString(R.string.pending_questions, it) },
             ).joinToString(" + ")
             runCatching {
@@ -1695,6 +1754,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setQuietHours(on: Boolean) {
         activity.setQuietHours(on)
         _state.update { it.copy(quietHours = on) }
+    }
+
+    fun setNotifyCompleted(on: Boolean) {
+        activity.setNotifyCompleted(on)
+        _state.update { it.copy(notifyCompleted = on) }
+    }
+
+    fun setNotifyInterrupted(on: Boolean) {
+        activity.setNotifyInterrupted(on)
+        _state.update { it.copy(notifyInterrupted = on) }
+    }
+
+    fun setNotifyQuestions(on: Boolean) {
+        activity.setNotifyQuestions(on)
+        _state.update { it.copy(notifyQuestions = on) }
+    }
+
+    fun setNotifyApprovals(on: Boolean) {
+        activity.setNotifyApprovals(on)
+        _state.update { it.copy(notifyApprovals = on) }
     }
 
     /**
@@ -1982,6 +2061,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         val context = getApplication<Application>()
         val detail = describeFinished(sessionId)
+        if ((detail.failed && !_state.value.notifyInterrupted) || (!detail.failed && !_state.value.notifyCompleted)) {
+            note("settled $sessionId: notice category off")
+            return
+        }
         val title = context.getString(
             if (detail.failed) R.string.turn_failed_notice_title else R.string.turn_completed_title,
         )
