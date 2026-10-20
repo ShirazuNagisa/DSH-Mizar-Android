@@ -3,11 +3,14 @@ package me.shirazu.dshmizar.ui.conversation
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -40,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
@@ -80,6 +85,8 @@ import me.shirazu.dshmizar.ui.design.Space
 import me.shirazu.dshmizar.ui.design.glassCard
 import me.shirazu.dshmizar.ui.design.pressable
 import me.shirazu.dshmizar.ui.design.shapedClickable
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * Sending a prompt, and stopping one -- ported from iOS `Views/ComposerView.swift`
@@ -106,6 +113,9 @@ internal fun Composer(
     onCommand: (String) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
+    /** Whether the stop button's companion may go round: it is the one running
+     *  mark in view. Otherwise it parks. */
+    orbit: Boolean = false,
     /** Reported upward so the interactions dock can tuck itself away while typing. */
     onFocusChanged: (Boolean) -> Unit = {},
 ) {
@@ -177,6 +187,7 @@ internal fun Composer(
             Box(modifier = Modifier.padding(end = 8.dp)) {
                 PrimaryButton(
                     running = running,
+                    orbit = orbit,
                     draftBlank = draft.isBlank(),
                     onSend = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -458,6 +469,7 @@ internal fun ContextRing(
 @Composable
 private fun PrimaryButton(
     running: Boolean,
+    orbit: Boolean,
     draftBlank: Boolean,
     onSend: () -> Unit,
     onStop: () -> Unit,
@@ -482,10 +494,14 @@ private fun PrimaryButton(
         Motion.pick(Motion.bouncy()),
         label = "primaryScale",
     )
+    val companion = alcor(stopping = mode == Mode.STOP, orbit = orbit)
     Box(
         modifier = Modifier
             .size(34.dp)
             .scale(scale)
+            // Drawn before the clip, so it can go round outside the rim -- and
+            // under the fill, so a companion spiralling in is taken in by it.
+            .then(companion)
             .clip(CircleShape)
             .background(fill)
             .pressable(scale = 0.88f)
@@ -511,3 +527,72 @@ private fun PrimaryButton(
 }
 
 private enum class Mode { IDLE, SEND, STOP }
+
+/** One turn of the companion: TwinStar's period. */
+private const val AlcorPeriodMillis = 2400
+private const val AlcorParkDegrees = -35f
+private val AlcorOrbit = 20.dp
+private val AlcorDot = 1.5.dp
+
+/**
+ * Alcor, Mizar's faint companion, going round the stop button while the turn is
+ * running and the button is the one running mark in view ([orbit]); parked at -35°
+ * when it is not, and under Reduce Motion.
+ *
+ * Out of the centre when the button becomes Stop; into it when the button stops
+ * being Stop -- the turn finished, was cancelled, or a draft turned it into Send --
+ * still turning as it goes, so the end of a turn is drawn as the companion coming
+ * home. Its reach follows the state, not a timer: a cancel that lands mid-spiral
+ * turns it round with the speed it has. Under Reduce Motion it fades rather than
+ * travels.
+ *
+ * Everything moves in the draw phase: the angle and the reach are read as the dot
+ * is drawn, and the button recomposes for none of it.
+ */
+@Composable
+private fun alcor(stopping: Boolean, orbit: Boolean): Modifier {
+    val reduceMotion = LocalReduceMotion.current
+    val color = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+    val reach = animateFloatAsState(
+        if (stopping) 1f else 0f,
+        Motion.pick(Motion.smooth()),
+        label = "alcorReach",
+    )
+    val angle = remember { Animatable(AlcorParkDegrees) }
+    val spinning = stopping && orbit && !reduceMotion
+    LaunchedEffect(spinning, stopping, reduceMotion) {
+        // Kept within one turn, so the numbers never grow.
+        angle.snapTo(angle.value.mod(360f))
+        val speed = 360f / AlcorPeriodMillis * 1000f // degrees per second
+        when {
+            reduceMotion -> angle.snapTo(AlcorParkDegrees.mod(360f))
+            spinning -> while (true) {
+                angle.animateTo(angle.value + 360f, tween(AlcorPeriodMillis, easing = LinearEasing))
+                angle.snapTo(angle.value.mod(360f))
+            }
+            // Coming home: a last third of a turn as it spirals in.
+            !stopping -> angle.animateTo(angle.value + 120f, Motion.smooth(), initialVelocity = speed)
+            // Parked: on round to the park position, not back to it.
+            else -> {
+                var park = AlcorParkDegrees.mod(360f)
+                if (park < angle.value) park += 360f
+                angle.animateTo(park, Motion.smooth())
+            }
+        }
+    }
+    return Modifier.drawBehind {
+        val r = reach.value.coerceIn(0f, 1f)
+        if (r <= 0.001f) return@drawBehind
+        val rad = Math.toRadians(angle.value.toDouble())
+        val orbitPx = AlcorOrbit.toPx() * (if (reduceMotion) 1f else r)
+        drawCircle(
+            color = color,
+            alpha = if (reduceMotion) r else 1f,
+            radius = AlcorDot.toPx(),
+            center = Offset(
+                center.x + orbitPx * cos(rad).toFloat(),
+                center.y + orbitPx * sin(rad).toFloat(),
+            ),
+        )
+    }
+}

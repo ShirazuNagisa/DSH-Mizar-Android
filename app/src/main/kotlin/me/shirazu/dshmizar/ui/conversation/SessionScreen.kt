@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.progressSemantics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -236,6 +237,12 @@ fun SessionScreen(
     val lastTurn = state.turns.lastOrNull()
     val inFlight = lastTurn != null && (lastTurn.isRunning || lastTurn.isPending) && (sessionRunning || recent)
     val running = sessionRunning || inFlight
+    // Whether the newest turn's section -- where the transcript draws its own twin
+    // star and shimmer -- is laid out in the viewport.
+    val runningTurnId = lastTurn?.takeIf { inFlight || it.isRunning }?.id
+    val runningOnScreen by remember(runningTurnId) {
+        derivedStateOf { runningTurnId != null && list.layoutInfo.visibleItemsInfo.any { it.key == runningTurnId } }
+    }
     val hasPending = state.pending?.isEmpty == false
     val lastTurnFailed = state.turns.lastOrNull()?.steps?.any { it is ConversationItem.Failure } == true
 
@@ -429,6 +436,10 @@ fun SessionScreen(
                         model.sendPrompt(text)
                     },
                     onStop = { model.cancelTurn() },
+                    // Alcor goes round the stop button only while it is the one
+                    // running mark in view: not under the drawer, and not while the
+                    // transcript's own twin star is on screen.
+                    orbit = running && !drawerOpen && !runningOnScreen,
                     onFocusChanged = { composerFocused = it },
                 )
             }
@@ -510,10 +521,15 @@ private fun StatusLine(running: Boolean, pending: Boolean, failed: Boolean) {
     }
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
         if (running) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(10.dp),
-                strokeWidth = 1.5.dp,
+            // The twin star, parked: running reads from the star and the label, and
+            // the one thing that moves for it is the companion on the stop button
+            // (or the transcript's own star, when that is on screen). Announced as
+            // the indeterminate progress the spinner was.
+            me.shirazu.dshmizar.ui.design.TwinStar(
+                modifier = Modifier.progressSemantics(),
+                size = 10.dp,
                 color = tint,
+                parked = true,
             )
         } else {
             Box(Modifier.size(6.dp).background(tint, androidx.compose.foundation.shape.CircleShape))

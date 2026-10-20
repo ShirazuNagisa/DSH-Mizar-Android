@@ -27,6 +27,9 @@ import kotlin.math.sin
  * faint companion, Alcor, beside it. A session that is working shows exactly
  * that: a dot, and a smaller one going round it. Ported from iOS
  * `Design/TwinStar.swift`. Under Reduce Motion the companion stops at -35°.
+ *
+ * [parked]: the companion held at -35° whatever the setting -- the star still
+ * says "running", for a place where another mark on screen is the one that moves.
  */
 @Composable
 fun TwinStar(
@@ -34,8 +37,9 @@ fun TwinStar(
     size: Dp = 12.dp,
     color: Color = MaterialTheme.colorScheme.primary,
     periodMillis: Int = 2400,
+    parked: Boolean = false,
 ) {
-    val reduceMotion = LocalReduceMotion.current
+    val reduceMotion = LocalReduceMotion.current || parked
     val angle by if (reduceMotion) {
         androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(-35f) }
     } else {
