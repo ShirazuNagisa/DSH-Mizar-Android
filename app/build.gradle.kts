@@ -40,6 +40,8 @@ android {
         // (0.8.0 / 15) so a build can be identified from either platform's report.
         versionCode = 43
         versionName = "0.10.1"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures {
@@ -66,6 +68,12 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (hasReleaseKeystore) signingConfig = signingConfigs.getByName("release")
+        }
+        debug {
+            // Instrumentation tests replace the installed release build; signing the
+            // debug app and its test APK with the release key keeps the pairing and the
+            // cached transcripts instead of requiring an uninstall.
             if (hasReleaseKeystore) signingConfig = signingConfigs.getByName("release")
         }
     }
@@ -113,6 +121,12 @@ dependencies {
     implementation(libs.firebase.messaging)
 
     testImplementation(libs.junit4)
+
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.espresso.core)
+    androidTestImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
 }
 
 /**
