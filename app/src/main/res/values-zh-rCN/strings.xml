@@ -95,6 +95,10 @@
     <string name="subagent_running">运行中</string>
     <string name="subagent_finished">已结束</string>
     <string name="slow_typewriter">慢速打字机（用于验证）</string>
+    <string name="side_page_turns">轮次</string>
+    <string name="side_page_subagents">子代理</string>
+    <string name="side_page_preview">预览</string>
+    <string name="preview_under_development">还在开发中，敬请期待。</string>
     <string name="no_sessions">还没有会话。在电脑上新建一个，然后刷新。</string>
     <string name="workspace_count">%1$d 个会话</string>
     <string name="show_more">再显示 %1$d 个</string>

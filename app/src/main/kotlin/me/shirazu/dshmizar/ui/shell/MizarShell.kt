@@ -251,9 +251,9 @@ fun MizarShell(model: AppViewModel, state: UiState) {
                         .background(MizarColors.SidebarBackground)
                         .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
                 ) {
-                    TurnIndex(
+                    WideSidePlane(
+                        model = model,
                         state = state,
-                        now = System.currentTimeMillis(),
                         onScreen = onScreenTurns,
                         onPick = { index ->
                             scope.launch {

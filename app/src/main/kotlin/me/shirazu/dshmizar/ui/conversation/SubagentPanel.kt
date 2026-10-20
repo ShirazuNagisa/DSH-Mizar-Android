@@ -74,36 +74,40 @@ internal fun SubagentPanel(
                         Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
                     }
                 }
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    if (children.isEmpty()) {
-                        Text(
-                            stringResource(R.string.subagents_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        return@Column
-                    }
-                    Text(
-                        stringResource(R.string.subagents_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp),
-                    )
-                    if (state.subagentLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
-                            strokeWidth = 1.5.dp,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    children.forEachIndexed { index, child ->
-                        SubagentRowItem(number = index + 1, child = child, state = state)
-                    }
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    SubagentList(state = state, children = children)
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun SubagentList(state: UiState, children: List<SessionRow>) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (children.isEmpty()) {
+            Text(
+                stringResource(R.string.subagents_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            return@Column
+        }
+        Text(
+            stringResource(R.string.subagents_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp),
+        )
+        if (state.subagentLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(14.dp),
+                strokeWidth = 1.5.dp,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        children.forEachIndexed { index, child ->
+            SubagentRowItem(number = index + 1, child = child, state = state)
         }
     }
 }
