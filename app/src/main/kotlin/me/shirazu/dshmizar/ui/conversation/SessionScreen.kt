@@ -342,7 +342,10 @@ fun SessionScreen(
                 },
                 actions = {
                     if (subagents.isNotEmpty()) {
-                        IconButton(onClick = { showingSubagents = true }) {
+                        IconButton(onClick = {
+                            model.loadSubagentTitles()
+                            showingSubagents = true
+                        }) {
                             Icon(
                                 Icons.Default.Person,
                                 contentDescription = stringResource(R.string.subagents),

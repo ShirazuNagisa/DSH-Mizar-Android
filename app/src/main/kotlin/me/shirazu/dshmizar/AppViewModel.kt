@@ -103,6 +103,9 @@ data class UiState(
     val pairingStage: PairingStage? = null,
     /** Showing the cached session list while the host is unreachable. */
     val offlineBrowser: Boolean = false,
+    /** Titles read from the delegated children themselves, by session id. */
+    val subagentTitles: Map<String, String> = emptyMap(),
+    val subagentLoading: Boolean = false,
     val hosts: List<PairedHost> = emptyList(),
     val host: PairedHost? = null,
     val welcome: ServerFrame.Welcome? = null,
@@ -727,6 +730,71 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun browseOffline() {
         _state.update { it.copy(offlineBrowser = true) }
+    }
+
+    /**
+     * Read the delegated children's own names, once per child.
+     *
+     * The session list carries the children but not their titles; iOS shows the
+     * title from the child's usage frame, else its first prompt. Same sources here,
+     * read only when the board is opened -- the app deliberately never syncs
+     * subagent pages in bulk.
+     */
+    fun loadSubagentTitles() {
+        val selected = _state.value.selectedSessionId ?: return
+        if (_state.value.subagentLoading) return
+        val children = _state.value.sessions.filter {
+            it.isSubagent && it.parentSessionId == selected
+        }
+        val pending = children.map { it.sessionId }.filterNot { it in _state.value.subagentTitles }.take(20)
+        if (pending.isEmpty()) return
+        val socket = connection ?: return
+        _state.update { it.copy(subagentLoading = true) }
+        viewModelScope.launch {
+            try {
+                for (childId in pending) {
+                    val title = readSubagentTitle(socket, childId)
+                    if (title != null) {
+                        _state.update { it.copy(subagentTitles = it.subagentTitles + (childId to title)) }
+                    }
+                }
+            } finally {
+                _state.update { it.copy(subagentLoading = false) }
+            }
+        }
+    }
+
+    /** The child's usage-frame title, else the first line of its first prompt. */
+    private suspend fun readSubagentTitle(socket: MizarConnection, childId: String): String? {
+        val fromStats = runCatching {
+            socket.call<SessionStatsResult>("session.stats", payload("sessionId" to jsonString(childId)))
+        }.getOrNull()?.stats?.title?.takeIf { it.isNotBlank() }
+        if (fromStats != null) {
+            note("subagent title $childId -> stats")
+            return fromStats
+        }
+        val title = runCatching {
+            // The tail of a short delegated session usually contains its whole log;
+            // 200 records is the same page size the conversation asks for and enough
+            // to reach the prompt the child was given.
+            val page = socket.call<SessionMessagesResult>(
+                "session.messages",
+                payload(
+                    "sessionId" to jsonString(childId),
+                    "maxMessages" to me.shirazu.mizar.kit.jsonInt(200),
+                ),
+            )
+            Conversation.items(page)
+                .filterIsInstance<ConversationItem.Message>()
+                .firstOrNull { it.role == ConversationItem.Role.USER }
+                ?.text
+                ?.lineSequence()
+                ?.map { it.trim() }
+                ?.firstOrNull { it.isNotEmpty() }
+                ?.take(80)
+        }.getOrNull()
+        note("subagent title $childId -> ${title ?: "miss"}")
+        return title
     }
 
     /**

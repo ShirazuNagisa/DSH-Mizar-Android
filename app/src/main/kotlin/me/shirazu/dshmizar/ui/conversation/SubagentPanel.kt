@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -91,6 +92,13 @@ internal fun SubagentPanel(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp),
                     )
+                    if (state.subagentLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 1.5.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                     children.forEachIndexed { index, child ->
                         SubagentRowItem(number = index + 1, child = child, state = state)
                     }
@@ -102,7 +110,8 @@ internal fun SubagentPanel(
 
 @Composable
 private fun SubagentRowItem(number: Int, child: SessionRow, state: UiState) {
-    val title = SessionGrouping.sessionTitle(child, state.titles)
+    val title = state.subagentTitles[child.sessionId]
+        ?: SessionGrouping.sessionTitle(child, state.titles)
     val tint = if (child.running) MizarColors.Running else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         modifier = Modifier
