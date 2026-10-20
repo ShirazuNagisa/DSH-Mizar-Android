@@ -21,7 +21,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -302,7 +301,9 @@ fun SessionScreen(
                     // The shell's toggle: the list is a card underneath, not a
                     // screen behind, so this opens the sidebar rather than popping.
                     IconButton(onClick = onOpenSidebar) {
-                        Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.show_sidebar))
+                        // Scrubbed by the drawer itself: three lines at rest, an
+                        // arrow back once the sidebar is out.
+                        me.shirazu.dshmizar.ui.design.SidebarGlyph(stringResource(R.string.show_sidebar))
                     }
                 },
                 actions = {

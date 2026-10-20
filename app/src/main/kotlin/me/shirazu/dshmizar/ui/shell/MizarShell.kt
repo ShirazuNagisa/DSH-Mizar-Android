@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +55,7 @@ import me.shirazu.dshmizar.ui.conversation.SessionScreen
 import me.shirazu.dshmizar.ui.pairing.NamingDialog
 import me.shirazu.dshmizar.ui.design.ContinuousCornerShape
 import me.shirazu.dshmizar.ui.design.LocalReduceMotion
+import me.shirazu.dshmizar.ui.design.LocalShellProgress
 import me.shirazu.dshmizar.ui.design.rememberPushedCardRadius
 import kotlin.math.min
 
@@ -364,17 +366,22 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
         val sessionId = state.selectedSessionId
         if (sessionId != null) {
             androidx.compose.runtime.key(sessionId) {
-                SessionScreen(
-                    model = model,
-                    state = state,
-                    onOpenSidebar = { shell.toggle() },
-                    // The index is already standing beside the conversation on a
-                    // wide screen; the title's tap has nothing to open.
-                    onOpenIndex = { if (!wide) shell.toggleIndex() },
-                    listState = conversationList,
-                    highlightTurn = glowingTurn,
-                    drawerOpen = shell.isOpen,
-                )
+                // The drawer's number, handed down as a reader rather than a value:
+                // the toggle's glyph draws with it and nothing recomposes for it.
+                val readProgress = remember(shell) { { shell.progress.value } }
+                CompositionLocalProvider(LocalShellProgress provides readProgress) {
+                    SessionScreen(
+                        model = model,
+                        state = state,
+                        onOpenSidebar = { shell.toggle() },
+                        // The index is already standing beside the conversation on a
+                        // wide screen; the title's tap has nothing to open.
+                        onOpenIndex = { if (!wide) shell.toggleIndex() },
+                        listState = conversationList,
+                        highlightTurn = glowingTurn,
+                        drawerOpen = shell.isOpen,
+                    )
+                }
             }
         } else {
             HomeView(
