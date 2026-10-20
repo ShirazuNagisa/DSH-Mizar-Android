@@ -26,7 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import me.shirazu.dshmizar.AppViewModel
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.MizarColors
@@ -46,16 +45,16 @@ private enum class WidePage { TURNS, SUBAGENTS, PREVIEW }
  */
 @Composable
 fun WideSidePlane(
-    model: AppViewModel,
     state: UiState,
     onScreen: Set<Int>,
     onPick: (Int) -> Unit,
+    onLoadSubagentTitles: () -> Unit = {},
 ) {
     var page by remember { mutableStateOf(WidePage.TURNS) }
     // Only read the children's names when their page is actually in front, and
     // read them again for a different session.
     LaunchedEffect(page, state.selectedSessionId) {
-        if (page == WidePage.SUBAGENTS) model.loadSubagentTitles()
+        if (page == WidePage.SUBAGENTS) onLoadSubagentTitles()
     }
     Column(
         modifier = Modifier

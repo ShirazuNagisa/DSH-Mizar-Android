@@ -252,9 +252,9 @@ fun MizarShell(model: AppViewModel, state: UiState) {
                         .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
                 ) {
                     WideSidePlane(
-                        model = model,
                         state = state,
                         onScreen = onScreenTurns,
+                        onLoadSubagentTitles = { model.loadSubagentTitles() },
                         onPick = { index ->
                             scope.launch {
                                 val header = if (!state.exhausted && state.oldestSeq != null) 1 else 0
