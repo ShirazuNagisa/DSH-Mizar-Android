@@ -34,13 +34,13 @@ internal enum class DrawerSide { LEFT, RIGHT }
  */
 
 /** Elevation of the conversation card at a fully open drawer. */
-private val CardLift = 34.dp
+private val CardLift = 22.dp
 
 /** How far the card's contact shadow reaches onto a drawer. */
-private val ContactWidth = 40.dp
+private val ContactWidth = 56.dp
 
 /** The darkest part of the drawer's inner edge, where the card covers it. */
-private val InnerDark = Color.Black.copy(alpha = 0.55f)
+private val InnerDark = Color.Black.copy(alpha = 0.32f)
 
 /** A card that still fills the frame: it lifts without shrinking away. */
 internal fun cardScale(reveal: Float): Float = 1f - 0.006f * reveal.coerceIn(0f, 1f)
@@ -57,7 +57,7 @@ internal fun cardScale(reveal: Float): Float = 1f - 0.006f * reveal.coerceIn(0f,
 internal fun Modifier.cardDepth(reveal: Float, dark: Boolean, shape: Shape): Modifier {
     val r = reveal.coerceIn(0f, 1f)
     if (r <= 0f) return this
-    val tint = Color.Black.copy(alpha = if (dark) 0.65f * r else 0.28f * r)
+    val tint = Color.Black.copy(alpha = if (dark) 0.35f * r else 0.14f * r)
     return shadow(
         elevation = CardLift * r,
         shape = shape,
@@ -75,9 +75,9 @@ internal fun Modifier.cardDepth(reveal: Float, dark: Boolean, shape: Shape): Mod
 internal fun Modifier.cardRim(reveal: Float, dark: Boolean, shape: Shape): Modifier {
     val r = reveal.coerceIn(0f, 1f)
     val top = if (dark) {
-        Color.White.copy(alpha = 0.14f * r)
+        Color.White.copy(alpha = 0.10f * r)
     } else {
-        Color.White.copy(alpha = 0.35f * r)
+        Color.White.copy(alpha = 0.22f * r)
     }
     return border(
         width = 1.dp,
@@ -95,7 +95,7 @@ internal fun Modifier.cardRim(reveal: Float, dark: Boolean, shape: Shape): Modif
 internal fun Modifier.cardSheen(reveal: Float, dark: Boolean, side: DrawerSide): Modifier {
     val r = reveal.coerceIn(0f, 1f)
     if (r <= 0f) return this
-    val light = if (dark) 0.05f else 0.045f
+    val light = if (dark) 0.035f else 0.030f
     val endPx = with(androidx.compose.ui.platform.LocalDensity.current) { 150.dp.toPx() }
     val edge = Color.White.copy(alpha = light * r)
     val near = Color.White.copy(alpha = 0.015f * r)
@@ -117,7 +117,7 @@ internal fun Modifier.cardSheen(reveal: Float, dark: Boolean, side: DrawerSide):
 internal fun DrawerGlass(reveal: Float, dark: Boolean, side: DrawerSide, modifier: Modifier = Modifier) {
     val r = reveal.coerceIn(0f, 1f)
     if (r <= 0f) return
-    val spill = if (dark) 0.09f else 0.16f
+    val spill = if (dark) 0.07f else 0.10f
     val colours = if (side == DrawerSide.LEFT) {
         listOf(Color.Transparent, Color.White.copy(alpha = spill * r))
     } else {
@@ -128,7 +128,7 @@ internal fun DrawerGlass(reveal: Float, dark: Boolean, side: DrawerSide, modifie
             .fillMaxHeight()
             .width(30.dp)
             .align(if (side == DrawerSide.LEFT) Alignment.CenterEnd else Alignment.CenterStart)
-            .then(if (Build.VERSION.SDK_INT >= 31) Modifier.blur(14.dp) else Modifier)
+            .then(if (Build.VERSION.SDK_INT >= 31) Modifier.blur(18.dp) else Modifier)
             .background(Brush.horizontalGradient(colours))
         Box(strip)
     }
@@ -139,7 +139,7 @@ internal fun DrawerGlass(reveal: Float, dark: Boolean, side: DrawerSide, modifie
 internal fun CardGlass(reveal: Float, dark: Boolean, side: DrawerSide, modifier: Modifier = Modifier) {
     val r = reveal.coerceIn(0f, 1f)
     if (r <= 0f) return
-    val spill = if (dark) 0.06f else 0.10f
+    val spill = if (dark) 0.05f else 0.07f
     val colours = if (side == DrawerSide.LEFT) {
         listOf(Color.White.copy(alpha = spill * r), Color.Transparent)
     } else {
@@ -150,7 +150,7 @@ internal fun CardGlass(reveal: Float, dark: Boolean, side: DrawerSide, modifier:
             .fillMaxHeight()
             .width(22.dp)
             .align(if (side == DrawerSide.LEFT) Alignment.CenterStart else Alignment.CenterEnd)
-            .then(if (Build.VERSION.SDK_INT >= 31) Modifier.blur(10.dp) else Modifier)
+            .then(if (Build.VERSION.SDK_INT >= 31) Modifier.blur(14.dp) else Modifier)
             .background(Brush.horizontalGradient(colours))
         Box(strip)
     }
@@ -167,7 +167,7 @@ internal fun DrawScope.drawerDepth(reveal: Float, dark: Boolean, side: DrawerSid
     val width = size.width
 
     // The whole page recedes a little behind the lifted card.
-    drawRect(Color.Black.copy(alpha = (if (dark) 0.14f else 0.10f) * r))
+    drawRect(Color.Black.copy(alpha = (if (dark) 0.085f else 0.05f) * r))
 
     // Contact shadow at the inner edge: the card is the light source, so the
     // side of the drawer it covers is the darkest part.
@@ -189,7 +189,7 @@ internal fun DrawScope.drawerDepth(reveal: Float, dark: Boolean, side: DrawerSid
     drawRect(
         brush = Brush.verticalGradient(
             colors = listOf(
-                Color.Black.copy(alpha = (if (dark) 0.26f else 0.10f) * r),
+                Color.Black.copy(alpha = (if (dark) 0.16f else 0.055f) * r),
                 Color.Transparent,
             ),
             startY = 0f,
@@ -200,7 +200,7 @@ internal fun DrawScope.drawerDepth(reveal: Float, dark: Boolean, side: DrawerSid
 
     // One specular edge, on the side away from the card, plus a hairline at the
     // very top: the two cues that make a dark surface read as glass.
-    val glass = Color.White.copy(alpha = (if (dark) 0.075f else 0.30f) * r)
+    val glass = Color.White.copy(alpha = (if (dark) 0.05f else 0.20f) * r)
     val edgeX = if (side == DrawerSide.LEFT) 0.5.dp.toPx() else width - 0.5.dp.toPx()
     drawLine(
         color = glass,
@@ -222,7 +222,7 @@ internal fun DrawScope.columnDepth(dark: Boolean) {
     drawRect(
         brush = Brush.horizontalGradient(
             colors = listOf(
-                Color.Black.copy(alpha = if (dark) 0.26f else 0.10f),
+                Color.Black.copy(alpha = if (dark) 0.14f else 0.05f),
                 Color.Transparent,
             ),
             startX = 0f,

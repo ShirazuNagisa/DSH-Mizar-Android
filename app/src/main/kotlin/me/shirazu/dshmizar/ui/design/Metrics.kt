@@ -44,6 +44,13 @@ object Radius {
      */
     val cardPushed = 26.dp
 
+    /**
+     * The lifted conversation card. Slightly fuller than the screen's own corner,
+     * so a card pushed aside reads as a pane floating above the frame; the iOS
+     * equivalent is 39 pt.
+     */
+    val cardLifted = 38.dp
+
     /** The sent bubble's tightened corner, nearest the answer. */
     val tail = 4.dp
 
