@@ -162,6 +162,9 @@ fun MizarShell(model: AppViewModel, state: UiState) {
         val sidebarReveal = p.coerceIn(0f, 1f)
         val indexReveal = (-p).coerceIn(0f, 1f)
         val reveal = maxOf(sidebarReveal, indexReveal)
+        // The shell's depth palette follows the theme once per frame at the top,
+        // rather than each drawer re-reading it and disagreeing for a frame.
+        val dark = LocalMizarDark.current
 
         // Wide enough and the index stops being a drawer: it stands as a column of
         // its own beside the conversation, the way the iPad keeps it. The sidebar
@@ -187,6 +190,28 @@ fun MizarShell(model: AppViewModel, state: UiState) {
                 state = state,
                 shell = shell,
             )
+            // The drawer is a page set into the frame: a contact shadow where the
+            // card covers it, a top-down shade, and one specular edge. The
+            // overlay is draw-only, so the list keeps every touch.
+            if (sidebarReveal > 0f) {
+                // Glass spill first, contact shadow over it: the shadow must win
+                // at the edge or the reflection flattens the recess it sits in.
+                DrawerGlass(
+                    reveal = sidebarReveal,
+                    dark = dark,
+                    side = DrawerSide.LEFT,
+                    modifier = Modifier.matchParentSize(),
+                )
+                Box(
+                    Modifier.matchParentSize().drawBehind {
+                        drawerDepth(
+                            reveal = sidebarReveal,
+                            dark = dark,
+                            side = DrawerSide.LEFT,
+                        )
+                    },
+                )
+            }
         }
 
         // The turn index, the sidebar's mirror on the right. Same one number, opposite
@@ -222,6 +247,23 @@ fun MizarShell(model: AppViewModel, state: UiState) {
                         }
                     },
                 )
+                if (indexReveal > 0f) {
+                    DrawerGlass(
+                        reveal = indexReveal,
+                        dark = dark,
+                        side = DrawerSide.RIGHT,
+                        modifier = Modifier.matchParentSize(),
+                    )
+                    Box(
+                        Modifier.matchParentSize().drawBehind {
+                            drawerDepth(
+                                reveal = indexReveal,
+                                dark = dark,
+                                side = DrawerSide.RIGHT,
+                            )
+                        },
+                    )
+                }
             }
         }
         if (wide) {
@@ -249,7 +291,11 @@ fun MizarShell(model: AppViewModel, state: UiState) {
                         .width(indexWidth)
                         .fillMaxSize()
                         .background(MizarColors.SidebarBackground)
-                        .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+                        .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
+                        // A wide screen has no index drawer: the column is a groove
+                        // beside the card, so its depth is fixed rather than tied to
+                        // a reveal value.
+                        .drawBehind { columnDepth(dark) },
                 ) {
                     WideSidePlane(
                         state = state,
@@ -339,13 +385,17 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
     // Zero at rest, which the shape draws as a plain rectangle: the card only pays
     // for a path clip while a drawer is actually out.
     val shape = ContinuousCornerShape(corner)
+    val drawerSide = if (progress >= 0f) DrawerSide.LEFT else DrawerSide.RIGHT
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .graphicsLayer {
                 translationX = if (progress >= 0f) sidebarWidthPx * progress else indexWidthPx * progress
-                val s = 1f - 0.06f * reveal
+                // Lift rather than recede: a 6% shrink read as "pushed away", which is
+                // the opposite of the drawer sitting below it. The shadow does the
+                // lifting; the card keeps its size.
+                val s = cardScale(reveal)
                 scaleX = s
                 scaleY = s
                 // The card shrinks away from the drawer that is out, not always from
@@ -353,10 +403,12 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
                 // by the index it recedes toward the left.
                 transformOrigin = TransformOrigin(if (progress >= 0f) 0f else 1f, 0.5f)
             }
+            .cardDepth(reveal, dark, shape)
             .clip(shape)
             .background(MaterialTheme.colorScheme.background)
-            // A console card does not cast a shadow; it is outlined.
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+            // A console card's rim is a lit edge, not a hard outline; at rest it
+            // falls back to the ordinary outline colour.
+            .cardRim(reveal, dark, shape)
             .drawerDrag(shell, sidebarWidthPx, indexWidthPx, indexEnabled),
     ) {
         // Keyed on the session, which is what makes every piece of state inside
@@ -402,6 +454,20 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f * reveal),
                         shape = shape,
                     ),
+            )
+            // The reflection sits above the shade: the card is the lit object, and
+            // the light is on the edge nearest the drawer.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clip(shape)
+                    .cardSheen(reveal, dark, drawerSide),
+            )
+            CardGlass(
+                reveal = reveal,
+                dark = dark,
+                side = drawerSide,
+                modifier = Modifier.matchParentSize(),
             )
         }
     }

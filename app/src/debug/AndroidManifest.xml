@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Debug-only depth bench; the production manifest has no such screen. -->
+        <activity
+            android:name=".DepthPreviewActivity"
+            android:exported="true"
+            android:theme="@style/Theme.DshMizar" />
+    </application>
+</manifest>
