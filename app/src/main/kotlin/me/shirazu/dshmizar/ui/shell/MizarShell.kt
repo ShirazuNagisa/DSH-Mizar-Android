@@ -443,12 +443,13 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
             )
         }
 
-        // A shade, and a faint rim of the accent on the edge that faces the drawer.
+        // A faint rim of the accent on the edge that faces the drawer. No shade
+        // over the card: the card stays as bright as it is at rest, so the only
+        // thing between its rounded edge and the sidebar is its own soft shadow.
         if (reveal > 0f) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = (if (dark) 0.32f else 0.05f) * reveal), shape)
                     .border(
                         width = 1.dp,
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f * reveal),

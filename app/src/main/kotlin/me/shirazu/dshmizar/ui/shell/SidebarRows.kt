@@ -291,7 +291,7 @@ private fun WorkspaceHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(44.dp)
+            .height(48.dp)
             .clickable(onClick = onToggle)
             .padding(horizontal = Space.lg),
         verticalAlignment = Alignment.CenterVertically,
@@ -306,8 +306,8 @@ private fun WorkspaceHeader(
         Icon(
             Icons.Default.Folder,
             contentDescription = null,
-            modifier = Modifier.size(18.dp),
-            tint = if (open) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.primary,
         )
         Spacer(Modifier.width(Space.sm))
         Text(

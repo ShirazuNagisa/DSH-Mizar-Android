@@ -22,16 +22,16 @@ import me.shirazu.dshmizar.ui.RootScreen
 /**
  * The single activity.
  *
- * Two entry points land here besides the launcher: a `mizar://pair?...` deep link,
- * which is the same parse path the scanner uses, and a notification tap carrying a
- * session id.
+ * Three entry points land here besides the launcher: a `mizar://pair?...` deep
+ * link, a `mizar://auth?...` link from the GitHub landing page, and a
+ * notification tap carrying a session id.
  */
 class MainActivity : ComponentActivity() {
 
     private val model: AppViewModel by viewModels()
 
-    /** A pairing URI the UI has not consumed yet. */
-    private var incomingPairUri by mutableStateOf<String?>(null)
+    /** A pairing or sign-in URI the UI has not consumed yet. */
+    private var incomingUri by mutableStateOf<String?>(null)
 
     private val requestNotifications =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* refused is fine */ }
@@ -53,8 +53,8 @@ class MainActivity : ComponentActivity() {
             MizarTheme(mode = state.themeMode) {
                 RootScreen(
                     model = model,
-                    incomingPairUri = incomingPairUri,
-                    onPairUriHandled = { incomingPairUri = null },
+                    incomingUri = incomingUri,
+                    onUriHandled = { incomingUri = null },
                 )
             }
         }
@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         model.setPresence(true); me.shirazu.dshmizar.push.ConnectionService.start(this, getString(R.string.link_connecting))
+        model.refreshAccountOnForeground()
     }
 
     override fun onStop() {
@@ -87,8 +88,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun readIntent(intent: Intent?) {
+        val uri = intent?.data
         when {
-            intent?.dataString?.startsWith("mizar://") == true -> incomingPairUri = intent.dataString
+            // Split by host: every mizar:// link used to be treated as a pairing
+            // code, which silently swallowed the sign-in callback. `github` is the
+            // relay 0.3.x spelling; `auth` is the older one, kept so an app that
+            // was already on a phone during the upgrade still finishes its flow.
+            uri?.scheme == "mizar" &&
+                (uri.host == "pair" || uri.host == "auth" || uri.host == "account" || uri.host == "github") ->
+                incomingUri = uri.toString()
             else -> intent?.getStringExtra(EXTRA_SESSION_ID)?.let { model.selectSession(it) }
         }
     }

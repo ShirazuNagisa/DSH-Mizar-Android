@@ -45,6 +45,7 @@ import me.shirazu.dshmizar.ui.design.MizarHapticsState
 import me.shirazu.dshmizar.ui.design.Transitions
 import me.shirazu.dshmizar.ui.shell.MizarShell
 import me.shirazu.mizar.kit.PairingUri
+import me.shirazu.mizar.kit.account.AuthUri
 
 /**
  * The root: a switch on the connection's phase.
@@ -58,17 +59,24 @@ import me.shirazu.mizar.kit.PairingUri
  * underneath, the conversation as a card on top (shell/MizarShell.kt).
  */
 @Composable
-fun RootScreen(model: AppViewModel, incomingPairUri: String?, onPairUriHandled: () -> Unit) {
+fun RootScreen(model: AppViewModel, incomingUri: String?, onUriHandled: () -> Unit) {
     val state by model.state.collectAsState()
 
     // An effect, not an `if` in the composition. Pairing is a side effect that spends
     // a single-use code, and running it inline meant every recomposition between the
     // scan and the state update could spend it again. Keyed on the URI so a second
-    // scan of the same code is still one pairing.
-    LaunchedEffect(incomingPairUri) {
-        val uri = incomingPairUri ?: return@LaunchedEffect
-        PairingUri.parse(uri)?.let { target -> model.pair(target, "Android") }
-        onPairUriHandled()
+    // scan of the same code is still one pairing. A sign-in callback is the same
+    // shape: one handoff, spent once.
+    LaunchedEffect(incomingUri) {
+        val uri = incomingUri ?: return@LaunchedEffect
+        if (AuthUri.isAuth(uri)) {
+            model.handleAuthUri(uri)
+        } else if (uri.startsWith("mizar://account")) {
+            model.openAccountScreen()
+        } else {
+            PairingUri.parse(uri)?.let { target -> model.pair(target, "Android") }
+        }
+        onUriHandled()
     }
 
     SideEffect { MizarHapticsState.enabled = state.hapticsEnabled }
@@ -76,6 +84,7 @@ fun RootScreen(model: AppViewModel, incomingPairUri: String?, onPairUriHandled: 
         LocalHapticsEnabled provides state.hapticsEnabled,
         me.shirazu.dshmizar.ui.design.LocalSlowTypewriter provides state.slowTypewriter,
     ) {
+    Box(Modifier.fillMaxSize()) {
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             // Above both screens on purpose: a lost connection matters whether the
@@ -129,6 +138,16 @@ fun RootScreen(model: AppViewModel, incomingPairUri: String?, onPairUriHandled: 
                     }
                 }
             }
+        }
+    }
+        // A sheet over everything, not a phase: the account works while the host
+        // is unreachable, and the sign-in callback can arrive in any phase.
+        if (state.account.screenOpen) {
+            me.shirazu.dshmizar.ui.account.AccountScreen(
+                model = model,
+                account = state.account,
+                onClose = { model.closeAccountScreen() },
+            )
         }
     }
     }

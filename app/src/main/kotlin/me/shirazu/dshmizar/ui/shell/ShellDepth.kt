@@ -34,13 +34,10 @@ internal enum class DrawerSide { LEFT, RIGHT }
  */
 
 /** Elevation of the conversation card at a fully open drawer. */
-private val CardLift = 22.dp
+private val CardLift = 6.dp
 
-/** How far the card's contact shadow reaches onto a drawer. */
+/** How far the wide column's groove reaches into the card beside it. */
 private val ContactWidth = 56.dp
-
-/** The darkest part of the drawer's inner edge, where the card covers it. */
-private val InnerDark = Color.Black.copy(alpha = 0.32f)
 
 /** A card that still fills the frame: it lifts without shrinking away. */
 internal fun cardScale(reveal: Float): Float = 1f - 0.006f * reveal.coerceIn(0f, 1f)
@@ -57,7 +54,7 @@ internal fun cardScale(reveal: Float): Float = 1f - 0.006f * reveal.coerceIn(0f,
 internal fun Modifier.cardDepth(reveal: Float, dark: Boolean, shape: Shape): Modifier {
     val r = reveal.coerceIn(0f, 1f)
     if (r <= 0f) return this
-    val tint = Color.Black.copy(alpha = if (dark) 0.35f * r else 0.14f * r)
+    val tint = Color.Black.copy(alpha = if (dark) 0.15f * r else 0.05f * r)
     return shadow(
         elevation = CardLift * r,
         shape = shape,
@@ -117,7 +114,7 @@ internal fun Modifier.cardSheen(reveal: Float, dark: Boolean, side: DrawerSide):
 internal fun DrawerGlass(reveal: Float, dark: Boolean, side: DrawerSide, modifier: Modifier = Modifier) {
     val r = reveal.coerceIn(0f, 1f)
     if (r <= 0f) return
-    val spill = if (dark) 0.07f else 0.10f
+    val spill = if (dark) 0.03f else 0.04f
     val colours = if (side == DrawerSide.LEFT) {
         listOf(Color.Transparent, Color.White.copy(alpha = spill * r))
     } else {
@@ -166,25 +163,9 @@ internal fun DrawScope.drawerDepth(reveal: Float, dark: Boolean, side: DrawerSid
     if (r <= 0f) return
     val width = size.width
 
-    // The whole page recedes a little behind the lifted card.
-    drawRect(Color.Black.copy(alpha = (if (dark) 0.085f else 0.05f) * r))
-
-    // Contact shadow at the inner edge: the card is the light source, so the
-    // side of the drawer it covers is the darkest part.
-    val contact = ContactWidth.toPx()
-    val inner = InnerDark.copy(alpha = InnerDark.alpha * r)
-    val startX = if (side == DrawerSide.LEFT) width - contact else 0f
-    drawRect(
-        brush = Brush.horizontalGradient(
-            colors = if (side == DrawerSide.LEFT) listOf(Color.Transparent, inner) else listOf(inner, Color.Transparent),
-            startX = startX,
-            endX = startX + contact,
-        ),
-        topLeft = Offset(startX, 0f),
-        size = Size(contact, size.height),
-    )
-
-    // Light falls from above: the top of the drawer carries a shade too.
+    // No contact shadow and no page-wide dim: the card's rounded edge is meant to
+    // meet the sidebar directly, with only the card's own faint lift between them.
+    // Light falls from above: the top of the drawer carries a shade.
     val topShade = 28.dp.toPx()
     drawRect(
         brush = Brush.verticalGradient(

@@ -50,6 +50,13 @@ class MizarConnection(
         val deviceModel: String? = null,
         val requestTimeoutMillis: Long = 60_000,
         val handshakeTimeoutMillis: Long = 20_000,
+        /**
+         * Identity headers for the relay's upgrade request.
+         *
+         * Empty for a direct socket: there is no relay to meter it. The relay
+         * reads these once, at the handshake, so a change means a new connection.
+         */
+        val headers: Map<String, String> = emptyMap(),
     ) {
         /** Direct first: one QR code covers "same Wi-Fi" and "anywhere". */
         val endpoint: Endpoint?
@@ -131,7 +138,7 @@ class MizarConnection(
         transport = socket
 
         try {
-            socket.connect(url)
+            socket.connect(url, configuration.headers)
         } catch (error: Throwable) {
             transport = null
             _state.value = State.Failed(describe(error))

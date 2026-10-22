@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
 interface WebSocketTransport {
 
     /** Open the socket, or throw. */
-    suspend fun connect(url: String)
+    suspend fun connect(url: String, headers: Map<String, String> = emptyMap())
 
     /** Send one text frame, or throw `SOCKET_CLOSED`. */
     suspend fun send(text: String)
@@ -52,10 +52,15 @@ class OkHttpWebSocketTransport(
     private var socket: WebSocket? = null
     private var inbox = Channel<String?>(Channel.UNLIMITED)
 
-    override suspend fun connect(url: String) {
+    override suspend fun connect(url: String, headers: Map<String, String>) {
         inbox = Channel(Channel.UNLIMITED)
         val opened = CompletableDeferred<Unit>()
-        val request = Request.Builder().url(url).build()
+        val builder = Request.Builder().url(url)
+        // The relay reads identity from the upgrade request; a socket that is
+        // already open cannot be given a new one, which is why signing in or out
+        // reconnects instead of patching the live socket.
+        for ((name, value) in headers) builder.header(name, value)
+        val request = builder.build()
 
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {

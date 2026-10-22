@@ -52,6 +52,46 @@
                     android:host="pair"
                     android:scheme="mizar" />
             </intent-filter>
+
+            <!--
+              The GitHub landing page hands the app a one-time code. A separate
+              filter, not a second <data> in the one above: multiple data elements
+              in one filter are matched as a cross product of scheme and host.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="auth"
+                    android:scheme="mizar" />
+            </intent-filter>
+
+            <!--
+              The relay 0.3.x landing page hands the app the same one-time code
+              under `mizar://github/login?code=…`. A separate host and path, so it
+              cannot be confused with the older `mizar://auth` link.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="github"
+                    android:path="/login"
+                    android:scheme="mizar" />
+            </intent-filter>
+
+            <!-- Opens the account screen directly; also how the AVD reaches it
+                 without a paired computer. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="account"
+                    android:scheme="mizar" />
+            </intent-filter>
         </activity>
 
         <!--

@@ -74,6 +74,7 @@ import me.shirazu.dshmizar.stageAttachment
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.AnchoredPopover
 import me.shirazu.dshmizar.ui.design.Glass
+import me.shirazu.dshmizar.ui.design.GlassCircleLabel
 import me.shirazu.dshmizar.ui.design.Motion
 import me.shirazu.dshmizar.ui.design.NumericText
 import me.shirazu.dshmizar.ui.design.PopoverSize
@@ -325,6 +326,7 @@ fun SessionScreen(
                     ) {
                         Text(
                             text = state.stats?.title ?: stringResource(R.string.session),
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -334,76 +336,88 @@ fun SessionScreen(
                 navigationIcon = {
                     // The shell's toggle: the list is a card underneath, not a
                     // screen behind, so this opens the sidebar rather than popping.
-                    IconButton(onClick = onOpenSidebar) {
+                    GlassCircleLabel(size = 38.dp, onClick = onOpenSidebar) {
                         // Scrubbed by the drawer itself: three lines at rest, an
                         // arrow back once the sidebar is out.
                         me.shirazu.dshmizar.ui.design.SidebarGlyph(stringResource(R.string.show_sidebar))
                     }
                 },
                 actions = {
-                    if (subagents.isNotEmpty()) {
-                        IconButton(onClick = {
-                            model.loadSubagentTitles()
-                            showingSubagents = true
-                        }) {
-                            Icon(
-                                Icons.Default.Person,
-                                contentDescription = stringResource(R.string.subagents),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    // The running turn's process is the answer to "what is it doing?";
-                    // on a relay socket it is not requested (iOS gates it the same way,
-                    // on a paid account or the LAN).
-                    if (running && state.isLocalNetwork) {
-                        IconButton(onClick = { model.toggleActivity() }) {
-                            Icon(
-                                Icons.Default.Info,
-                                contentDescription = stringResource(R.string.running_detail),
-                                tint = if (state.activityExpanded) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    // The screen follows pushed events, but a phone whose process was
-                    // paused -- or a host that restarted -- can be stale. The button says
-                    // when it is working: a refresh whose progress is invisible reads as
-                    // a refresh that did nothing.
-                    IconButton(
-                        onClick = { model.refreshConversation() },
-                        enabled = !state.refreshing,
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (state.refreshing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Icon(
-                                Icons.Default.Refresh,
-                                contentDescription = stringResource(R.string.refresh),
-                            )
+                        if (subagents.isNotEmpty()) {
+                            GlassCircleLabel(size = 38.dp, onClick = {
+                                model.loadSubagentTitles()
+                                showingSubagents = true
+                            }) {
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = stringResource(R.string.subagents),
+                                    modifier = Modifier.size(19.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
-                    }
-                    Box {
-                        IconButton(onClick = { showingPermissions = true }) {
-                            Icon(Icons.Default.Lock, contentDescription = stringResource(R.string.permissions))
+                        // The running turn's process is the answer to "what is it doing?";
+                        // on a relay socket it is not requested (iOS gates it the same way,
+                        // on a paid account or the LAN).
+                        if (running && state.advancedFeaturesUnlocked) {
+                            GlassCircleLabel(size = 38.dp, onClick = { model.toggleActivity() }) {
+                                Icon(
+                                    Icons.Default.Info,
+                                    contentDescription = stringResource(R.string.running_detail),
+                                    modifier = Modifier.size(19.dp),
+                                    tint = if (state.activityExpanded) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
-                        AnchoredPopover(
-                            expanded = showingPermissions,
-                            onDismiss = { showingPermissions = false },
-                            title = stringResource(R.string.permissions),
-                            width = PopoverSize.COMPACT_WIDTH,
-                            maxHeight = PopoverSize.COMPACT_HEIGHT,
+                        // The screen follows pushed events, but a phone whose process was
+                        // paused -- or a host that restarted -- can be stale. The button says
+                        // when it is working: a refresh whose progress is invisible reads as
+                        // a refresh that did nothing.
+                        GlassCircleLabel(
+                            size = 38.dp,
+                            onClick = { if (!state.refreshing) model.refreshConversation() },
                         ) {
-                            PermissionContent(
-                                state = state,
-                                onChoose = { preset ->
-                                    showingPermissions = false
-                                    model.setPermission(preset)
-                                },
-                            )
+                            if (state.refreshing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = stringResource(R.string.refresh),
+                                    modifier = Modifier.size(19.dp),
+                                )
+                            }
+                        }
+                        Box {
+                            GlassCircleLabel(size = 38.dp, onClick = { showingPermissions = true }) {
+                                Icon(
+                                    Icons.Default.Lock,
+                                    contentDescription = stringResource(R.string.permissions),
+                                    modifier = Modifier.size(19.dp),
+                                )
+                            }
+                            AnchoredPopover(
+                                expanded = showingPermissions,
+                                onDismiss = { showingPermissions = false },
+                                title = stringResource(R.string.permissions),
+                                width = PopoverSize.COMPACT_WIDTH,
+                                maxHeight = PopoverSize.COMPACT_HEIGHT,
+                            ) {
+                                PermissionContent(
+                                    state = state,
+                                    onChoose = { preset ->
+                                        showingPermissions = false
+                                        model.setPermission(preset)
+                                    },
+                                )
+                            }
                         }
                     }
                 },
@@ -475,7 +489,7 @@ fun SessionScreen(
                     onApproval = { id, outcome -> model.answerApproval(id, outcome) },
                     onQuestions = { callId, answers -> model.answerQuestions(callId, answers) },
                 )
-                if (state.isLocalNetwork) {
+                if (state.advancedFeaturesUnlocked) {
                     AttachmentBar(
                         attachments = state.attachments,
                         onPickPhoto = { photoPicker.launch("image/*") },

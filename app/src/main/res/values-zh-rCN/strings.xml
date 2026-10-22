@@ -51,7 +51,7 @@
     <string name="tool_apply_patch">应用补丁</string>
     <string name="transfer">传输</string>
     <string name="local_network_first">局域网优先</string>
-    <string name="local_network_first_note">手机与电脑在同一 Wi-Fi 时更快；无需账户即可查看运行细节和使用附件。</string>
+    <string name="local_network_first_note">手机与电脑在同一 Wi-Fi 时更快；付费账户在任何网络下也能查看运行细节和使用附件。</string>
     <string name="running_detail">运行细节</string>
     <string name="detail_older">更早</string>
     <string name="detail_close">关闭细节</string>
@@ -59,7 +59,7 @@
     <string name="attach_photo">照片</string>
     <string name="attach_file">文件</string>
     <string name="remove_attachment">移除附件</string>
-    <string name="attachment_lan_only">附件需要局域网连接。</string>
+    <string name="attachment_lan_only">附件需要付费账户或局域网连接。</string>
     <string name="attachment_still_uploading">请等附件上传完成。</string>
     <string name="attachment_unreadable">无法读取该文件。</string>
     <string name="attachment_too_many">附件数量过多。</string>
@@ -196,7 +196,7 @@
     <string name="home_hint">右滑或点按钮查看会话列表。</string>
     <string name="show_sidebar">查看会话</string>
     <string name="workspaces">工作区</string>
-    <string name="search_sessions">搜索</string>
+    <string name="search_sessions">搜索会话</string>
     <string name="clear">清除</string>
     <string name="connected">已连接</string>
     <string name="requests_waiting">%1$d 个请求待处理</string>
@@ -258,9 +258,53 @@
     <string name="latency_ms">%1$d 毫秒</string>
     <string name="route_direct">直连 %1$s</string>
     <string name="route_relay">中继</string>
+    <string name="connection_via_relay">经由中继</string>
+    <string name="connection_via_lan">经由局域网</string>
     <string name="greeting_morning">早上好</string>
     <string name="greeting_afternoon">下午好</string>
     <string name="greeting_evening">晚上好</string>
     <string name="greeting_night">夜深了</string>
+
+    <!-- Account -->
+    <string name="account">账户</string>
+    <string name="account_sign_in">登录</string>
+    <string name="account_sign_out">退出登录</string>
+    <string name="account_create">注册账户</string>
+    <string name="account_not_signed_in">未登录</string>
+    <string name="account_free">免费账户</string>
+    <string name="account_paid">付费账户</string>
+    <string name="account_email">邮箱</string>
+    <string name="account_username">用户名</string>
+    <string name="account_identifier">用户名或邮箱</string>
+    <string name="account_password">密码</string>
+    <string name="account_continue_github">使用 GitHub 登录</string>
+    <string name="account_link_github">绑定 GitHub</string>
+    <string name="account_github_linked">已绑定 GitHub</string>
+    <string name="account_devices">已登录的设备</string>
+    <string name="account_device_current">这台手机</string>
+    <string name="account_no_devices">没有已登录的设备。</string>
+    <string name="account_paid_until">付费至 %1$s</string>
+    <string name="account_invite">兑换邀请码</string>
+    <string name="account_invite_hint">邀请码</string>
+    <string name="account_invite_redeem">兑换</string>
+    <string name="account_delete">删除账户</string>
+    <string name="account_delete_title">删除这个账户？</string>
+    <string name="account_delete_body">账户会从所有手机移除，且无法恢复。输入 DELETE 以确认。</string>
+    <string name="account_delete_action">删除</string>
+    <string name="account_cancel">取消</string>
+    <string name="account_unreachable">暂时无法连接账户服务</string>
+    <string name="account_retry">重试</string>
+    <string name="account_handoff_entry">有登录代码？</string>
+    <string name="account_handoff_hint">浏览器里显示的代码</string>
+    <string name="account_handoff_action">完成登录</string>
+    <string name="account_optional_note">账户是可选的，不登录也能使用所有免费功能。</string>
+    <string name="account_notice_device_limit">%1$s 已退出登录，为这台手机腾出位置。</string>
+    <string name="account_error_missing">请输入用户名或邮箱以及密码。</string>
+    <string name="account_error_username">用户名长度为 2-32 个字符，不能包含空格或 @。</string>
+    <string name="account_error_email">这个邮箱地址无效。</string>
+    <string name="account_error_password">密码长度为 8-128 个字符。</string>
+    <string name="account_error_generic">出了点问题，请重试。</string>
+    <string name="account_error_no_browser">没有可用的浏览器，无法完成 GitHub 登录。</string>
+    <string name="account_close">关闭</string>
 </resources>
 

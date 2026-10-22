@@ -87,6 +87,20 @@ pwsh scripts/emulator/emu.ps1 stop                   # 关机并清掉残留 loc
 | FCM 推送 | ⚠️ | `google_apis` 无 Play 商店；要验推送需 `google_apis_playstore` 镜像 |
 | ColorOS 冻结、关通知权限杀前台服务 | ❌ | 只有真机有（真机上 C5 不可达的原因） |
 
+## 账户与 GitHub 登录
+
+账户服务用 `scripts/account-mock.mjs` 在宿主机上跑，模拟器通过 `10.0.2.2` 访问：
+
+```sh
+node scripts/account-mock.mjs --host 0.0.0.0 --port 8787 --public http://10.0.2.2:8787
+GRADLE_USER_HOME=E:\gradle-home2 ./gradlew :app:assembleRelease -PmizarAccountBase=http://10.0.2.2:8787/account/v1
+```
+
+- 固定账号 `shirazu / mizar-test-password`，邀请码 `MOCK-INVITE`（+30 天）。
+- GitHub 的浏览器环节可以跳过：直接 `am start` 一条带 handoff 的深链，
+  或者用 curl 走完 `/github/start → /github/callback` 拿到 handoff。
+- 完整流程与验收清单见 [account.md](account.md)。
+
 ## 故障阶梯
 
 1. 启动后 `adb devices` 有 `emulator-5556` 但 `shell` 超时、qemu CPU 不再增长 → **换了渲染方式**：确认用的是 `-gpu host`。

@@ -38,8 +38,15 @@ android {
         targetSdk = 35
         // Kept in step with the iOS target's MARKETING_VERSION/CURRENT_PROJECT_VERSION
         // (0.8.0 / 15) so a build can be identified from either platform's report.
-        versionCode = 43
-        versionName = "0.10.1"
+        versionCode = 44
+        versionName = "0.10.2"
+
+        // The account service is one host, like iOS: only the main relay serves
+        // it. `-PmizarAccountBase=http://10.0.2.2:8787/account/v1` points a build
+        // at the AVD's mock server without touching the source.
+        val accountBase = (project.findProperty("mizarAccountBase") as String?)
+            ?: "https://dshmizar-1.shirazu-nagisa.com/account/v1"
+        buildConfigField("String", "ACCOUNT_BASE_URL", "\"$accountBase\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -110,6 +117,7 @@ dependencies {
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.coil.compose)
 
     implementation(libs.camera.core)
     implementation(libs.camera.camera2)

@@ -76,6 +76,7 @@ import me.shirazu.mizar.kit.SessionGrouping
 fun SettingsDialog(
     state: UiState,
     onDismiss: () -> Unit,
+    onOpenAccount: () -> Unit,
     onForget: (String) -> Unit,
     onAddHost: () -> Unit,
     onTheme: (ThemeMode) -> Unit,
@@ -151,6 +152,11 @@ fun SettingsDialog(
                 )
             }
         }
+
+        // The account is optional, so it sits above the preferences rather than
+        // among them: it is identity, not a setting.
+        SectionLabel(stringResource(R.string.account))
+        me.shirazu.dshmizar.ui.account.AccountRow(state.account, onClick = onOpenAccount)
 
         // The palette is a preference, and the operator should not have to change
         // the system to get a dark screen at night.

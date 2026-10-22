@@ -43,7 +43,12 @@ data class PairedHost(
         }
 
     /** The connection settings for one endpoint. */
-    fun configurationFor(endpoint: MizarConnection.Endpoint, appVersion: String?, deviceModel: String?) =
+    fun configurationFor(
+        endpoint: MizarConnection.Endpoint,
+        appVersion: String?,
+        deviceModel: String?,
+        headers: Map<String, String> = emptyMap(),
+    ) =
         when (endpoint) {
             is MizarConnection.Endpoint.Direct -> MizarConnection.Configuration(
                 authority = endpoint.authority,
@@ -60,6 +65,7 @@ data class PairedHost(
                 // A relay is reached over TLS and through nginx, so its handshake is
                 // allowed to take longer than a LAN socket's.
                 handshakeTimeoutMillis = 20_000,
+                headers = headers,
             )
         }
 

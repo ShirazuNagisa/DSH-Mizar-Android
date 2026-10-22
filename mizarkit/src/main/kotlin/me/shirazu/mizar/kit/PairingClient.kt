@@ -16,6 +16,13 @@ data class HttpRequest(
     val url: String,
     val headers: Map<String, String> = emptyMap(),
     val body: String? = null,
+    /**
+     * One request's own deadline, or `null` for the client's.
+     *
+     * Pairing needs it: a dead LAN address must not spend the relay's twenty
+     * seconds before the relay is even tried.
+     */
+    val timeoutMillis: Long? = null,
 )
 
 /** What came back. */
@@ -44,7 +51,13 @@ class OkHttpHttpTransport(
         val body = request.body?.toRequestBody("application/json".toMediaType())
         builder.method(request.method, body)
 
-        client.newCall(builder.build()).execute().use { response ->
+        val callClient = request.timeoutMillis?.let { timeout ->
+            client.newBuilder()
+                .connectTimeout(timeout, TimeUnit.MILLISECONDS)
+                .readTimeout(timeout, TimeUnit.MILLISECONDS)
+                .build()
+        } ?: client
+        callClient.newCall(builder.build()).execute().use { response ->
             HttpResponse(
                 status = response.code,
                 body = response.body?.string() ?: "",
@@ -94,8 +107,53 @@ class PairingClient(
         deviceModel: String? = null,
         authority: String? = null,
         baseUrl: String? = null,
+    ): PairedHost = pair(
+        code = code,
+        deviceName = deviceName,
+        deviceModel = deviceModel,
+        route = PairingRoute.plan(authority, baseUrl).firstOrNull() ?: throw noRoute(authority, baseUrl),
+    )
+
+    /**
+     * Try every route the QR carries, and keep the one that answered.
+     *
+     * The fallback rule is precise: a route is abandoned only when nothing on it
+     * answered. A pairing code the host refused is final — retrying it through
+     * the other door would just spend the single-use code twice.
+     */
+    suspend fun pairWithFallback(
+        code: String,
+        deviceName: String? = null,
+        deviceModel: String? = null,
+        authority: String? = null,
+        baseUrl: String? = null,
+    ): PairingOutcome {
+        val routes = PairingRoute.plan(authority, baseUrl)
+        if (routes.isEmpty()) throw noRoute(authority, baseUrl)
+        var last: Throwable? = null
+        for (route in routes) {
+            try {
+                return PairingOutcome(pair(code, deviceName, deviceModel, route), route)
+            } catch (error: Throwable) {
+                last = error
+                if (!nothingAnswered(error)) throw error
+            }
+        }
+        throw last ?: noRoute(authority, baseUrl)
+    }
+
+    /** Pair over one named route, with that route's own deadline. */
+    suspend fun pair(
+        code: String,
+        deviceName: String? = null,
+        deviceModel: String? = null,
+        route: PairingRoute,
     ): PairedHost {
-        val url = requireUrl(authority, baseUrl, MIZAR_PAIR_PATH)
+        val url = when (route) {
+            is PairingRoute.Direct -> PairingUri.httpUrl(route.authority, MIZAR_PAIR_PATH)
+            is PairingRoute.Relay -> PairingUri.relayHttpUrl(route.baseUrl, MIZAR_PAIR_PATH)
+        } ?: throw MizarError("BAD_AUTHORITY", "\"${route.address}\" is not an address this app can dial")
+
         val body = WIRE_JSON.encodeToString(
             PairRequest.serializer(),
             PairRequest(code = code, deviceName = deviceName, deviceModel = deviceModel, appVersion = appVersion),
@@ -106,6 +164,7 @@ class PairingClient(
                 url = url,
                 headers = mapOf("content-type" to "application/json", "accept" to "application/json"),
                 body = body,
+                timeoutMillis = route.timeoutMillis,
             ),
         )
 
@@ -120,11 +179,20 @@ class PairingClient(
         return PairedHost(
             hostId = parsed.hostId,
             hostName = parsed.hostName,
-            authority = authority,
-            baseUrl = baseUrl,
+            authority = (route as? PairingRoute.Direct)?.authority,
+            baseUrl = (route as? PairingRoute.Relay)?.baseUrl,
             deviceId = parsed.deviceId,
             deviceToken = parsed.deviceToken,
         )
+    }
+
+    /** Whether a failure means "nothing answered", the only case worth a retry. */
+    private fun nothingAnswered(error: Throwable): Boolean =
+        error is IOException || (error is MizarError && error.code == "NETWORK")
+
+    private fun noRoute(authority: String?, baseUrl: String?): MizarError {
+        val described = authority?.takeIf { it.isNotBlank() } ?: baseUrl.orEmpty()
+        return MizarError("BAD_AUTHORITY", "\"$described\" is not an address this app can dial")
     }
 
     private suspend fun send(request: HttpRequest): HttpResponse = try {

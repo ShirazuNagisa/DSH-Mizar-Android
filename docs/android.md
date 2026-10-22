@@ -65,6 +65,21 @@ protocol/   与主机插件共用的黄金帧（fixtures），测试直接读这
 iOS 与 Android 在同一间房里各走各的通道：`push.register` 的 `platform` 字段决定这一点，缺省是
 `ios`，所以现有 iOS 客户端与已部署的中继不需要任何改动。
 
+## 配对
+
+插件 0.8.5+ 的二维码同时带直连地址（`h`）和中继地址（`u`）。配对按**直连 6 秒 → 中继 20 秒**逐条尝试：
+
+- 只有「这条路上什么都没应答」才换下一条；`PAIRING_CODE_*` 这类明确拒绝是终局，不换门重试。
+- 应答的那条路由会交给第一次连接，不再先花另一条路的超时。
+- 重连本来就会遍历两条路由；现在配对与它一致。
+
+## 账户（0.10.2）
+
+账户是可选的：邮箱/用户名 + 密码，或 GitHub。登录后中继连接带身份头，付费账户在中继下也能用附件与
+运行细节；不登录时这两项仍然由局域网解锁。令牌存 EncryptedSharedPreferences，登录/登出会重连一次。
+
+完整说明、服务端配置与 AVD 测法见 [account.md](account.md)。
+
 ## 平台决定
 
 - **明文 `ws://`**：宿主地址是配对时才知道的，Android 无法预先声明例外，所以
@@ -72,8 +87,8 @@ iOS 与 Android 在同一间房里各走各的通道：`push.register` 的 `plat
   真正的解法是监听器上 TLS，那还是宿主侧的待办。
 - **targetSdk 35**：Android 16 的局域网访问保护（`ACCESS_LOCAL_NETWORK`）在目标 36 时才需要
   显式申请，这里先避开并记一笔。
-- **没有前台服务**：iOS 客户端也没有后台模式，Android 侧不做「保活」这种不对等的功能。
-  息屏久了长连接会被系统收走，重新打开 App 即可；推送是后台唯一的通道。
+- **前台服务**：`push/ConnectionService.kt` 以 `dataSync` 类型常驻，通知按连接状态说三种话；
+  息屏久了系统仍可能收走长连接，重新打开 App 即可。细节见 [foreground-service.md](foreground-service.md)。
 - **Doze 与厂商省电**：FCM 的到达时间与长连接的存活都受它们影响。App 在每次回到前台时重连并
   重新拉取会话，所以「回来就有」而不是「回来等一会」。
 - **状态目录**：凭据用 Keystore 支撑的加密存储（一份 blob、先更新后新增），
@@ -87,8 +102,9 @@ iOS 与 Android 在同一间房里各走各的通道：`push.register` 的 `plat
 | 连接失败的说法 | `ConnectionDiagnosis` 直接给出英文句子 | 给出**结构化的判定**，由 App 映射到本地化文案；未本地化时才回落到英文 |
 | `RESPONSE_TOO_LARGE` | 未建模 | 在错误码表里 |
 | 令牌失效 | `requiresRepairing` 从未被使用 | 清除本地凭据并回到配对 |
-| 工作区标题 | 由路径推导 | 仍由路径推导（`workspace.list` 的 title 留作后续改进） |
+| 工作区标题 | 由路径推导 | 与 iOS 一致：用 `workspace.list` 的 `title`，没有会话的工作区也能选到 |
 | Markdown | `AttributedString(markdown:)` 两段回退 | 自研小解析器 + 未闭合围栏规则，`plain` 作为最后回退 |
+| 账户 | Apple 登录 + App Store 订阅 | 邮箱密码 + GitHub 登录；订阅（Play Billing）尚未接入，见 [account.md](account.md) |
 
 **两处已知的协议解析差异**（`PairingUri` 逐字节对齐的是**面板**那一侧，即 TypeScript）：
 

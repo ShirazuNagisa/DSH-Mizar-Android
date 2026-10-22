@@ -7,8 +7,8 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -30,6 +31,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -47,9 +50,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
@@ -61,6 +69,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import me.shirazu.dshmizar.AppViewModel
 import me.shirazu.dshmizar.R
@@ -247,8 +256,8 @@ fun Sidebar(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = Space.md, vertical = Space.xs)
-                .height(42.dp)
-                .glassCapsule(),
+                .height(46.dp)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, Corner.md),
             contentAlignment = Alignment.CenterStart,
         ) {
             Row(
@@ -294,30 +303,31 @@ fun Sidebar(
             }
         }
 
-        // New session, and the window that grows out of it.
+        // New session: glass, like the search field above it. An opaque card here
+        // read as a sheet lying on the list rather than a control in it.
         var showingNewSession by remember { mutableStateOf(false) }
         Box(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = Space.md, vertical = Space.xs)
-                    .height(48.dp)
+                    .padding(horizontal = Space.md, vertical = 6.dp)
+                    .height(50.dp)
                     .glassCard(radius = Radius.md)
-                    .pressable(scale = 0.97f)
+                    .pressable(scale = 0.98f)
                     .shapedClickable(Corner.md) { showingNewSession = true }
                     .padding(horizontal = Space.lg),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    Icons.Default.Add,
+                    Icons.Default.Edit,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(20.dp),
                 )
-                Spacer(Modifier.width(Space.sm))
+                Spacer(Modifier.width(Space.md))
                 Text(
                     stringResource(R.string.new_session),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
                 )
             }
             AnchoredPopover(
@@ -345,10 +355,10 @@ fun Sidebar(
             text = stringResource(R.string.workspaces).uppercase(),
             style = MaterialTheme.typography.labelSmall.copy(
                 fontWeight = FontWeight.SemiBold,
-                letterSpacing = 1.5.sp,
+                letterSpacing = 0.4.sp,
             ),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.xs),
+            modifier = Modifier.padding(start = Space.lg, end = Space.lg, top = 10.dp, bottom = 4.dp),
         )
 
         WorkspaceGroups(
@@ -408,50 +418,50 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
             .fillMaxWidth()
             .padding(horizontal = Space.md, vertical = Space.sm),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Space.sm),
     ) {
-        Box(modifier = Modifier.weight(1f)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // At least the settings key's height, and as tall as its two lines need:
-                    // a fixed 54 dp clipped the host's name at large text sizes.
-                    .heightIn(min = 54.dp)
-                    .glassCapsule()
-                    .shapedClickable(CircleShape) { showingConnection = true }
-                    .padding(horizontal = Space.lg, vertical = Space.sm),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ConnectionMark(connected = state.phase == me.shirazu.dshmizar.Phase.READY && !state.reconnecting)
-                Spacer(Modifier.width(Space.md))
-                Column {
-                    Text(
-                        text = stringResource(
-                            if (state.phase == me.shirazu.dshmizar.Phase.READY && !state.reconnecting) {
-                                R.string.connected
-                            } else {
-                                R.string.connecting
-                            },
-                        ),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    Text(
-                        text = state.host?.displayName ?: "",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+        val connected = state.phase == me.shirazu.dshmizar.Phase.READY && !state.reconnecting
+        val route = when {
+            !connected -> state.host?.displayName ?: ""
+            state.isLocalNetwork -> stringResource(R.string.connection_via_lan)
+            else -> stringResource(R.string.connection_via_relay)
         }
-        Box {
-            GlassCircleLabel(size = 54.dp, onClick = { showingSettings = true }) {
-                Icon(
-                    Icons.Default.Settings,
-                    contentDescription = stringResource(R.string.settings),
-                    modifier = Modifier.size(20.dp),
+        Row(
+            modifier = Modifier
+                // A pill, not a bar: it hugs its two lines and leaves the corner to
+                // the account button, as the iOS footer does.
+                .widthIn(max = 250.dp)
+                .heightIn(min = 54.dp)
+                .glassCapsule()
+                .shapedClickable(CircleShape) { showingConnection = true }
+                .padding(start = Space.lg, end = Space.md, top = Space.sm, bottom = Space.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ConnectionMark(connected = connected)
+            Spacer(Modifier.width(Space.md))
+            Column {
+                Text(
+                    text = stringResource(if (connected) R.string.connected else R.string.connecting),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Text(
+                    text = route,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            Spacer(Modifier.width(Space.sm))
+            Icon(
+                Icons.Default.KeyboardArrowUp,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
+        Spacer(Modifier.weight(1f))
+        AccountOrSettings(
+            state = state,
+            onSettings = { showingSettings = true },
+        )
     }
     AnchoredPopover(
         expanded = showingConnection,
@@ -482,6 +492,10 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
         SettingsDialog(
             state = state,
             onDismiss = { showingSettings = false },
+            onOpenAccount = {
+                showingSettings = false
+                model.openAccountScreen()
+            },
             onForget = { hostId ->
                 showingSettings = false
                 model.forget(hostId)
@@ -505,6 +519,69 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
     }
     }
 }
+
+/**
+ * The bottom-right key: the account's initials when signed in, the gear when not.
+ *
+ * Both open **settings**, not the account screen -- that is what iOS does, and it
+ * keeps the gear's job intact after signing in: settings is where the account row
+ * lives, and tapping that row opens the account screen. A long press on the
+ * avatar is not needed; one tap is the whole gesture.
+ */
+@Composable
+private fun AccountOrSettings(
+    state: UiState,
+    onSettings: () -> Unit,
+) {
+    val profile = state.account.profile
+    if (profile == null) {
+        GlassCircleLabel(size = 54.dp, onClick = onSettings) {
+            Icon(
+                Icons.Default.Settings,
+                contentDescription = stringResource(R.string.settings),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        return
+    }
+    val colors = profile.avatar.colors.mapNotNull(::parseHexColor).takeIf { it.isNotEmpty() }
+        ?: listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary)
+    Box(
+        modifier = Modifier
+            .size(52.dp)
+            .shadow(7.dp, CircleShape, clip = false)
+            .clip(CircleShape)
+            .background(Brush.linearGradient(colors), CircleShape)
+            .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
+            .clickable(onClick = onSettings),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            profile.initials,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = Color.White,
+        )
+        profile.avatar.url?.let { url ->
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize().clip(CircleShape),
+            )
+        }
+    }
+}
+
+/** `#rrggbb` or `#aarrggbb`, as the account avatar palette writes it. */
+private fun parseHexColor(value: String): Color? = runCatching {
+    val hex = value.removePrefix("#")
+    val argb = when (hex.length) {
+        6 -> 0xFF000000L or hex.toLong(16)
+        8 -> hex.toLong(16)
+        else -> return null
+    }
+    Color(argb.toInt())
+}.getOrNull()
 
 /**
  * The connection, as the icon's own mark: lit and still while the socket is up,

@@ -1,6 +1,8 @@
 package me.shirazu.dshmizar
 
 import android.app.Application
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -27,6 +29,16 @@ import me.shirazu.dshmizar.push.ConnectionService
 import me.shirazu.dshmizar.push.Notifications
 import me.shirazu.dshmizar.store.ActivityStore
 import me.shirazu.dshmizar.store.ConversationCache
+import me.shirazu.dshmizar.store.EncryptedAccountStore
+import me.shirazu.mizar.kit.account.AccountAuth
+import me.shirazu.mizar.kit.account.AccountClient
+import me.shirazu.mizar.kit.account.AccountDevicePayload
+import me.shirazu.mizar.kit.account.AccountError
+import me.shirazu.mizar.kit.account.AccountIdentity
+import me.shirazu.mizar.kit.account.AccountNotice
+import me.shirazu.mizar.kit.account.AccountSession
+import me.shirazu.mizar.kit.account.AccountStoring
+import me.shirazu.mizar.kit.account.AuthUri
 import me.shirazu.dshmizar.ui.ThemeMode
 import me.shirazu.dshmizar.store.EncryptedCredentialStore
 import me.shirazu.dshmizar.store.FileSessionIndexStore
@@ -57,6 +69,7 @@ import me.shirazu.mizar.kit.ModelSelection
 import me.shirazu.mizar.kit.PairedHost
 import me.shirazu.mizar.kit.PairingTarget
 import me.shirazu.mizar.kit.PairingClient
+import me.shirazu.mizar.kit.PairingRoute
 import me.shirazu.mizar.kit.PendingInteractions
 import me.shirazu.mizar.kit.PermissionCatalog
 import me.shirazu.mizar.kit.PromptResult
@@ -95,6 +108,34 @@ enum class Phase { LAUNCHING, UNPAIRED, CONNECTING, READY, FAILED }
 
 /** Which part of the first pairing is running, for the connecting screen. */
 enum class PairingStage { PAIRING, SYNCING }
+
+/** Where the account is, which is independent of the connection. */
+enum class AccountPhase { IDLE, LOADING, READY, UNREACHABLE }
+
+/** Which half of the signed-out form is showing. */
+enum class AccountMode { SIGN_IN, REGISTER }
+
+/**
+ * The account, as the UI draws it.
+ *
+ * `UNREACHABLE` keeps the session: a phone on a train still shows whose account
+ * it is and what plan it has. Only a 401/403 clears it, which is the one case
+ * where the cached profile is known to be wrong rather than merely stale.
+ */
+data class AccountUiState(
+    val phase: AccountPhase = AccountPhase.IDLE,
+    val session: AccountSession? = null,
+    val notice: AccountNotice? = null,
+    val error: String? = null,
+    val working: Boolean = false,
+    val screenOpen: Boolean = false,
+    val mode: AccountMode = AccountMode.SIGN_IN,
+    /** The landing page's "type the code" fallback is showing. */
+    val handoffEntry: Boolean = false,
+) {
+    val profile get() = session?.profile
+    val isPaid: Boolean get() = profile?.isPaid == true
+}
 
 /** Everything the UI draws. */
 data class UiState(
@@ -191,7 +232,15 @@ data class UiState(
     val attachmentBusy: Boolean = false,
     /** When each session was last on screen, so the list can mark what is new. */
     val seenAt: Map<String, Long> = emptyMap(),
-)
+    /** The account service, which is optional and never gates the free features. */
+    val account: AccountUiState = AccountUiState(),
+) {
+    /**
+     * The gate iOS uses for attachments and the running turn's detail: a paying
+     * account anywhere, or any account on the LAN (which costs the relay nothing).
+     */
+    val advancedFeaturesUnlocked: Boolean get() = account.isPaid || isLocalNetwork
+}
 
 /**
  * The app's one state holder.
@@ -215,6 +264,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val activity = ActivityStore(application)
     private val indexStore: SessionIndexStore = FileSessionIndexStore(application)
     private val conversationCache = ConversationCache(application)
+    private val accounts: AccountStoring = EncryptedAccountStore(application)
+    private val accountClient = AccountClient(
+        baseUrl = BuildConfig.ACCOUNT_BASE_URL,
+        appVersion = BuildConfig.VERSION_NAME,
+    )
 
     private val _state = MutableStateFlow(
         UiState(
@@ -317,6 +371,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Load what is stored and connect to the most recent host. */
     fun start() {
         viewModelScope.launch {
+            loadAccount()
             val hosts = credentials.loadAll().sortedBy { it.pairedAtMillis }
             val host = hosts.lastOrNull()
             if (host == null) {
@@ -330,25 +385,306 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ── account ──────────────────────────────────────────────────────────────
+
+    /** Read the stored session and quietly refresh it. Never blocks a launch. */
+    private suspend fun loadAccount() {
+        // Warm the install id off the main thread: the first read touches disk.
+        withContext(Dispatchers.IO) { accounts.installId }
+        val stored = runCatching { accounts.load() }.getOrNull()
+        if (stored == null) {
+            _state.update { it.copy(account = it.account.copy(phase = AccountPhase.READY)) }
+            return
+        }
+        _state.update { it.copy(account = it.account.copy(phase = AccountPhase.READY, session = stored)) }
+        // The refresh is deliberately not awaited: connecting to the computer must
+        // not wait on an account service that may be slow or unreachable.
+        viewModelScope.launch { refreshAccountNow(silent = true) }
+    }
+
+    /** Pull the profile again; the account screen's retry and the foreground hook. */
+    fun refreshAccount() {
+        viewModelScope.launch { refreshAccountNow() }
+    }
+
+    /** A phone that comes back to the foreground asks once, quietly. */
+    fun refreshAccountOnForeground() {
+        val account = _state.value.account
+        if (account.session == null || account.phase == AccountPhase.LOADING || account.working) return
+        viewModelScope.launch { refreshAccountNow(silent = true) }
+    }
+
+    private suspend fun refreshAccountNow(silent: Boolean = false) {
+        val session = _state.value.account.session ?: return
+        if (!silent) _state.update { it.copy(account = it.account.copy(phase = AccountPhase.LOADING, error = null)) }
+        try {
+            val user = accountClient.me(session.token, accounts.installId)
+            // A sign-out may have landed while this was in flight; do not resurrect it.
+            if (_state.value.account.session?.token != session.token) return
+            val updated = session.copy(profile = user, savedAtMillis = System.currentTimeMillis())
+            runCatching { accounts.save(updated) }
+            _state.update {
+                it.copy(account = it.account.copy(phase = AccountPhase.READY, session = updated, error = null))
+            }
+        } catch (error: AccountError) {
+            if (_state.value.account.session?.token != session.token) return
+            if (error.requiresReauthentication) {
+                runCatching { accounts.clear() }
+                _state.update {
+                    it.copy(account = it.account.copy(phase = AccountPhase.READY, session = null, notice = null))
+                }
+            } else {
+                // Unreachable is not signed out: the cached profile stays on screen.
+                _state.update {
+                    it.copy(account = it.account.copy(phase = AccountPhase.UNREACHABLE, error = error.message))
+                }
+            }
+        }
+    }
+
+    fun openAccountScreen() {
+        _state.update { it.copy(account = it.account.copy(screenOpen = true, error = null)) }
+    }
+
+    fun closeAccountScreen() {
+        _state.update { it.copy(account = it.account.copy(screenOpen = false, error = null, handoffEntry = false)) }
+    }
+
+    fun setAccountMode(mode: AccountMode) {
+        _state.update { it.copy(account = it.account.copy(mode = mode, error = null)) }
+    }
+
+    fun showHandoffEntry(show: Boolean) {
+        _state.update { it.copy(account = it.account.copy(handoffEntry = show, error = null)) }
+    }
+
+    fun clearAccountError() {
+        _state.update { it.copy(account = it.account.copy(error = null)) }
+    }
+
+    /** Sign in with a username or an email. */
+    fun loginAccount(identifier: String, password: String) {
+        val name = identifier.trim()
+        if (name.isEmpty() || password.isEmpty()) {
+            setAccountError(getApplication<Application>().getString(R.string.account_error_missing))
+            return
+        }
+        authenticate { accountClient.login(name, password, devicePayload()) }
+    }
+
+    fun registerAccount(username: String, email: String, password: String) {
+        val name = username.trim()
+        val address = email.trim()
+        val problem = when {
+            name.length !in 2..32 -> R.string.account_error_username
+            name.any { it.isWhitespace() || it == '@' } -> R.string.account_error_username
+            !address.contains('@') || address.startsWith('@') || address.endsWith('@') -> R.string.account_error_email
+            password.length !in 8..128 -> R.string.account_error_password
+            else -> null
+        }
+        if (problem != null) {
+            setAccountError(getApplication<Application>().getString(problem))
+            return
+        }
+        authenticate { accountClient.register(name, address, password, devicePayload()) }
+    }
+
+    /** One path for login, registration and the GitHub exchange. */
+    private fun authenticate(block: suspend () -> AccountAuth) {
+        if (_state.value.account.working) return
+        viewModelScope.launch {
+            _state.update { it.copy(account = it.account.copy(working = true, error = null)) }
+            try {
+                val auth = block()
+                val session = AccountSession(auth.token, auth.user, System.currentTimeMillis())
+                // Writing the token is part of signing in: a session that only
+                // exists in memory would vanish on the next launch.
+                accounts.save(session)
+                _state.update {
+                    it.copy(
+                        account = it.account.copy(
+                            phase = AccountPhase.READY,
+                            session = session,
+                            notice = auth.notice,
+                            working = false,
+                            error = null,
+                            mode = AccountMode.SIGN_IN,
+                            handoffEntry = false,
+                        ),
+                    )
+                }
+                reconnectForIdentity()
+            } catch (error: Throwable) {
+                _state.update {
+                    it.copy(account = it.account.copy(working = false, error = messageFor(error)))
+                }
+            }
+        }
+    }
+
+    /** Open GitHub in the browser. With a session, this links instead of signing in. */
+    fun beginGitHubSignIn(link: Boolean = false) {
+        val session = _state.value.account.session
+        if (link && session == null) return
+        if (_state.value.account.working) return
+        viewModelScope.launch {
+            _state.update { it.copy(account = it.account.copy(working = true, error = null)) }
+            try {
+                val start = accountClient.githubStart(devicePayload(), if (link) session?.token else null)
+                _state.update { it.copy(account = it.account.copy(working = false)) }
+                openBrowser(start.authorizeUrl)
+            } catch (error: Throwable) {
+                _state.update {
+                    it.copy(account = it.account.copy(working = false, error = messageFor(error)))
+                }
+            }
+        }
+    }
+
+    /** The landing page handed the app a code; trade it for a session. */
+    fun handleAuthUri(uri: String) {
+        val handoff = AuthUri.parse(uri) ?: return
+        redeemGitHubHandoff(handoff)
+    }
+
+    fun redeemGitHubHandoff(handoff: String) {
+        val code = handoff.trim()
+        if (code.isEmpty()) return
+        authenticate { accountClient.githubExchange(code, devicePayload()) }
+    }
+
+    /** Add paid days to the signed-in account. */
+    fun redeemInvite(code: String) {
+        val session = _state.value.account.session ?: return
+        val value = code.trim()
+        if (value.isEmpty() || _state.value.account.working) return
+        viewModelScope.launch {
+            _state.update { it.copy(account = it.account.copy(working = true, error = null)) }
+            try {
+                val user = accountClient.redeem(session.token, value)
+                val updated = session.copy(profile = user, savedAtMillis = System.currentTimeMillis())
+                accounts.save(updated)
+                _state.update {
+                    it.copy(account = it.account.copy(phase = AccountPhase.READY, session = updated, working = false))
+                }
+            } catch (error: Throwable) {
+                _state.update {
+                    it.copy(account = it.account.copy(working = false, error = messageFor(error)))
+                }
+            }
+        }
+    }
+
+    /** Sign out locally first; the service call is best effort. */
+    fun logoutAccount() {
+        val session = _state.value.account.session ?: return
+        viewModelScope.launch {
+            runCatching { accounts.clear() }
+            _state.update {
+                it.copy(
+                    account = it.account.copy(
+                        phase = AccountPhase.READY,
+                        session = null,
+                        notice = null,
+                        error = null,
+                        handoffEntry = false,
+                    ),
+                )
+            }
+            runCatching { accountClient.logout(session.token) }
+            reconnectForIdentity()
+        }
+    }
+
+    /** Delete the account; only clear the phone once the service has confirmed. */
+    fun deleteAccount() {
+        val session = _state.value.account.session ?: return
+        if (_state.value.account.working) return
+        viewModelScope.launch {
+            _state.update { it.copy(account = it.account.copy(working = true, error = null)) }
+            try {
+                accountClient.delete(session.token)
+            } catch (error: Throwable) {
+                _state.update {
+                    it.copy(account = it.account.copy(working = false, error = messageFor(error)))
+                }
+                return@launch
+            }
+            runCatching { accounts.clear() }
+            _state.update {
+                it.copy(
+                    account = it.account.copy(
+                        phase = AccountPhase.READY,
+                        session = null,
+                        notice = null,
+                        working = false,
+                        error = null,
+                        handoffEntry = false,
+                    ),
+                )
+            }
+            reconnectForIdentity()
+        }
+    }
+
+    /**
+     * Redial with the new identity headers.
+     *
+     * The relay reads them once, at the upgrade, so signing in or out cannot be
+     * patched onto a live socket.
+     */
+    private fun reconnectForIdentity() {
+        val host = _state.value.host ?: return
+        viewModelScope.launch { connect(host) }
+    }
+
+    private fun devicePayload() = AccountDevicePayload(
+        id = accounts.installId,
+        name = deviceModel,
+        model = Build.MODEL,
+        platform = "android",
+        appVersion = BuildConfig.VERSION_NAME,
+    )
+
+    private fun setAccountError(message: String) {
+        _state.update { it.copy(account = it.account.copy(error = message)) }
+    }
+
+    private fun messageFor(error: Throwable): String = when (error) {
+        is AccountError -> error.message
+        else -> error.message ?: getApplication<Application>().getString(R.string.account_error_generic)
+    }
+
+    private fun openBrowser(url: String) {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { getApplication<Application>().startActivity(intent) }
+            .onFailure { setAccountError(getApplication<Application>().getString(R.string.account_error_no_browser)) }
+    }
+
     /** Redeem a scanned or typed pairing code. */
     fun pair(target: PairingTarget, deviceName: String) {
         viewModelScope.launch {
             _state.update { it.copy(phase = Phase.CONNECTING, problem = null, pairingStage = PairingStage.PAIRING) }
             val client = PairingClient(appVersion = appVersion)
             try {
-                val paired = client.pair(
+                // The QR carries a direct address and a relay; a phone that cannot
+                // reach the first must still be able to pair through the second.
+                val outcome = client.pairWithFallback(
                     code = target.code,
                     deviceName = deviceName.ifBlank { "Android" },
                     deviceModel = deviceModel,
                     authority = target.authority,
                     baseUrl = target.baseUrl,
                 )
+                val paired = outcome.host
                 credentials.save(paired)
                 val hosts = credentials.loadAll().sortedBy { it.pairedAtMillis }
                 _state.update {
                     it.copy(hosts = hosts, host = paired, pendingNameHostId = paired.hostId, pairingStage = PairingStage.SYNCING)
                 }
-                connect(paired)
+                // Start on the route that just answered, so the first connect does
+                // not spend the other route's timeout before it.
+                connect(paired, preferred = outcome.route)
             } catch (error: Throwable) {
                 _state.update {
                     it.copy(phase = Phase.FAILED, problem = messageOf(error, target.authority ?: target.baseUrl), pairingStage = null)
@@ -357,7 +693,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun connect(host: PairedHost) {
+    private suspend fun connect(host: PairedHost, preferred: PairingRoute? = null) {
         stopWatchers()
         connection?.disconnect()
         connection = null
@@ -366,8 +702,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         indexStore.load(host.hostId)?.let { applyIndex(it) }
 
         var failure: Throwable? = null
-        for (endpoint in host.endpoints) {
-            val candidate = MizarConnection(host.configurationFor(endpoint, appVersion, deviceModel))
+        // The route that just answered goes first; the other stays behind it.
+        val endpoints = when (preferred) {
+            is PairingRoute.Relay -> host.endpoints.sortedBy { it !is MizarConnection.Endpoint.Relay }
+            is PairingRoute.Direct -> host.endpoints.sortedBy { it !is MizarConnection.Endpoint.Direct }
+            null -> host.endpoints
+        }
+        for (endpoint in endpoints) {
+            val identityHeaders = AccountIdentity.headers(
+                installId = accounts.installId,
+                token = _state.value.account.session?.token,
+                relayBaseUrl = host.baseUrl,
+                accountBaseUrl = BuildConfig.ACCOUNT_BASE_URL,
+            )
+            val candidate = MizarConnection(host.configurationFor(endpoint, appVersion, deviceModel, identityHeaders))
             try {
                 val welcome = candidate.connect()
                 connection = candidate
@@ -898,7 +1246,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             indexStore.remove(hostId)
             val hosts = credentials.loadAll().sortedBy { it.pairedAtMillis }
             if (wasOpen) {
-                _state.value = UiState(phase = if (hosts.isEmpty()) Phase.UNPAIRED else Phase.CONNECTING, hosts = hosts)
+                _state.update {
+                    it.copy(phase = if (hosts.isEmpty()) Phase.UNPAIRED else Phase.CONNECTING, hosts = hosts)
+                }
                 hosts.lastOrNull()?.let { connect(it) }
             } else {
                 _state.update { it.copy(hosts = hosts) }
@@ -1381,7 +1731,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun addAttachment(file: File, name: String, kind: String, mediaType: String?) {
         val host = _state.value.host ?: return
         val sessionId = _state.value.selectedSessionId ?: return
-        if (!_state.value.isLocalNetwork) {
+        if (!_state.value.advancedFeaturesUnlocked) {
             file.delete()
             _state.update { it.copy(problem = getApplication<Application>().getString(R.string.attachment_lan_only)) }
             return
@@ -1513,9 +1863,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Open or close the running turn's detail.
      *
-     * The detail is a paid feature on iOS; this client has no account tier, so the
-     * LAN link is the gate iOS also accepts. On a relay socket the control is not
-     * drawn at all and the host is never asked.
+     * The detail is a paid feature on iOS; this client accepts the same two keys:
+     * a paying account, or any account on the LAN. On a relay socket with a free
+     * account the control is not drawn and the host is never asked.
      */
     fun toggleActivity() {
         if (_state.value.activityExpanded) {
@@ -1524,7 +1874,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(activityExpanded = false) }
             return
         }
-        if (!_state.value.isLocalNetwork) return
+        if (!_state.value.advancedFeaturesUnlocked) return
         _state.update { it.copy(activityExpanded = true, activityError = null) }
         activityJob?.cancel()
         startActivityPolling()

@@ -223,7 +223,7 @@ class AttachmentsTest {
         val sent = mutableListOf<JsonObject>()
         val inbox = Channel<String>(Channel.UNLIMITED)
         val transport = object : WebSocketTransport {
-            override suspend fun connect(url: String) = Unit
+            override suspend fun connect(url: String, headers: Map<String, String>) = Unit
             override suspend fun send(text: String) {
                 val frame = WIRE_JSON.parseToJsonElement(text).jsonObject
                 sent += frame
