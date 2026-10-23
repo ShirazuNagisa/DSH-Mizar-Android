@@ -44,8 +44,13 @@ import me.shirazu.dshmizar.ui.LocalMizarDark
 object Glass {
     private const val RestingLight = 0.78f
     private const val RestingDark = 0.72f
-    private const val OverlayLight = 0.95f
-    private const val OverlayDark = 0.94f
+    // A window over the transcript is translucent only enough to be a window. At
+    // 0.95 the 5% that got through was not a breath: white text on a dark bubble
+    // arrived at +12 grey levels, which is legible, and a message behind a menu
+    // that can be read is a message competing with it. The last two percent are
+    // invisible as translucency and enough to put the ghost below noticing.
+    private const val OverlayLight = 0.985f
+    private const val OverlayDark = 0.975f
 
     /** The panel stroke: the hairline every glass surface is drawn with. */
     val Hairline: Dp = 1.dp
