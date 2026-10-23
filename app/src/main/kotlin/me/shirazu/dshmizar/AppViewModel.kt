@@ -800,12 +800,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 connectionEpoch++
                 _state.update {
                     it.copy(
-                        phase = Phase.READY,
+                        // A first pairing stays on the connecting screen while it
+                        // warms the index: READY would swap in the shell and the
+                        // progress would never be seen. A reconnect has nothing to
+                        // warm, so it goes straight through.
+                        phase = if (warm) Phase.CONNECTING else Phase.READY,
                         welcome = welcome,
                         problem = null,
                         needsPairing = false,
-                        // A first pairing stays on the connecting screen while it
-                        // warms the index; a reconnect has nothing to warm.
                         pairingStage = if (warm) PairingStage.SYNCING else null,
                         offlineBrowser = false,
                         seenAt = activity.seenAt(host.hostId),
@@ -821,9 +823,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 watchConnection(candidate, host)
                 note("connected to $endpoint")
                 if (warm) {
-                    refreshSessionsNow()
-                    warmTitles(candidate)
-                    _state.update { it.copy(pairingStage = null, syncProgress = null, syncEtaMillis = null) }
+                    // `finally`: a host that goes away mid-warm must still land on the
+                    // shell. Staying on "reading sessions" for ever is the one failure
+                    // mode of a progress screen.
+                    try {
+                        refreshSessionsNow()
+                        warmTitles(candidate)
+                    } finally {
+                        _state.update {
+                            it.copy(
+                                phase = Phase.READY,
+                                pairingStage = null,
+                                syncProgress = null,
+                                syncEtaMillis = null,
+                            )
+                        }
+                    }
                 } else {
                     refreshSessions()
                 }
