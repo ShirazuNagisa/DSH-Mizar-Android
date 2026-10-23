@@ -56,8 +56,8 @@
     <string name="detail_older">更早</string>
     <string name="detail_close">关闭细节</string>
     <string name="detail_nothing">还没有可显示的内容。</string>
-    <string name="attach_photo">照片</string>
-    <string name="attach_file">文件</string>
+    <string name="attach_photo">添加照片</string>
+    <string name="attach_file">添加文件</string>
     <string name="remove_attachment">移除附件</string>
     <string name="attachment_lan_only">附件需要付费账户或局域网连接。</string>
     <string name="attachment_still_uploading">请等附件上传完成。</string>

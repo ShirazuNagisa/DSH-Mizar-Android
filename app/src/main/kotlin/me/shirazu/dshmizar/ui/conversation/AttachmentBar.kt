@@ -36,49 +36,28 @@ import me.shirazu.dshmizar.ui.design.pressable
 import me.shirazu.dshmizar.ui.design.shapedClickable
 
 /**
- * The draft's attachments: two pickers, then one chip per file with its upload
- * progress. It sits above the composer, where the files will be sent from, and is
- * only drawn on a LAN link — the same gate iOS uses for a client without a paid
- * account.
+ * The draft's attachments: one chip per file with its upload progress.
+ *
+ * The two pickers live in the composer's `+` window now — one row of two large
+ * targets there, where a thumb already is — so this bar is only the files
+ * themselves, and it draws nothing at all until there is one.
  */
 @Composable
 internal fun AttachmentBar(
     attachments: List<DraftAttachment>,
-    onPickPhoto: () -> Unit,
-    onPickFile: () -> Unit,
     onRemove: (String) -> Unit,
 ) {
+    if (attachments.isEmpty()) return
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        PickerChip(stringResource(R.string.attach_photo), onPickPhoto)
-        PickerChip(stringResource(R.string.attach_file), onPickFile)
-        if (attachments.isNotEmpty()) {
-            LazyRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(attachments, key = { it.key }) { draft ->
-                    AttachmentChip(draft, onRemove = { onRemove(draft.key) })
-                }
+        LazyRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(attachments, key = { it.key }) { draft ->
+                AttachmentChip(draft, onRemove = { onRemove(draft.key) })
             }
         }
-    }
-}
-
-@Composable
-private fun PickerChip(label: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .height(28.dp)
-            .glassCapsule()
-            .pressable(scale = 0.94f)
-            .shapedClickable(androidx.compose.foundation.shape.CircleShape, onClick = onClick)
-            .padding(horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(12.dp))
-        Spacer(Modifier.width(4.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
     }
 }
 

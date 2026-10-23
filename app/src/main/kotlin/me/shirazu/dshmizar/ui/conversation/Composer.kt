@@ -121,6 +121,10 @@ internal fun Composer(
     orbit: Boolean = false,
     /** A ready attachment can be sent without text; the send key must know. */
     hasAttachments: Boolean = false,
+    /** Whether this draft may take attachments: a paid account, or a local link. */
+    attachmentsEnabled: Boolean = false,
+    onPickPhoto: () -> Unit = {},
+    onPickFile: () -> Unit = {},
     /** Reported upward so the interactions dock can tuck itself away while typing. */
     onFocusChanged: (Boolean) -> Unit = {},
 ) {
@@ -214,6 +218,9 @@ internal fun Composer(
             ComposerBarRow(
                 state = state,
                 focused = focused,
+                attachmentsEnabled = attachmentsEnabled,
+                onPickPhoto = onPickPhoto,
+                onPickFile = onPickFile,
                 showingModel = showingModel,
                 showingContext = showingContext,
                 showingCommands = showingCommands,
@@ -241,6 +248,9 @@ private val Arrangement6 = Arrangement.spacedBy(6.dp)
 private fun ComposerBarRow(
     state: UiState,
     focused: Boolean,
+    attachmentsEnabled: Boolean,
+    onPickPhoto: () -> Unit,
+    onPickFile: () -> Unit,
     showingModel: Boolean,
     showingContext: Boolean,
     showingCommands: Boolean,
@@ -263,10 +273,18 @@ private fun ComposerBarRow(
                 title = stringResource(R.string.commands),
                 // Four short words that will never grow: the window fits them,
                 // not some future list.
-                width = 208.dp,
-                maxHeight = 300.dp,
+                // Wider than the four command words need: the two attachment
+                // targets on top are half the window each and have to read as
+                // buttons, not as squeezed text.
+                width = 240.dp,
+                maxHeight = 340.dp,
             ) {
-                CommandContent(onCommand = { onCommand(it); onDismissCommands() })
+                CommandContent(
+                    attachmentsEnabled = attachmentsEnabled,
+                    onPickPhoto = { onDismissCommands(); onPickPhoto() },
+                    onPickFile = { onDismissCommands(); onPickFile() },
+                    onCommand = { onCommand(it); onDismissCommands() },
+                )
             }
         }
         Box(modifier = Modifier.weight(1f, fill = false)) {

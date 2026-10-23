@@ -1,6 +1,7 @@
 package me.shirazu.dshmizar.ui.conversation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.outlined.AddPhotoAlternate
+import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material3.HorizontalDivider
+import me.shirazu.dshmizar.ui.design.pressable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
@@ -35,6 +40,7 @@ import me.shirazu.dshmizar.ui.Format
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.ButtonShape
 import me.shirazu.dshmizar.ui.design.Corner
+import me.shirazu.dshmizar.ui.design.Glass
 import me.shirazu.dshmizar.ui.design.PopoverRow
 import me.shirazu.dshmizar.ui.design.shapedClickable
 import me.shirazu.dshmizar.ui.design.PopoverSection
@@ -273,7 +279,39 @@ private fun Labelled(label: String, value: String) {
 
 /** The four commands the composer offers. */
 @Composable
-internal fun CommandContent(onCommand: (String) -> Unit) {
+internal fun CommandContent(
+    attachmentsEnabled: Boolean,
+    onPickPhoto: () -> Unit,
+    onPickFile: () -> Unit,
+    onCommand: (String) -> Unit,
+) {
+    // The two ways to put a file in the draft sit on top, in one row of their own:
+    // they are not commands (they change what will be sent, not what the agent is
+    // told), they are the most-used pair in this window, and a row of two large
+    // targets is what makes them findable without reading.
+    if (attachmentsEnabled) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            AttachmentTile(
+                label = R.string.attach_photo,
+                icon = Icons.Outlined.AddPhotoAlternate,
+                onClick = onPickPhoto,
+                modifier = Modifier.weight(1f),
+            )
+            AttachmentTile(
+                label = R.string.attach_file,
+                icon = Icons.Outlined.AttachFile,
+                onClick = onPickFile,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
+    }
     val commands = listOf(
         "/goal" to R.string.command_goal,
         "/plan" to R.string.command_plan,
@@ -285,6 +323,49 @@ internal fun CommandContent(onCommand: (String) -> Unit) {
             title = stringResource(label),
             subtitle = slash,
             onClick = { onCommand(slash) },
+        )
+    }
+}
+
+/**
+ * One of the two attachment pickers, as a target rather than a line of text.
+ *
+ * Taller than a command row on purpose: this row is a pair of actions on the draft,
+ * and the height is what says so before the label is read. The icon carries the
+ * colour, the label stays in the page's own ink.
+ */
+@Composable
+private fun AttachmentTile(
+    label: Int,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .height(68.dp)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest, Corner.md)
+            // A hairline, the same one every chip in this app carries: the window
+            // behind is translucent glass, so a fill alone leaves the target's
+            // edge to be guessed at.
+            .border(Glass.Hairline, MaterialTheme.colorScheme.outlineVariant, Corner.md)
+            .pressable()
+            .shapedClickable(Corner.md, onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            stringResource(label),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
         )
     }
 }

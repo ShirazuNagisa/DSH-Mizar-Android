@@ -83,8 +83,8 @@
     <string name="detail_older">Older</string>
     <string name="detail_close">Close details</string>
     <string name="detail_nothing">Nothing to show yet.</string>
-    <string name="attach_photo">Photo</string>
-    <string name="attach_file">File</string>
+    <string name="attach_photo">Add photo</string>
+    <string name="attach_file">Add file</string>
     <string name="remove_attachment">Remove attachment</string>
     <string name="attachment_lan_only">Attachments need a paid account or a local-network connection.</string>
     <string name="attachment_still_uploading">Wait for the attachments to finish uploading.</string>

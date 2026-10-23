@@ -492,8 +492,6 @@ fun SessionScreen(
                 if (state.advancedFeaturesUnlocked) {
                     AttachmentBar(
                         attachments = state.attachments,
-                        onPickPhoto = { photoPicker.launch("image/*") },
-                        onPickFile = { filePicker.launch("*/*") },
                         onRemove = { key -> model.removeAttachment(key) },
                     )
                 }
@@ -503,6 +501,12 @@ fun SessionScreen(
                     onDraft = { draft = it },
                     running = running,
                     hasAttachments = state.attachments.any { it.readyId != null },
+                    // Same gate the bar used to carry: attachments are a paid feature
+                    // off the local network, and a target that cannot work should not
+                    // be offered.
+                    attachmentsEnabled = state.advancedFeaturesUnlocked,
+                    onPickPhoto = { photoPicker.launch("image/*") },
+                    onPickFile = { filePicker.launch("*/*") },
                     onChooseModel = { selection -> model.setModel(selection) },
                     onCommand = { slash ->
                         // Into the draft: the operator finishes the sentence.
