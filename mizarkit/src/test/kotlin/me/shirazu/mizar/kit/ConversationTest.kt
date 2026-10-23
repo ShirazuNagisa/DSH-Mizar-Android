@@ -57,6 +57,92 @@ class ConversationTest {
         endedReason = ended,
     )
 
+    /**
+     * A prompt whose turn was stopped before it answered is unfinished.
+     *
+     * The two arrive on different pages: the prompt is written before its turn
+     * exists, and the turn that claims it -- and is then stopped without saying
+     * anything -- can land on the far side of a page edge. The turn is "silent" by
+     * the shape the screen drops, and dropping it took the abort with it: the
+     * operator's own message was left standing alone under a 已完成 row.
+     */
+    @Test
+    fun `a prompt whose turn was stopped before it answered is unfinished`() {
+        val promptPage = turnsOf(
+            """
+            {"sessionId":"s","asOfSeq":3,"records":[
+              {"type":"event","event":{"type":"user/message","seq":3,"time":1100,
+                "data":{"content":[{"type":"text","text":"跑一个长任务"}],
+                        "source":{"kind":"user"},"role":"user","id":"u1"},"surfaceOp":"append"}}
+            ]}
+            """.trimIndent(),
+        )
+        val turnPage = turnsOf(
+            """
+            {"sessionId":"s","asOfSeq":5,"records":[
+              {"type":"event","event":{"type":"turn/start","seq":4,"time":1200,"data":{"turn":1}}},
+              {"type":"event","event":{"type":"turn/end","seq":5,"time":1300,
+                "data":{"turn":1,"reason":{"kind":"aborted","reason":{"kind":"user"}}}}}
+            ]}
+            """.trimIndent(),
+        )
+
+        val merged = mergeTurns(promptPage, turnPage)
+
+        assertEquals(1, merged.size, "the prompt and its stopped turn are one row")
+        assertEquals("aborted", merged[0].endedReason)
+        assertTrue(merged[0].failed, "a stopped turn must not read as completed")
+        assertEquals(1, merged[0].prompts.size, "the operator's message stays in the row")
+    }
+
+    /**
+     * A turn the operator stopped is unfinished, and says so.
+     *
+     * DSH closes an interrupted turn with `reason.kind = "aborted"`; the row above
+     * the answer reads the reason, so an `aborted` that arrived as anything else --
+     * a missing key, a shape the parser did not expect -- draws the one thing a
+     * monitoring screen must never draw: a stopped turn with a tick.
+     */
+    @Test
+    fun `a turn the operator stopped is unfinished`() {
+        val turns = turnsOf(
+            """
+            {"sessionId":"s","asOfSeq":5,"records":[
+              {"type":"event","event":{"type":"turn/start","seq":2,"time":1000,"data":{"turn":1}}},
+              {"type":"event","event":{"type":"user/message","seq":3,"time":1100,
+                "data":{"turn":1,"content":[{"type":"text","text":"跑一个长任务"}],
+                        "source":{"kind":"user"},"role":"user","id":"u1"}}},
+              {"type":"event","event":{"type":"assistant/message","seq":4,"time":1200,
+                "data":{"turn":1,"content":[{"type":"text","text":"先做第一步……"}],
+                        "role":"assistant","id":"a1"}}},
+              {"type":"event","event":{"type":"turn/end","seq":5,"time":1300,
+                "data":{"turn":1,"reason":{"kind":"aborted","reason":{"kind":"user"}}}}}
+            ]}
+            """.trimIndent(),
+        )
+
+        assertEquals(1, turns.size)
+        assertEquals("aborted", turns[0].endedReason)
+        assertTrue(turns[0].failed, "a stopped turn must not read as completed")
+        assertFalse(turns[0].isRunning)
+    }
+
+    @Test
+    fun `a turn the host completed is finished`() {
+        val turns = turnsOf(
+            """
+            {"sessionId":"s","asOfSeq":5,"records":[
+              {"type":"event","event":{"type":"turn/start","seq":2,"time":1000,"data":{"turn":1}}},
+              {"type":"event","event":{"type":"turn/end","seq":5,"time":1300,
+                "data":{"turn":1,"reason":{"kind":"completed"}}}}
+            ]}
+            """.trimIndent(),
+        )
+
+        assertFalse(turns[0].failed)
+        assertFalse(turns[0].isRunning)
+    }
+
     /** The `(role, text)` of every message in a page, which is what several tests assert on. */
     private fun rendered(items: List<ConversationItem>): List<String> = items.mapNotNull { item ->
         (item as? ConversationItem.Message)?.let { "${roleName(it.role)}:${it.text}" }
@@ -787,9 +873,11 @@ class ConversationTest {
         assertFalse(turn.failed)
         assertTrue(turn.isCollapsible)
         assertEquals(1, turn.turn)
-        // The position is the earliest *item* the turn holds, not its `turn/start`:
-        // the start record produces nothing to draw, so it has no `seq` of its own.
-        assertEquals(2, turn.orderSeq)
+        // The position is the earliest of the items the turn holds *or the
+        // `turn/start` that opened it*. The start record draws nothing, but a turn
+        // stopped before it said anything has no items at all, and without its own
+        // position it could not be placed after the prompt waiting for it.
+        assertEquals(1, turn.orderSeq)
     }
 
     @Test

@@ -265,9 +265,15 @@ private fun TurnSummary(
     // change, never on the first draw of a finished turn.
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     val active = waiting || turn.isRunning
+    // A prompt the host recorded and never opened a turn for. It did not finish --
+    // nothing ran -- and it is not running now; drawing it with a tick was the
+    // "a stopped turn says 已完成" report, because a turn the operator stops before
+    // it speaks can leave exactly this: the message, and no turn to end.
+    val neverStarted = !active && turn.turn == null && turn.endedAtMillis == null &&
+        turn.steps.isEmpty() && turn.prompts.isNotEmpty()
     var wasActive by remember(turn.id) { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(active) {
-        if (wasActive == true && !active && !turn.failed) {
+        if (wasActive == true && !active && !turn.failed && !neverStarted) {
             haptics.mizarPerform(HapticFeedbackType.LongPress)
         }
         wasActive = active
@@ -282,9 +288,9 @@ private fun TurnSummary(
                 TwinStar(size = 13.dp)
             } else {
                 Icon(
-                    if (turn.failed) Icons.Default.Warning else Icons.Default.CheckCircle,
+                    if (turn.failed || neverStarted) Icons.Default.Warning else Icons.Default.CheckCircle,
                     contentDescription = null,
-                    tint = if (turn.failed) MizarColors.Waiting else MizarColors.Running,
+                    tint = if (turn.failed || neverStarted) MizarColors.Waiting else MizarColors.Running,
                     modifier = Modifier.size(15.dp),
                 )
             }
@@ -295,6 +301,9 @@ private fun TurnSummary(
             active -> stringResource(R.string.turn_deep_seeking)
             turn.failed -> Format.duration(turn.durationMillis)?.let { stringResource(R.string.unfinished_after, it) }
                 ?: stringResource(R.string.unfinished)
+
+            // No end to measure, so no duration: just the fact that it did not run.
+            neverStarted -> stringResource(R.string.unfinished)
 
             else -> Format.duration(turn.durationMillis)?.let { stringResource(R.string.completed_in, it) }
                 ?: stringResource(R.string.completed)
@@ -311,7 +320,7 @@ private fun TurnSummary(
 
         Spacer(Modifier.weight(1f))
 
-        if (turn.failed) {
+        if (turn.failed || neverStarted) {
             // The prompt is already here, so the retry is one tap rather than
             // retyping the sentence the agent failed to answer.
             val prompt = (turn.prompts.firstOrNull() as? ConversationItem.Message)?.text

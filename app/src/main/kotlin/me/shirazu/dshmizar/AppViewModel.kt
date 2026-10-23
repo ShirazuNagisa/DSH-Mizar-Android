@@ -421,6 +421,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     private var liveSignature: String? = null
 
+    /** The transcript's shape as last logged, so the diagnostic line only moves when it does. */
+    private var lastTurnShape: String? = null
+
     /** Guards the load, and remembers a request that arrived during one. */
     private var loading = false
     private var reloadWanted = false
@@ -1708,6 +1711,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         applyPageContext(page)
+        // One line when the shape of the transcript changes, not one per poll: a
+        // turn's reason is what the summary row reads, and "the row says the wrong
+        // thing" is unanswerable without knowing which reason arrived.
+        val shape = _state.value.turns.joinToString("|") {
+            "${it.turn}:${it.endedReason}:${it.prompts.size}:${it.steps.size}"
+        }
+        if (shape != lastTurnShape) {
+            lastTurnShape = shape
+            note(
+                "turns: " + _state.value.turns.joinToString(" | ") {
+                    "t=${it.turn} reason=${it.endedReason} p=${it.prompts.size} s=${it.steps.size} failed=${it.failed} running=${it.isRunning}"
+                },
+            )
+        }
         val hostId = _state.value.host?.hostId
         val sessionId = _state.value.selectedSessionId
         if (hostId != null && sessionId != null) {

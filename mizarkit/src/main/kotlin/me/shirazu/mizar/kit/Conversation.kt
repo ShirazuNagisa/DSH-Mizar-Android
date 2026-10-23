@@ -158,6 +158,15 @@ data class ConversationTurn(
     val startedAtMillis: Long?,
     val endedAtMillis: Long?,
     val endedReason: String?,
+    /**
+     * The log position of the `turn/start` that opened this turn, when it had one.
+     *
+     * A turn that was stopped before it said anything holds no items, so it has no
+     * position of its own — and without one it cannot be placed after the prompt
+     * that belongs to it, which is how that prompt ended up alone under a 已完成
+     * row. The start record is the position it always had.
+     */
+    val startSeq: Int? = null,
 ) {
     /**
      * The identity used when merging two copies of the same turn.
@@ -168,8 +177,9 @@ data class ConversationTurn(
      */
     val id: String get() = turn?.let { it.toString() } ?: "unopened-${orderSeq?.toString() ?: "head"}"
 
-    /** Where this turn sits in the log: the earliest position it holds. */
-    val orderSeq: Int? get() = items.mapNotNull { it.seq }.minOrNull()
+    /** Where this turn sits in the log: the earliest position it holds, or opened at. */
+    val orderSeq: Int?
+        get() = listOfNotNull(items.mapNotNull { it.seq }.minOrNull(), startSeq).minOrNull()
 
     /** Prompts first, then everything the agent did. */
     val items: List<ConversationItem> get() = prompts + steps
@@ -252,6 +262,7 @@ data class ConversationTurn(
             // aborted turn from tagging the prompt above it as 未完成.
             endedAtMillis = if (turn == null) null else if (continuation) next.endedAtMillis else endedAtMillis,
             endedReason = if (turn == null) null else unfinished ?: if (continuation) next.endedReason else endedReason,
+            startSeq = listOfNotNull(startSeq, next.startSeq).minOrNull(),
         )
     }
 
@@ -273,6 +284,7 @@ data class ConversationTurn(
         // has no end and no reason.
         endedAtMillis = if (turn == null && other.turn == null) null else endedAtMillis ?: other.endedAtMillis,
         endedReason = if (turn == null && other.turn == null) null else endedReason ?: other.endedReason,
+        startSeq = listOfNotNull(startSeq, other.startSeq).minOrNull(),
     )
 
     companion object {
@@ -331,6 +343,7 @@ object Conversation {
         val prompts = LinkedHashMap<Int?, MutableList<ConversationItem>>()
         val steps = LinkedHashMap<Int?, MutableList<ConversationItem>>()
         val started = HashMap<Int?, Long?>()
+        val openedAtSeq = HashMap<Int?, Int?>()
         val ended = HashMap<Int?, Long?>()
         val reason = HashMap<Int?, String?>()
         var pending = mutableListOf<ConversationItem>()
@@ -351,6 +364,7 @@ object Conversation {
                 "turn/start" -> {
                     if (turn !in order) order += turn
                     started[turn] = at
+                    openedAtSeq[turn] = record.payload["seq"].intValue()
                     flush(turn)
                 }
 
@@ -405,6 +419,7 @@ object Conversation {
                 // on, until the next read rebuilt it.
                 endedAtMillis = if (key == null) null else ended[key],
                 endedReason = if (key == null) null else reason[key],
+                startSeq = if (key == null) null else openedAtSeq[key],
             )
         }
     }
@@ -546,10 +561,17 @@ fun mergeTurns(cached: List<ConversationTurn>, fresh: List<ConversationTurn>): L
         byId[turn.id] = if (known == null) turn else turn.merging(known)
     }
     return collapseContinuations(
-        // Silenced turns are dropped before folding, not after: an aborted turn that
-        // said nothing must not be absorbed into the completed turn above it, which
-        // would hand that turn the abort's reason and draw it as 未完成.
-        reclaimStrandedPrompts(withoutSilentTurns(byId.values.sortedWith(ConversationTurn.PRECEDES))),
+        // Reclaim first, drop second. A prompt recorded before its turn exists can
+        // land on the far side of a page edge from that turn; if the turn is then
+        // stopped before it says anything, it is "silent" and would be dropped --
+        // taking the abort with it, and leaving the prompt's own group to draw as
+        // 已完成. Handing the prompt back first makes that turn non-silent, so the
+        // row above the prompt reads 未完成, which is what happened.
+        //
+        // Still dropped before folding: a turn that said nothing and has no prompt
+        // waiting for it must not be absorbed into the completed turn above it,
+        // which would hand that turn the abort's reason.
+        withoutSilentTurns(reclaimStrandedPrompts(byId.values.sortedWith(ConversationTurn.PRECEDES))),
     )
 }
 

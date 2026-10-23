@@ -32,6 +32,7 @@
  *   POST /ctl/hold                       # open the second client
  *   POST /ctl/release                    # close it
  *   POST /ctl/answer   {kind, id, choice}  # answer as if the desktop GUI did
+ *   POST /ctl/turn     {outcome?}          # append a finished turn: completed | aborted | error
  */
 import { mkdirSync } from 'node:fs'
 import { createServer } from 'node:http'
@@ -69,13 +70,15 @@ function log(what) {
 
 const T0 = Date.now() - 6 * 60_000
 const records = [
-  { type: 'event', event: { type: 'turn/start', seq: 2, time: T0, sessionId: 'session-ki2-alpha', data: { turn: 1 } } },
+  // The order and the shapes the real host writes: the operator's message first
+  // (it carries no turn number -- the turn does not exist yet), then the turn that
+  // claims it, then a message that names its own turn.
   {
     type: 'event',
     event: {
       type: 'user/message',
-      seq: 3,
-      time: T0 + 400,
+      seq: 2,
+      time: T0,
       sessionId: 'session-ki2-alpha',
       data: {
         content: [{ type: 'text', text: '请在这台机器上验证 KI-2：重连之后待办卡片能不能回来。' }],
@@ -86,6 +89,8 @@ const records = [
       surfaceOp: 'append',
     },
   },
+  { type: 'event', event: { type: 'turn/start', seq: 3, time: T0 + 100, sessionId: 'session-ki2-alpha', data: { turn: 1 } } },
+  { type: 'event', event: { type: 'step/start', seq: 4, time: T0 + 800, sessionId: 'session-ki2-alpha', data: { turn: 1, step: 1 } } },
   {
     type: 'event',
     event: {
@@ -94,6 +99,8 @@ const records = [
       time: T0 + 1500,
       sessionId: 'session-ki2-alpha',
       data: {
+        turn: 1,
+        step: 1,
         content: [{ type: 'text', text: '好的。卡片是否出现以截图和宿主结算日志为准。' }],
         role: 'assistant',
         id: 'ki2-seed-assistant-1',
@@ -153,6 +160,9 @@ let nextSeq = 7
 
 /** The last `session.messages` request, so a test can assert what travelled. */
 let lastPageRequest = null
+
+/** Turns appended through the control endpoint, so each one gets its own number. */
+let turnCounter = 1
 
 function pageFor(sessionId, { maxMessages = 200, afterSeq = null, beforeSeq = null }) {
   const own = records.filter((record) => record.event.sessionId === sessionId)
@@ -417,6 +427,61 @@ const ctl = createServer(async (request, response) => {
       request.on('end', () => resolve(text === '' ? {} : JSON.parse(text)))
     })
     switch (url.pathname) {
+      case '/ctl/turn': {
+        // A turn that ended the way the caller says. `aborted` is what a Stop
+        // produces, and it is the one the transcript has to draw as unfinished --
+        // the summary row reads the reason, so the reason is what this fabricates.
+        const outcome = body['outcome'] ?? 'aborted'
+        const turn = (turnCounter += 1)
+        const base = Date.now()
+        const push = (event) => {
+          records.push({ type: 'event', event: { seq: (nextSeq += 1), sessionId: 'session-ki2-alpha', ...event } })
+        }
+        // The order the real host writes: the operator's message first (it carries
+        // no turn number -- the turn does not exist yet), then the turn that
+        // claims it.
+        push({
+          type: 'user/message',
+          time: base,
+          data: {
+            content: [{ type: 'text', text: `第 ${turn} 轮：跑一个会被中断的长任务。` }],
+            source: { kind: 'user' },
+            role: 'user',
+            id: `ki2-user-${turn}`,
+          },
+          surfaceOp: 'append',
+        })
+        push({ type: 'turn/start', time: base + 100, data: { turn } })
+        // `aborted-silent`: stopped before the model said anything, which is the
+        // case that used to lose its reason and draw as 已完成.
+        if (outcome === 'aborted-silent') {
+          push({ type: 'turn/end', time: base + 500, data: { turn, reason: { kind: 'aborted', reason: { kind: 'user' } } } })
+          log(`turn ${turn} appended: aborted (silent)`)
+          return reply(200, { turn, outcome })
+        }
+        push({ type: 'step/start', time: base + 600, data: { turn, step: 1 } })
+        push({
+          type: 'assistant/message',
+          time: base + 1500,
+          data: {
+            turn,
+            step: 1,
+            content: [{ type: 'text', text: '先做第一步，然后是第二步……' }],
+            role: 'assistant',
+            id: `ki2-assistant-${turn}`,
+          },
+          surfaceOp: 'append',
+        })
+        const reason =
+          outcome === 'aborted'
+            ? { kind: 'aborted', reason: { kind: 'user' } }
+            : outcome === 'error'
+              ? { kind: 'error', error: { message: 'boom', code: 'UNKNOWN' } }
+              : { kind: 'completed' }
+        push({ type: 'turn/end', time: base + 2000, data: { turn, reason } })
+        log(`turn ${turn} appended: ${outcome}`)
+        return reply(200, { turn, outcome })
+      }
       case '/ctl/code': {
         const { display, expiresAt } = await listener.issuePairingCode()
         log(`pairing code issued: ${display}`)
