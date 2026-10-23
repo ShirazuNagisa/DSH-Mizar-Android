@@ -2610,6 +2610,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // The host is already where it belongs. The phone's stored base URL can
             // still be stale — a fallback may have landed on the alternate relay —
             // so repair that from the host's own answer.
+            note("relay: host already on $desired")
             relay.baseUrl?.let { rememberRelayBaseUrl(it) }
             return
         }
