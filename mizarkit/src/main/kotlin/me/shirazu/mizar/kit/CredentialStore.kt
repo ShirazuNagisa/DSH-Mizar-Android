@@ -38,8 +38,15 @@ data class PairedHost(
     val endpoints: List<MizarConnection.Endpoint>
         get() = buildList {
             authority?.takeIf { it.isNotEmpty() }?.let { add(MizarConnection.Endpoint.Direct(it)) }
-            baseUrl?.takeIf { it.isNotEmpty() && PairingUri.isUsableBaseUrl(it) }
-                ?.let { add(MizarConnection.Endpoint.Relay(it)) }
+            baseUrl?.takeIf { it.isNotEmpty() && PairingUri.isUsableBaseUrl(it) }?.let { stored ->
+                add(MizarConnection.Endpoint.Relay(stored))
+                // The other public relay, with the same room path. A phone that was
+                // offline while the host's tunnel moved still has the old origin
+                // stored, and the room is the part that survived the move — so the
+                // other relay is where that host is now. A self-hosted relay has no
+                // alternate: it is the only place that host can be.
+                RelayTier.alternate(stored)?.let { add(MizarConnection.Endpoint.Relay(it)) }
+            }
         }
 
     /** The connection settings for one endpoint. */

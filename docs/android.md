@@ -91,6 +91,30 @@ iOS 与 Android 在同一间房里各走各的通道：`push.register` 的 `plat
   不带的话，配对流量的归属只有一个匿名桶。
 - 三个头都会被中继剥离，电脑端看不到。
 
+## 中继档位（插件 0.8.9）
+
+付费账户的隧道应当走付费中继（`dshmizar-1`），免费账户走免费中继（`dshmizar`）。host 没有账户身份，
+只有手机知道套餐，所以由手机调 `relay.set`：
+
+- 连上中继后读 `host.info.relay`，与 `RelayTier.baseUrl(paid)` 比对，**不同才**请求移动。
+- host 先回 `ok` 再重拨（约 250 ms）。手机把 `PairedHost.baseUrl` 换成返回的 `baseURL`，700 ms 后按新
+  room 重连——token 没变，room 没变，所以这是重拨不是重配。
+- 另一台设备触发时，本机会收到 `relay.changed`，同样更新并重连。
+- 老 host 没有 `relay` 字段、`relay.set` 回 `NOT_IMPLEMENTED`：什么都不做。自建中继不移动。
+- 账户套餐变化（付费↔免费、登录/登出）会重新同步一次；免费账户被付费中继的 gate 拒绝是预期行为。
+- 配对里存的是公共中继时，重连的候选里多一条「**另一个**公共中继 + 同一个 room」：手机离线期间
+  host 搬走的话，room 还在，另一条路能把它找回来。
+
+## 协议要点（插件 0.8.9）
+
+- **子代理的页要带父会话。** `session.messages` 的 `parentSessionId` 只在读**委派子会话**时传：host 拒绝
+  按 session 寻址子代理的日志（`session/agent-busy`，在碰日志之前就回），必须由父地址重建。fork 有
+  `parentSessionId` 但**不是**子代理——它是操作者自己的对话，按普通会话读。规则在
+  `mizarkit/SessionLineage`，四个读取点（会话页、上翻页、完成通知、子代理标题）都走同一个 `pageAddress()`。
+- **每一页都带 `context`。** 占用环以前只从 `session.stats` 来，而跑着 turn 时真正在跑的是增量刷新，
+  它从不读 stats——数字就冻在上一次全量读取。现在每页都带（同一份投影基线算出来的，不额外花一次读），
+  缺省表示 host 没有这份投影，读作**未知**而不是 0。
+
 ## 实时活动
 
 Android 16 的 Live Updates 是 iOS Live Activity 的对位：`push/LiveTurn.kt` 用

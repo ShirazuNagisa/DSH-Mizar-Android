@@ -73,6 +73,9 @@ import me.shirazu.mizar.kit.PairingTarget
 import me.shirazu.mizar.kit.PairingClient
 import me.shirazu.mizar.kit.PairingFailure
 import me.shirazu.mizar.kit.PairingRoute
+import me.shirazu.mizar.kit.HostRelay
+import me.shirazu.mizar.kit.RelaySetResult
+import me.shirazu.mizar.kit.RelayTier
 import me.shirazu.mizar.kit.label
 import me.shirazu.mizar.kit.ProtocolLog
 import me.shirazu.mizar.kit.SyncEta
@@ -378,6 +381,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** One LAN discovery at a time; a second trigger reuses the first. */
     private var lanSwitchJob: Job? = null
 
+    /** The relay redial after a tier change, so two changes cannot stack two of them. */
+    private var relaySwitchJob: Job? = null
+
     /**
      * The one in-flight re-read of the open conversation after a turn ended.
      *
@@ -479,9 +485,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // A sign-out may have landed while this was in flight; do not resurrect it.
             if (_state.value.account.session?.token != session.token) return
             val updated = session.copy(profile = user, savedAtMillis = System.currentTimeMillis())
+            val wasPaid = _state.value.account.isPaid
             runCatching { accounts.save(updated) }
             _state.update {
                 it.copy(account = it.account.copy(phase = AccountPhase.READY, session = updated, error = null))
+            }
+            // The plan decides which relay the host's tunnel should use. A change in
+            // either direction asks the host to move; nothing else here touches it.
+            if (wasPaid != updated.profile?.isPaid) {
+                connection?.let { socket -> viewModelScope.launch { syncRelayTier(socket) } }
             }
         } catch (error: AccountError) {
             if (_state.value.account.session?.token != session.token) return
@@ -849,6 +861,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 if (endpoint !is MizarConnection.Endpoint.Direct && _state.value.localNetworkFirst) {
                     maybeSwitchToLan(host, candidate, welcome)
                 }
+                // A paid account's tunnel belongs on the account relay, and the host
+                // has no account identity: the phone is the only side that knows the
+                // plan. Skipped by hosts that predate relay tiers.
+                if (endpoint !is MizarConnection.Endpoint.Direct) {
+                    viewModelScope.launch { syncRelayTier(candidate) }
+                }
                 return
             } catch (error: Throwable) {
                 note("endpoint $endpoint failed: ${error.message}")
@@ -1135,10 +1153,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val page = runCatching {
             socket.call<SessionMessagesResult>(
                 "session.messages",
-                payload(
-                    "sessionId" to jsonString(sessionId),
-                    "maxMessages" to me.shirazu.mizar.kit.jsonInt(12),
-                ),
+                payload(*pageAddress(sessionId), "maxMessages" to me.shirazu.mizar.kit.jsonInt(12)),
             )
         }.getOrNull() ?: return FinishedDetail(false, null)
 
@@ -1241,10 +1256,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // to reach the prompt the child was given.
             val page = socket.call<SessionMessagesResult>(
                 "session.messages",
-                payload(
-                    "sessionId" to jsonString(childId),
-                    "maxMessages" to me.shirazu.mizar.kit.jsonInt(200),
-                ),
+                payload(*pageAddress(childId), "maxMessages" to me.shirazu.mizar.kit.jsonInt(200)),
             )
             Conversation.items(page)
                 .filterIsInstance<ConversationItem.Message>()
@@ -1656,6 +1668,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Fold one page of records into the transcript. */
+    /**
+     * Put a page's context figure on the bar.
+     *
+     * Every `session.messages` page carries the occupancy as of its cut (plugin
+     * 0.8.9), derived from the same projection baseline that names the cut. The
+     * incremental refresh — the one an open screen actually runs while a turn is
+     * going — never asks for `session.stats`, so before this the composer's figure
+     * froze at whatever the last full load saw.
+     *
+     * A page without the figure leaves the frame alone: unknown, never zero.
+     */
+    private fun applyPageContext(page: SessionMessagesResult) {
+        val pressure = page.context ?: return
+        val before = _state.value.stats?.context?.percent
+        _state.update { current ->
+            current.copy(stats = (current.stats ?: SessionStatsFrame()).copy(context = pressure))
+        }
+        // Only when it moves: this runs on every page, and a line per refresh would
+        // bury the rest of the log. A figure that *stops* moving is the bug this
+        // exists to catch, and silence here is how that reads.
+        if (before != pressure.percent) note("context ${pressure.percent}% from page")
+    }
+
     private fun applyPage(page: SessionMessagesResult) {
         val fresh = Conversation.items(page)
         val freshTurns = Conversation.turns(page)
@@ -1672,6 +1707,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 newestSeq = listOfNotNull(current.newestSeq, page.asOfSeq).maxOrNull(),
             )
         }
+        applyPageContext(page)
         val hostId = _state.value.host?.hostId
         val sessionId = _state.value.selectedSessionId
         if (hostId != null && sessionId != null) {
@@ -1711,7 +1747,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 "session.refresh",
                 payload(
                     *buildList {
-                        add("sessionId" to jsonString(sessionId))
+                        addAll(pageAddress(sessionId))
                         add("maxMessages" to me.shirazu.mizar.kit.jsonInt(tail))
                         afterSeq?.let { add("afterSeq" to me.shirazu.mizar.kit.jsonInt(it)) }
                     }.toTypedArray(),
@@ -1755,7 +1791,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 "session.messages",
                 payload(
                     *buildList {
-                        add("sessionId" to jsonString(sessionId))
+                        addAll(pageAddress(sessionId))
                         add("maxMessages" to me.shirazu.mizar.kit.jsonInt(tail))
                         // A number is this screen's own claim about what it holds; `null`
                         // is the claim that it holds **nothing**. The difference matters
@@ -1828,7 +1864,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val page = socket.call<SessionMessagesResult>(
                 "session.messages",
                 payload(
-                    "sessionId" to jsonString(sessionId),
+                    *pageAddress(sessionId),
                     "maxMessages" to me.shirazu.mizar.kit.jsonInt(200),
                     "beforeSeq" to me.shirazu.mizar.kit.jsonInt(before),
                 ),
@@ -1838,6 +1874,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(exhausted = true, hasMore = false) }
                 return 0
             }
+            applyPageContext(page)
             val fresh = Conversation.items(page)
             val freshTurns = Conversation.turns(page)
             val before_count = _state.value.conversation.size
@@ -2550,6 +2587,101 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * unauthenticated `hello` the pairing screen uses: the id must equal the host the
      * phone is already talking to, or a stranger on the network would be adopted.
      */
+    // ── relay tier ───────────────────────────────────────────────────────────
+
+    /**
+     * Ask the host to put its tunnel on the relay this account's tier pays for.
+     *
+     * The host has no account identity, so it cannot know whether the phone's plan
+     * is paid; the phone asks (`relay.set`) and the host decides — it owns the
+     * two-relay allowlist, remembers the choice, and redials its tunnel. The token
+     * does not change, so the room does not change: moving relays is a redial, not
+     * a re-pairing.
+     *
+     * Everything here is best effort. A host from before relay tiers answers
+     * `NOT_IMPLEMENTED` and is left alone; anything else is a connection failure
+     * the next request will surface, and must not take the screen down.
+     */
+    private suspend fun syncRelayTier(socket: MizarConnection) {
+        val info = runCatching { socket.call<HostInfo>("host.info") }.getOrNull() ?: return
+        val relay = info.relay ?: return
+        val desired = RelayTier.baseUrl(_state.value.account.isPaid)
+        if (RelayTier.canonicalOrigin(relay.url) == desired) {
+            // The host is already where it belongs. The phone's stored base URL can
+            // still be stale — a fallback may have landed on the alternate relay —
+            // so repair that from the host's own answer.
+            relay.baseUrl?.let { rememberRelayBaseUrl(it) }
+            return
+        }
+        val result = try {
+            socket.call<RelaySetResult>("relay.set", payload("url" to jsonString(desired)))
+        } catch (error: Throwable) {
+            val known = (error as? me.shirazu.mizar.kit.MizarError)?.known
+            if (known == me.shirazu.mizar.kit.MizarErrorCode.NOT_IMPLEMENTED) {
+                note("relay: host does not implement relay.set")
+            } else {
+                note("relay: could not move the host to $desired — ${error.message}")
+            }
+            return
+        }
+        val baseUrl = result.baseUrl
+            ?: _state.value.host?.baseUrl?.let { RelayTier.rebased(it, result.url) }
+        note("relay: host moved to ${result.url}")
+        baseUrl?.let { rememberRelayBaseUrl(it) }
+        scheduleRelayReconnect(baseUrl)
+    }
+
+    /** Persist the relay base URL the host reported or promised. */
+    private suspend fun rememberRelayBaseUrl(baseUrl: String) {
+        val current = _state.value.host ?: return
+        if (current.baseUrl == baseUrl) return
+        val moved = current.copy(baseUrl = baseUrl)
+        runCatching { credentials.save(moved) }
+        _state.update { state ->
+            state.copy(
+                host = moved,
+                hosts = state.hosts.map { if (it.hostId == moved.hostId) moved else it },
+            )
+        }
+    }
+
+    /**
+     * Redial once the host has had time to move its tunnel.
+     *
+     * The answer travelled over the tunnel the host is about to replace, and the
+     * host waits a beat before moving — dialling too early would reconnect to the
+     * relay it is leaving. Only a relayed socket redials: on the LAN the tunnel's
+     * relay is irrelevant to this phone.
+     */
+    private fun scheduleRelayReconnect(baseUrl: String?) {
+        if (baseUrl.isNullOrBlank() || _state.value.isLocalNetwork) return
+        relaySwitchJob?.cancel()
+        relaySwitchJob = viewModelScope.launch {
+            delay(RELAY_SWITCH_DELAY_MILLIS)
+            // One dial at a time. The host cutting its tunnel usually starts the
+            // patient reconnect loop, and two loops racing for the socket would
+            // leave whichever finished last as the live one.
+            cancelReconnect()
+            val host = _state.value.host ?: return@launch
+            note("relay: redialling $baseUrl")
+            connect(host, preferred = PairingRoute.Relay(baseUrl))
+        }
+    }
+
+    /** A `relay.changed` event: another device moved the tunnel this phone stores. */
+    private fun applyRelayChanged(data: kotlinx.serialization.json.JsonElement) {
+        val changed = runCatching {
+            me.shirazu.mizar.kit.WIRE_JSON.decodeFromJsonElement(HostRelay.serializer(), data)
+        }.getOrNull() ?: return
+        note("relay: another device moved the host to ${changed.url}")
+        viewModelScope.launch {
+            val baseUrl = changed.baseUrl
+                ?: _state.value.host?.baseUrl?.let { RelayTier.rebased(it, changed.url) }
+            baseUrl?.let { rememberRelayBaseUrl(it) }
+            scheduleRelayReconnect(baseUrl)
+        }
+    }
+
     private fun maybeSwitchToLan(
         host: PairedHost,
         socket: MizarConnection,
@@ -2667,6 +2799,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         // The host knows when a turn ends; a connected client should be
                         // told, not left to infer it from a list refresh.
                         if (frame.name == "turn.settled") onTurnSettled(frame.data)
+                        // Another device asked the host to move its tunnel; the base
+                        // URL this phone stores has to follow, or the next reconnect
+                        // dials a relay the host has left.
+                        if (frame.name == "relay.changed") applyRelayChanged(frame.data)
                     }
                 }
             }
@@ -2944,6 +3080,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun payload(vararg members: Pair<String, kotlinx.serialization.json.JsonElement>): JsonObject =
         buildJsonObject { for ((key, value) in members) put(key, value) }
 
+    /**
+     * The address every page read starts with.
+     *
+     * A delegated child is not addressable as a session: the host answers
+     * `session/agent-busy` before it touches the log, so the parent has to travel
+     * with the request (plugin 0.8.9 rebuilds the subagent address from it). A fork
+     * carries a parent and is not a child -- see [me.shirazu.mizar.kit.SessionLineage].
+     */
+    private fun pageAddress(sessionId: String): Array<Pair<String, kotlinx.serialization.json.JsonElement>> =
+        buildList {
+            add("sessionId" to jsonString(sessionId))
+            me.shirazu.mizar.kit.SessionLineage.parentOf(_state.value.sessions, sessionId)
+                ?.let { add("parentSessionId" to jsonString(it)) }
+        }.toTypedArray()
+
     fun dismissProblem() {
         _state.update { it.copy(problem = null) }
     }
@@ -2985,6 +3136,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
          * names nobody is looking at yet.
          */
         const val WARM_TITLE_LIMIT = 80
+
+        /**
+         * How long the host gets to move its tunnel before this phone redials.
+         *
+         * The `relay.set` answer travels over the tunnel being replaced, and the
+         * host waits 250 ms before cutting it; a little more than that, and the new
+         * relay is already listening for this room.
+         */
+        const val RELAY_SWITCH_DELAY_MILLIS = 700L
 
         /**
          * How long a poll waits before deciding the host is not there.

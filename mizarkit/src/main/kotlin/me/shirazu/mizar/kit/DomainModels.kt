@@ -26,6 +26,14 @@ data class HostInfo(
      * which would mean "there is nowhere to dial".
      */
     val addresses: List<String>? = null,
+    /**
+     * The relay the host's tunnel is on, when the plugin is new enough to answer.
+     *
+     * The host owns the allowlist and the choice; the phone only says which of the
+     * two public relays its account pays for. Absent is an older host: nothing to
+     * move, and nothing to repair.
+     */
+    val relay: HostRelay? = null,
 )
 
 /** `session.list`. */

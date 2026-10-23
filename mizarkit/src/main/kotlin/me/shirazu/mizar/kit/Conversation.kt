@@ -18,6 +18,19 @@ data class SessionMessagesResult(
     val asOfSeq: Int? = null,
     val records: List<JsonElement> = emptyList(),
     val hasMore: Boolean = false,
+    /**
+     * Context-window occupancy as of this page's cut, when the host sends one.
+     *
+     * Every page carries it since plugin 0.8.9 — the host derives it from the same
+     * projection baseline that names the cut, so a full read and the data-saving
+     * incremental read both bring it. That is what keeps the composer's context
+     * figure moving while a turn runs: the incremental refresh never asked for
+     * `session.stats`, so before this the figure froze at the last full load.
+     *
+     * `null` means the host did not send one (an older plugin, or a deployment with
+     * no token-meter projection) — unknown, never a zeroed window.
+     */
+    val context: ContextPressure? = null,
 )
 
 /**

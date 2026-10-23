@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
+import me.shirazu.mizar.kit.ModelRouting
 import me.shirazu.dshmizar.ui.Format
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.ButtonShape
@@ -67,11 +68,12 @@ internal fun ModelPickerContent(
     // What this session is on, by the same three sources the composer's chip reads.
     // Seed the local choice from it, or the rows open with nothing ticked and no way
     // to tell which model is in force.
-    val inForce = homeChoice
-        ?: state.selectedSessionId?.let { state.modelChoice[it] }
-        ?: state.stats?.model?.next
-        ?: state.stats?.model?.lastUsed
-        ?: catalog.defaultSelection
+    // The same resolver the composer's pill uses -- see ModelRouting.
+    val inForce = ModelRouting.agreed(
+        chosen = homeChoice ?: state.selectedSessionId?.let { state.modelChoice[it] },
+        reported = state.stats?.model,
+        fallback = catalog.defaultSelection,
+    )
     var chosenProvider by remember(inForce) { mutableStateOf(inForce?.provider) }
     var chosenModel by remember(inForce) { mutableStateOf(inForce?.model) }
     var chosenEffort by remember(inForce) { mutableStateOf(inForce?.reasoningEffort) }

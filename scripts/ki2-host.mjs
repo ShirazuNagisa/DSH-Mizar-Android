@@ -134,9 +134,25 @@ const sessions = [
     parentSessionId: null,
     origin: null,
   },
+  // A delegated child. Its log is only readable through its parent -- the host
+  // refuses `{kind: "session"}` for it before touching the log -- so this row is
+  // what makes the "parentSessionId travels with the page request" rule testable
+  // without a real DSH.
+  {
+    sessionId: 'session-ki2-child',
+    updatedAt: T0 + 1200,
+    running: false,
+    blank: false,
+    agentAvailable: true,
+    parentSessionId: 'session-ki2-alpha',
+    origin: 'subagent',
+  },
 ]
 
 let nextSeq = 7
+
+/** The last `session.messages` request, so a test can assert what travelled. */
+let lastPageRequest = null
 
 function pageFor(sessionId, { maxMessages = 200, afterSeq = null, beforeSeq = null }) {
   const own = records.filter((record) => record.event.sessionId === sessionId)
@@ -215,18 +231,58 @@ const listener = await MizarListener.start({
     }),
     'session.messages': async (payload) => {
       const record = payload ?? {}
-      return pageFor(record['sessionId'], {
+      const sessionId = record['sessionId']
+      const parentSessionId = record['parentSessionId']
+      lastPageRequest = {
+        sessionId,
+        parentSessionId: typeof parentSessionId === 'string' ? parentSessionId : null,
+      }
+      // The refusal the real host gives a delegated child addressed as a session.
+      // Reproduced here so a page request that forgets the parent fails loudly in
+      // this harness instead of quietly working.
+      const row = sessions.find((candidate) => candidate.sessionId === sessionId)
+      if (row?.origin === 'subagent' && typeof parentSessionId !== 'string') {
+        throw new MethodError(
+          'REMOTE_ERROR',
+          'session/agent-busy: subagent Sessions require their durable parent address',
+        )
+      }
+      const page = pageFor(sessionId, {
         maxMessages: typeof record['maxMessages'] === 'number' ? record['maxMessages'] : 200,
         afterSeq: typeof record['afterSeq'] === 'number' ? record['afterSeq'] : null,
         beforeSeq: typeof record['beforeSeq'] === 'number' ? record['beforeSeq'] : null,
       })
+      // Every page carries the occupancy since plugin 0.8.9; the app folds it into
+      // the composer's figure without asking for session.stats.
+      log(`session.messages ${sessionId} parent=${lastPageRequest.parentSessionId ?? '-'} +context`)
+      return {
+        ...page,
+        context: {
+          window: 128000,
+          pressureTokens: 42000,
+          projectedTokens: 45000,
+          percent: 35,
+          breakdown: { systemTokens: 1000, toolsTokens: 2000, messageTokens: 39000 },
+        },
+      }
     },
     'session.stats': async (payload) => {
       const id = payload?.['sessionId'] ?? ''
       return {
         sessionId: id,
         asOfSeq: records.reduce((max, record) => Math.max(max, record.event.seq), 0),
-        stats: { title: id === 'session-ki2-beta' ? '空白会话' : 'KI-2 验证会话', permissionPreset: 'default' },
+        // The child has no title in its stats frame on purpose: that is what makes
+        // the app fall through to reading the child's *page*, which is the path
+        // that has to name the parent.
+        stats: {
+          title:
+            id === 'session-ki2-beta'
+              ? '空白会话'
+              : id === 'session-ki2-child'
+                ? undefined
+                : 'KI-2 验证会话',
+          permissionPreset: 'default',
+        },
       }
     },
     'interactions.pending': async () => ({
@@ -349,6 +405,9 @@ const ctl = createServer(async (request, response) => {
         approvals: broker.listApprovals(),
         questions: broker.listQuestions(),
         settleLog,
+        // What the last page read asked for: the parent a delegated child has to
+        // name, and whether this build still sends it.
+        lastPageRequest,
       })
     }
     if (request.method !== 'POST') return reply(405, { error: 'POST or GET /ctl/state' })

@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -135,7 +137,15 @@ fun TurnIndex(
             return@Column
         }
 
+        // The stream opens at its top, and a session switch starts the new
+        // session's stream at *its* top: the old offset belongs to the old list,
+        // and carrying it over drops the new one somewhere arbitrary. There is no
+        // auto-centring -- a scroll into a lazy stack's not-yet-built region lands
+        // on an estimate, which on a first open strands the list in a void.
+        val listState = rememberLazyListState()
+        LaunchedEffect(state.selectedSessionId) { listState.scrollToItem(0) }
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
                 horizontal = Space.md,

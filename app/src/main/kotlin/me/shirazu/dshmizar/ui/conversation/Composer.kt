@@ -73,6 +73,7 @@ import androidx.compose.ui.unit.dp
 import me.shirazu.dshmizar.ui.design.mizarPerform
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
+import me.shirazu.mizar.kit.ModelRouting
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.LocalReduceMotion
 import me.shirazu.dshmizar.ui.design.Motion
@@ -320,12 +321,15 @@ private fun ModelPill(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val selection = state.selectedSessionId?.let { state.modelChoice[it] }
     val label = run {
-        val chosen = selection
-            ?: state.stats?.model?.next
-            ?: state.stats?.model?.lastUsed
-            ?: state.modelCatalog?.defaultSelection
+        // One resolver for the pill and the picker: when they each carried their
+        // own copy of this precedence, a switch made the pill name the old route
+        // while the sheet named the new one.
+        val chosen = ModelRouting.agreed(
+            chosen = state.selectedSessionId?.let { state.modelChoice[it] },
+            reported = state.stats?.model,
+            fallback = state.modelCatalog?.defaultSelection,
+        )
         // The button naming nothing but "Model" is the one thing it must never do.
         if (chosen == null) return@run stringResource(R.string.model)
         // The level's name as the catalogue spells it, not the raw id: the wire value
