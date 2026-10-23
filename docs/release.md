@@ -7,7 +7,11 @@ release APK 可以在本地用 `keystore/release.jks` 构建并直接分发；�
 ```powershell
 $env:GRADLE_USER_HOME = 'E:\gradle-home2'
 $env:JAVA_HOME = '<jdk-17>'
-.\gradlew.bat :mizarkit:test :app:assembleRelease
+# --rerun-tasks 不是可选项：up-to-date 的测试任务一条测试都不会跑，
+# `BUILD SUCCESSFUL` 不代表测试通过。0.10.3 就是这样把两条从没执行过的
+# 测试带进了 CI（见 docs/android-testing.md 的「A green build is not a green test run」）。
+.\gradlew.bat :mizarkit:test :app:testDebugUnitTest --rerun-tasks
+.\gradlew.bat :app:assembleRelease
 
 # 产物：app/build/outputs/apk/release/app-release.apk
 Copy-Item app\build\outputs\apk\release\app-release.apk dist\dsh-mizar-<版本>.apk
@@ -51,7 +55,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 | 0.10.1 | 42 | — | Next pill 触区修复的内部构建；tag `v0.10.1` 已移到 43 版提交，42 的资产被替换 |
 | **0.10.1** | **43** | `dist/dsh-mizar-0.10.1.apk` | **对外发布版本**：GUI 重构 + Next 触区修复（原 0.9.2 命名已撤回） |
 | 0.10.2 | 44 | `dist/dsh-mizar-0.10.2.apk` | 缺口清单 P1/P2：实时活动、配对进度、按块揭示、路由失败说明、诊断包 |
-| **0.10.3** | **45** | `dist/dsh-mizar-0.10.3.apk` | 跟插件 0.8.9：子代理页、逐页上下文、中继档位；附件入口进 `+`；中断轮不再显示「已完成」 |
+| **0.10.3** | **45** | `dist/dsh-mizar-0.10.3.apk` | 跟插件 0.8.9：子代理页、逐页上下文、中继档位；附件入口进 `+`；中断轮不再显示「已完成」。首次 CI 因 `ProtocolLogTest` 的顺序问题失败，修复（`a3e4b76`）后 tag 移到该提交 |
 
 ### 0.9.2 / 0.10.x 版本沿革（2026-10）
 

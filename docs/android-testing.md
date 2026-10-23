@@ -26,6 +26,30 @@ protocol suite, `app/src/main/kotlin/**/ui/**` adds instrumentation, a resource
 change runs `:app:assembleDebug` (resources fail the build, not a test), and a
 docs-only diff runs nothing. `--run` executes the selection.
 
+## A green build is not a green test run
+
+Gradle prints `BUILD SUCCESSFUL` for a test task that was **up to date**, and an up-to-date
+task has not executed a single test. 0.10.3 shipped that way: `ProtocolLogTest` landed
+after 0.10.2 was cut, every local `:mizarkit:test` after it was up to date, and the first
+machine to actually run those tests was CI — which failed the release on two of them.
+
+Before cutting a release, force the run:
+
+```sh
+./gradlew :mizarkit:test :app:testDebugUnitTest --rerun-tasks
+```
+
+The same failure is worth remembering as a shape, because it will come back in another
+guise. **A test double that answers inside `send`** hands the reply to the reader thread
+before the caller's next line runs, so anything the caller records *after* the send lands
+after the answer. The protocol log did exactly that and read `IN error:UNAUTHORIZED`
+before `OUT sent` — an answer to a request that had not been sent yet. Recording the
+attempt before the frame reaches the transport fixed it by construction: the log follows
+causality, not thread scheduling.
+
+So when a test fails only sometimes, or only on CI, look first for an assertion about
+**order** that a synchronous fake can reorder.
+
 ## Recorded HTTP, for the pairing paths
 
 `mizarkit/.../replay/HttpReplay.kt` replays a JSON recording of real HTTP
