@@ -44,7 +44,7 @@ class ProtocolLog(private val capacity: Int = DEFAULT_CAPACITY) {
     private val lock = Any()
     private val entries = ArrayDeque<Entry>(capacity)
 
-    /** A request left this phone. */
+    /** A request was handed to the transport. */
     fun sent(method: String, bytes: Int, atMillis: Long = System.currentTimeMillis()) {
         add(Entry(atMillis, Direction.OUT, method, outcome = "sent", bytes = bytes))
     }

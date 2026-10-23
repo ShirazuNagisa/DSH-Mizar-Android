@@ -240,8 +240,14 @@ class MizarConnection(
 
         try {
             val frame = Frames.encodeRequest(type, id, payload)
-            socket.send(frame)
+            // Recorded before the frame reaches the transport, not after. An answer
+            // cannot precede the request it answers, but the log can: a transport
+            // that answers inline -- a test double, an in-process pipe -- lets the
+            // reader thread route the reply while the caller has not yet written its
+            // own line, and the diagnostics then read backwards. A request the socket
+            // refuses is still recorded as unsent, one line below.
             traffic?.sent(type, frame.toByteArray(Charsets.UTF_8).size)
+            socket.send(frame)
         } catch (_: Throwable) {
             pending.remove(id)
             inFlight.remove(id)
