@@ -25,17 +25,17 @@ plugins {
 
 android {
     namespace = "me.shirazu.dshmizar"
-    compileSdk = 35
+    compileSdk = 36
 
     // Pinned so the build does not depend on whichever build-tools version AGP
     // happens to consider current, and does not trigger an extra SDK download when
     // 35.0.0 is already installed.
-    buildToolsVersion = "35.0.0"
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "me.shirazu.dshmizar"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         // Kept in step with the iOS target's MARKETING_VERSION/CURRENT_PROJECT_VERSION
         // (0.8.0 / 15) so a build can be identified from either platform's report.
         versionCode = 44

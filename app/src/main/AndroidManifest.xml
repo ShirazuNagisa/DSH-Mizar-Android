@@ -121,6 +121,16 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- The running turn's stop button. A broadcast rather than an activity intent
+             because the live update exists precisely when the app is not on screen. -->
+        <receiver
+            android:name=".push.LiveTurnReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="me.shirazu.dshmizar.action.LIVE_STOP" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

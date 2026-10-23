@@ -87,6 +87,15 @@
     <string name="connection_latency_history">最近往返</string>
     <string name="pairing_stage_pairing">正在配对…</string>
     <string name="pairing_stage_syncing">正在读取会话…</string>
+    <string name="pairing_sync_count">已读取 %1$d / %2$d 个会话</string>
+    <string name="pairing_sync_eta">约剩 %1$s</string>
+    <string name="sync_eta_seconds">%1$d 秒</string>
+    <string name="sync_eta_minutes">%1$d 分 %2$d 秒</string>
+    <string name="live_turn_channel">任务进度</string>
+    <string name="live_turn_channel_description">在锁屏与状态栏显示正在运行的任务</string>
+    <string name="live_turn_running">电脑正在处理…</string>
+    <string name="live_turn_chip">处理中</string>
+    <string name="live_turn_stop">停止</string>
     <string name="browse_offline">浏览本地历史</string>
     <string name="offline_banner">离线模式 · 仅显示本地缓存</string>
     <string name="subagents">子代理</string>

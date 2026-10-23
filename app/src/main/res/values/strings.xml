@@ -114,6 +114,15 @@
     <string name="connection_latency_history">Recent round trips</string>
     <string name="pairing_stage_pairing">Pairing…</string>
     <string name="pairing_stage_syncing">Reading sessions…</string>
+    <string name="pairing_sync_count">%1$d of %2$d sessions</string>
+    <string name="pairing_sync_eta">About %1$s left</string>
+    <string name="sync_eta_seconds">%1$d s</string>
+    <string name="sync_eta_minutes">%1$d min %2$d s</string>
+    <string name="live_turn_channel">Turn progress</string>
+    <string name="live_turn_channel_description">Shows a running turn on the lock screen and in the status bar</string>
+    <string name="live_turn_running">Working on the computer…</string>
+    <string name="live_turn_chip">Working</string>
+    <string name="live_turn_stop">Stop</string>
     <string name="browse_offline">Browse offline</string>
     <string name="offline_banner">Offline · showing cached data</string>
     <string name="subagents">Subagents</string>

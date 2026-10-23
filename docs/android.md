@@ -20,7 +20,7 @@ protocol/   与主机插件共用的黄金帧（fixtures），测试直接读这
 | 项 | 版本 |
 |---|---|
 | JDK | 17（AGP 8.7 不接受更新的 JDK） |
-| Android SDK | platform 35 + build-tools 35.0.0 |
+| Android SDK | platform 36 + build-tools 36.0.0（`targetSdk`/`compileSdk` 都是 36） |
 | Gradle | 8.11.1（wrapper 已提交，`./gradlew` 即可） |
 
 `local.properties` 里的 `sdk.dir` 是本机路径，不提交。
@@ -30,7 +30,8 @@ protocol/   与主机插件共用的黄金帧（fixtures），测试直接读这
 
 ```sh
 # 测试（纯 JVM，秒级）
-./gradlew :mizarkit:test
+./gradlew :mizarkit:test          # 协议、配对、投影
+./gradlew :app:testDebugUnitTest  # 纯 App 侧逻辑（Markdown 揭示）
 
 # 打 debug 包
 ./gradlew :app:assembleDebug      # → app/build/outputs/apk/debug/app-debug.apk
@@ -72,6 +73,36 @@ iOS 与 Android 在同一间房里各走各的通道：`push.register` 的 `plat
 - 只有「这条路上什么都没应答」才换下一条；`PAIRING_CODE_*` 这类明确拒绝是终局，不换门重试。
 - 应答的那条路由会交给第一次连接，不再先花另一条路的超时。
 - 重连本来就会遍历两条路由；现在配对与它一致。
+- 失败时 `PairingFailure` 带着逐条尝试，`activity.log` 里一条路由一行；屏幕上只显示真正该看的那条
+  错误（宿主明确拒绝时是它，否则是最后一条路的传输错误）。
+- 中继那条请求带 `x-mizar-client-id`（见下节）；直连那条不带。
+
+首次配对会顺带读一遍会话标题（最多 80 条、最近的优先），连接页显示 `已读取 N / M 个会话`、
+进度条与预计剩余时间。**只有首次配对会等它**：重连直接用上次落盘的索引，列表照旧按需懒加载。
+
+## 中继身份头
+
+`mizarkit/account/AccountIdentity`：`x-mizar-client-id` 是安装 id（`[A-Za-z0-9._-]{8,64}`，
+存在加密存储里），`x-mizar-account` 是账户令牌的 **SHA-256**，`x-mizar-session` 是令牌本身、
+只发给拥有账户库的那个中继源。
+
+- **直连不发**：本机电脑不计流量，也没有账户库可核对。
+- **配对的中继请求也发**：那是新安装的第一条请求，也是中继给这台设备建流量身份的那条；
+  不带的话，配对流量的归属只有一个匿名桶。
+- 三个头都会被中继剥离，电脑端看不到。
+
+## 实时活动
+
+Android 16 的 Live Updates 是 iOS Live Activity 的对位：`push/LiveTurn.kt` 用
+`Notification.ProgressStyle` 发一条常驻通知，系统把它提成状态栏胶囊与锁屏卡片。
+
+- **进度是不确定的**：一轮 turn 还剩多少无法预知，宿主只报已经发生的步骤。一条走到 90% 就停住的
+  进度条，比一条说「还在跑」的更糟。
+- **计时用系统计时器**（`setUsesChronometer` + `setWhen`）：App 被挂起时它照样走，手机不必醒来重绘。
+- **停止按钮**是广播（`LiveTurnReceiver`），经 `LiveTurnCommands` 找到当前连接；进程已经不在时
+  退回「打开 App 并定位到该会话」——那时候 socket 也没了，没有别的诚实答案。
+- **收起**由 `turn.settled` 触发，会话列表里没有 running 行时也收；不依赖用户手动划掉。
+- **API 36 以下什么都不发**：没有这个界面，而连接服务自己的常驻通知已经在说「已连接」。
 
 ## 账户（0.10.2）
 
@@ -85,8 +116,11 @@ iOS 与 Android 在同一间房里各走各的通道：`push.register` 的 `plat
 - **明文 `ws://`**：宿主地址是配对时才知道的，Android 无法预先声明例外，所以
   `usesCleartextTraffic="true"`——和 iOS 的 `NSAllowsArbitraryLoads` 是同一个决定、同一个理由。
   真正的解法是监听器上 TLS，那还是宿主侧的待办。
-- **targetSdk 35**：Android 16 的局域网访问保护（`ACCESS_LOCAL_NETWORK`）在目标 36 时才需要
-  显式申请，这里先避开并记一笔。
+- **targetSdk 36**：升到 36 是为了 Android 16 的 Live Updates（`Notification.ProgressStyle`），
+  `compileSdk` 同步到 36、build-tools 36.0.0。曾经记在这里的「局域网访问保护需要
+  `ACCESS_LOCAL_NETWORK`」是**后续版本**才强制的运行时权限，API 36 的 `android.jar` 里没有这个
+  常量，所以这次升级不引入新的权限请求；等它出现时再补，届时直连与中继两条路的关系（配对回退）
+  正好是降级路径。
 - **前台服务**：`push/ConnectionService.kt` 以 `dataSync` 类型常驻，通知按连接状态说三种话；
   息屏久了系统仍可能收走长连接，重新打开 App 即可。细节见 [foreground-service.md](foreground-service.md)。
 - **Doze 与厂商省电**：FCM 的到达时间与长连接的存活都受它们影响。App 在每次回到前台时重连并
@@ -104,6 +138,9 @@ iOS 与 Android 在同一间房里各走各的通道：`push.register` 的 `plat
 | 令牌失效 | `requiresRepairing` 从未被使用 | 清除本地凭据并回到配对 |
 | 工作区标题 | 由路径推导 | 与 iOS 一致：用 `workspace.list` 的 `title`，没有会话的工作区也能选到 |
 | Markdown | `AttributedString(markdown:)` 两段回退 | 自研小解析器 + 未闭合围栏规则，`plain` 作为最后回退 |
+| 打字机 | 按块揭示已解析的 Markdown | 同上，`MarkdownReveal` 逐块切；纯文本走按字符的便宜路径 |
+| 实时活动 | Live Activity + Widget Extension | Live Updates（`Notification.ProgressStyle`，API 36+）；进度不确定，结束由 `turn.settled` 收起 |
+| 配对进度 | 全屏进度 + 预计剩余时间 | 连接页内的进度条 + `已读取 N / M` + ETA；只覆盖标题预热（本客户端不预下载对话） |
 | 账户 | Apple 登录 + App Store 订阅 | 邮箱密码 + GitHub 登录；订阅（Play Billing）尚未接入，见 [account.md](account.md) |
 
 **两处已知的协议解析差异**（`PairingUri` 逐字节对齐的是**面板**那一侧，即 TypeScript）：
@@ -118,7 +155,9 @@ iOS 与 Android 在同一间房里各走各的通道：`push.register` 的 `plat
 `protocol/fixtures/` 里的文件与主机插件仓库的同名文件一致，来自真实宿主。测试从仓库里直接读，
 不复制进测试源码，这样同一份字节既被 TypeScript 侧校验、也被 Kotlin 侧校验。
 
-## 界面行为（0.8.1）
+## 界面行为
+
+这一节原来停在 0.8.1，只写当时的三件事；下面按 0.10.x 的实际界面重写，旧条目保留在末尾。
 
 - **手动刷新**：会话标题栏右侧的 ↻ 按钮重新读取该会话的对话、统计与待办卡片。用于「电脑上发了消息、手机上没跟上」的场景（进程被冻结、宿主重启、网络抖动）。
 - **状态行**：标题下方常驻一行 —— `正在思考…`（绿色转圈）/ `等待你的回答`（橙色，有审批或提问卡）/ `上一轮失败`（红色）/ `空闲`（灰）。
@@ -127,6 +166,32 @@ iOS 与 Android 在同一间房里各走各的通道：`push.register` 的 `plat
 - **复制整条消息**：每个气泡右上角有一个复制按钮，写剪贴板并提示「已复制」；文本选区仍保留，用于局部复制。
 - **记住会话**：冷启动会直接打开上次阅读的会话（每个进程只恢复一次；主动返回列表后不会被拽回去）。
 - **主题**：中性灰调色板（此前只设了 `primary`，其余角色是 Material 默认的蓝紫基色，因此输入框显深蓝、选中文字不清）。文本选中色为深色 `#3A4A66` / 浅色 `#B9CFFB`。
+- **打字机按块揭示**：带格式的回答不再是「整段直接出现」。解析结果按块切，逐块出现、当前块部分显示，
+  所以 `##`、`**`、围栏标记不会被逐字符爬过屏幕；纯文本仍走按字符的便宜路径。慢速诊断开关照旧。
+- **局域网优先**：连上中继后主动探测宿主自己的地址，命中就切到直连（`host.info` 的 `addresses`，
+  用 `probeHostId` 校验主机 id 才切）；设置页可关。
+- **附件与运行细节**：付费账户 **或** 局域网解锁。局域网里整条附件栏都在；离开同一 Wi-Fi 且没有付费账户时隐藏。
+- **归档**：会话长按菜单里归档，调 `session.archive`，该行从本机列表移除。
+- **离线浏览**：宿主连不上时可以直接进缓存过的列表与会话，顶部一条横幅说明现在看的是旧数据。
+- **日志导出**：设置页一键打包（见 [诊断包](#诊断包)）。
+- **宽屏三页侧栏**：轮次 / 子代理 / 预览三页，平板与折叠屏上是常驻列而不是抽屉。
+
+## 诊断包
+
+设置页的导出按钮生成一个 zip，全部是纯文本，且**不含**设备令牌、配对码、提问与回答：
+
+| 文件 | 内容 |
+|---|---|
+| `environment.json` | 构建、系统、设备、运行时（含是否模拟器、ABI、堆上限） |
+| `device.txt` | 上面那些的可读版本 |
+| `state.txt` | 连接阶段、主机身份、最后一次失败、同步进度 |
+| `settings.txt` | 操作者的开关 |
+| `sessions.txt` | 会话列表（不含正文） |
+| `activity.log` | App 自己的事件，新的在后 |
+| `requests.jsonl` | 协议往返：method、方向、耗时、结果码、字节数（不含 payload） |
+
+`requests.jsonl` 是排查「帧没发出去 / 发出去被拒」的那份：一条 `out` 后面没有对应的 `in`，就是
+发出去了没人应答；`error:CODE` 是宿主按名字拒绝的。环形缓冲 400 条，由 `MizarConnection` 写入。
 
 ### 构建包的两条规则
 

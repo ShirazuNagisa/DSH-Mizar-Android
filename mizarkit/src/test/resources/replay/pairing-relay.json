@@ -1,0 +1,16 @@
+{
+    "name": "pairing-relay",
+    "recordedAt": "2026-10-23T00:00:00Z",
+    "exchanges": [
+        {
+            "method": "POST",
+            "path": "/r/room/mizar/v1/pair",
+            "status": 200,
+            "body": "{\"hostId\":\"host-rec\",\"hostName\":\"desk\",\"deviceId\":\"device-rec\",\"deviceToken\":\"token-rec\",\"protocolVersion\":1}",
+            "headers": {
+                "content-type": "application/json"
+            },
+            "note": "A relay pairing that succeeded: the room is part of the path, and the QR's direct address was unreachable."
+        }
+    ]
+}

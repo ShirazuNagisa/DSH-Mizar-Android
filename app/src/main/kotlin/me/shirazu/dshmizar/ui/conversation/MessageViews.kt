@@ -161,8 +161,8 @@ private fun AgentText(text: String, typing: Boolean, onCopy: (String) -> Unit) {
         // A readable measure on a wide screen; edge to edge on a phone.
         Box(modifier = Modifier.widthIn(max = 680.dp)) {
             SelectionContainer {
-                if (typing && !MarkdownBlocks.looksBlocky(text)) {
-                    TypewriterAgentText(text)
+                if (typing) {
+                    TypewriterAgentText(text, onCopy)
                 } else {
                     MessageText(
                         text = text,
@@ -183,27 +183,35 @@ private fun AgentText(text: String, typing: Boolean, onCopy: (String) -> Unit) {
 /**
  * An answer revealed a character at a time.
  *
- * Only plain bodies use this: a Markdown body cut mid-syntax would crawl markers
- * across the screen, and the iOS client solves that by cutting the parsed blocks.
- * Formatting therefore arrives with the whole answer; the rhythm is what this adds.
+ * Plain bodies are cut by character, which is the cheap path. A Markdown body is
+ * cut on its **parsed blocks** instead: revealing the raw source would crawl `**`
+ * and fence markers across the screen, which is why formatted answers used to
+ * appear whole. The blocks arrive already styled, so a heading, a list and a table
+ * now type as the text they will be.
  */
 @Composable
-private fun TypewriterAgentText(text: String) {
+private fun TypewriterAgentText(text: String, onCopy: (String) -> Unit) {
     val reduceMotion = LocalReduceMotion.current
     val slow = LocalSlowTypewriter.current
-    val plan = remember(text, slow) {
+    val blocky = remember(text) { MarkdownBlocks.looksBlocky(text) }
+    val blocks = remember(text, blocky) { if (blocky) MarkdownBlocks.parse(text) else emptyList() }
+    // What the plan paces: the characters that will actually appear on screen.
+    val paced = remember(text, blocks, blocky) {
+        if (blocky) MarkdownReveal.plainText(blocks) else text
+    }
+    val plan = remember(paced, slow) {
         TypewriterPlan.forText(
-            text,
+            paced,
             maximumDurationMillis = if (slow) 8_000L else TypewriterPlan.DEFAULT_MAXIMUM_DURATION_MILLIS,
         )
     }
-    var revealed by remember(text) { mutableIntStateOf(if (reduceMotion) text.length else 0) }
+    var revealed by remember(text) { mutableIntStateOf(if (reduceMotion) paced.length else 0) }
     LaunchedEffect(text) {
         if (reduceMotion) {
-            revealed = text.length
+            revealed = paced.length
             return@LaunchedEffect
         }
-        android.util.Log.i("mizar-notify", "typewriter start: ${text.length} chars")
+        android.util.Log.i("mizar-notify", "typewriter start: ${paced.length} chars blocky=$blocky")
         val start = System.nanoTime()
         while (true) {
             val elapsedMicros = (System.nanoTime() - start) / 1_000L
@@ -213,13 +221,23 @@ private fun TypewriterAgentText(text: String) {
         }
         android.util.Log.i("mizar-notify", "typewriter done")
     }
-    Text(
-        text = text.take(revealed),
-        style = MaterialTheme.typography.bodyLarge.copy(
-            lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * 1.15,
-        ),
-        color = MaterialTheme.colorScheme.onSurface,
-    )
+    if (blocky) {
+        MarkdownBlocksView(
+            blocks = MarkdownReveal.blocks(blocks, revealed),
+            color = MaterialTheme.colorScheme.onSurface,
+            codeColor = MaterialTheme.colorScheme.onSurface,
+            linkColor = MaterialTheme.colorScheme.primary,
+            onCopy = onCopy,
+        )
+    } else {
+        Text(
+            text = text.take(revealed),
+            style = MaterialTheme.typography.bodyLarge.copy(
+                lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * 1.15,
+            ),
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
 }
 
 /** What the system said, as an aside: a bordered log line, not a tinted card. */

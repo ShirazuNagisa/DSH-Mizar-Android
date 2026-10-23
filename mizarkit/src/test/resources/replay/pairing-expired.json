@@ -1,0 +1,16 @@
+{
+    "name": "pairing-expired",
+    "recordedAt": "2026-10-23T00:00:00Z",
+    "exchanges": [
+        {
+            "method": "POST",
+            "path": "/mizar/v1/pair",
+            "status": 410,
+            "body": "{\"error\":\"PAIRING_CODE_EXPIRED\"}",
+            "headers": {
+                "content-type": "application/json"
+            },
+            "note": "The direct address answered and refused: the code is expired, so the relay must not be asked."
+        }
+    ]
+}

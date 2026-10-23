@@ -1,0 +1,31 @@
+<!--
+    The status-bar mark: two arcs and a dot, the same shape as the launch screen's
+    MizarMark, flattened to a single colour because a notification icon is a mask.
+
+    A vector rather than the launcher bitmap: the system tints the small icon and
+    draws it at 24dp, so a scaled-down colour icon shows up as a grey square.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,19m-2.1,0a2.1,2.1 0 1,0 4.2,0a2.1,2.1 0 1,0 -4.2,0" />
+
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M7.2,14.6 Q12,10.2 16.8,14.6"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="2" />
+
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M4.2,11.1 Q12,4.6 19.8,11.1"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="2" />
+</vector>

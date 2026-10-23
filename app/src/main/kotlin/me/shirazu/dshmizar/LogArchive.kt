@@ -24,16 +24,26 @@ object LogArchive {
     private val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
 
     /** Build the zip and return it, or throw when the cache itself is unwritable. */
-    fun build(context: Context, state: UiState, notes: List<String>): File {
+    fun build(
+        context: Context,
+        state: UiState,
+        notes: List<String>,
+        requests: List<String> = emptyList(),
+    ): File {
         val directory = File(context.cacheDir, "exports").apply { mkdirs() }
         val file = File(directory, "mizar-logs-${stamp.format(Date())}.zip")
         ZipOutputStream(file.outputStream().buffered()).use { zip ->
             put(zip, "README.txt", readme())
+            put(zip, "environment.json", environment(context))
             put(zip, "device.txt", device(context))
             put(zip, "state.txt", state(state))
             put(zip, "settings.txt", settings(state))
             put(zip, "sessions.txt", sessions(state))
             put(zip, "activity.log", notes.joinToString("\n"))
+            // Protocol round trips, one JSON object per line. Method names, timings
+            // and error codes only: the arguments are where the operator's prompts
+            // and the agent's answers live.
+            put(zip, "requests.jsonl", if (requests.isEmpty()) "" else requests.joinToString("\n", postfix = "\n"))
         }
         return file
     }
@@ -51,15 +61,90 @@ object LogArchive {
         appendLine("tried and what came back. This archive is plain text so it can be")
         appendLine("read without this app:")
         appendLine()
-        appendLine("  device.txt     build, OS and the moment of export")
-        appendLine("  state.txt      connection, host identity, the last failure")
-        appendLine("  settings.txt   the operator's switches")
-        appendLine("  sessions.txt   the session list, without message text")
-        appendLine("  activity.log   the app's own events, newest last")
+        appendLine("  environment.json  build, OS, device and runtime, as JSON")
+        appendLine("  device.txt        the same, as a few readable lines")
+        appendLine("  state.txt         connection, host identity, the last failure")
+        appendLine("  settings.txt      the operator's switches")
+        appendLine("  sessions.txt      the session list, without message text")
+        appendLine("  activity.log      the app's own events, newest last")
+        appendLine("  requests.jsonl    protocol round trips: method, direction, ms, outcome")
         appendLine()
         appendLine("Deliberately absent: the device token, pairing codes, prompts and")
         appendLine("replies. The archive exists to be emailed; a credential inside one")
         appendLine("would be a remote-control key given away with a bug report.")
+        appendLine()
+        appendLine("requests.jsonl is the file to read when a frame seems to have gone")
+        appendLine("missing: an \"out\" line with no matching \"in\" line means it left and")
+        appendLine("nothing answered, and \"error:CODE\" is the host refusing it by name.")
+    }
+
+    /**
+     * The environment as JSON, for whoever is reading the archive with a script.
+     *
+     * The same facts as `device.txt` plus the ones a build report needs and a
+     * person does not: the fingerprint (which ROM), the ABI, and whether this is an
+     * emulator at all -- three bug reports about "the app is slow" have been three
+     * different machines, and the archive should say which.
+     */
+    private fun environment(context: Context): String = buildString {
+        appendLine("{")
+        appendLine("  \"package\": ${json(context.packageName)},")
+        appendLine("  \"versionName\": ${json(BuildConfig.VERSION_NAME)},")
+        appendLine("  \"versionCode\": ${BuildConfig.VERSION_CODE},")
+        appendLine("  \"exportedAt\": ${json(isoNow())},")
+        appendLine("  \"android\": {")
+        appendLine("    \"release\": ${json(Build.VERSION.RELEASE)},")
+        appendLine("    \"sdk\": ${Build.VERSION.SDK_INT},")
+        appendLine("    \"codename\": ${json(Build.VERSION.CODENAME)},")
+        appendLine("    \"incremental\": ${json(Build.VERSION.INCREMENTAL)},")
+        appendLine("    \"securityPatch\": ${json(Build.VERSION.SECURITY_PATCH ?: "")}")
+        appendLine("  },")
+        appendLine("  \"device\": {")
+        appendLine("    \"manufacturer\": ${json(Build.MANUFACTURER)},")
+        appendLine("    \"brand\": ${json(Build.BRAND)},")
+        appendLine("    \"model\": ${json(Build.MODEL)},")
+        appendLine("    \"device\": ${json(Build.DEVICE)},")
+        appendLine("    \"product\": ${json(Build.PRODUCT)},")
+        appendLine("    \"hardware\": ${json(Build.HARDWARE)},")
+        appendLine("    \"fingerprint\": ${json(Build.FINGERPRINT)}")
+        appendLine("  },")
+        appendLine("  \"runtime\": {")
+        appendLine("    \"locale\": ${json(Locale.getDefault().toLanguageTag())},")
+        appendLine("    \"timeZone\": ${json(java.util.TimeZone.getDefault().id)},")
+        appendLine("    \"abi\": ${json(Build.SUPPORTED_ABIS.joinToString(","))},")
+        appendLine("    \"emulator\": ${isEmulator()},")
+        appendLine("    \"cpuCores\": ${Runtime.getRuntime().availableProcessors()},")
+        appendLine("    \"heapMaxMb\": ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}")
+        appendLine("  }")
+        append("}")
+    }
+
+    /** The usual fingerprint test: an emulator build names itself in one of these. */
+    private fun isEmulator(): Boolean =
+        Build.FINGERPRINT.startsWith("generic") ||
+            Build.FINGERPRINT.contains("emulator") ||
+            Build.MODEL.contains("sdk_gphone") ||
+            Build.PRODUCT.contains("sdk_gphone") ||
+            Build.HARDWARE.contains("goldfish") ||
+            Build.HARDWARE.contains("ranchu")
+
+    private fun isoNow(): String =
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US).format(Date())
+
+    /** A JSON string, escaped. The values here are build fields, never input. */
+    private fun json(value: String): String {
+        val out = StringBuilder(value.length + 2).append('"')
+        for (character in value) {
+            when (character) {
+                '"' -> out.append("\\\"")
+                '\\' -> out.append("\\\\")
+                '\n' -> out.append("\\n")
+                '\r' -> out.append("\\r")
+                '\t' -> out.append("\\t")
+                else -> if (character < ' ') out.append("\\u%04x".format(character.code)) else out.append(character)
+            }
+        }
+        return out.append('"').toString()
     }
 
     private fun device(context: Context) = buildString {
@@ -77,6 +162,8 @@ object LogArchive {
 
     private fun state(state: UiState) = buildString {
         appendLine("phase: ${state.phase}")
+        appendLine("pairingStage: ${state.pairingStage ?: "—"}")
+        state.syncProgress?.let { appendLine("syncProgress: ${it.done}/${it.total} (${it.percent}%)") }
         appendLine("reconnecting: ${state.reconnecting}")
         appendLine("needsPairing: ${state.needsPairing}")
         appendLine("isLocalNetwork: ${state.isLocalNetwork}")

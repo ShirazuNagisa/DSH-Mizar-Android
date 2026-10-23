@@ -78,6 +78,17 @@ class OkHttpHttpTransport(
 class PairingClient(
     private val transport: HttpTransport = OkHttpHttpTransport(),
     private val appVersion: String? = null,
+    /**
+     * Identity headers for a relayed attempt.
+     *
+     * Pairing through a relay is the first request a fresh install makes, and the
+     * one that creates the device's traffic identity. Without these, a guest's
+     * pairing traffic lands in the relay's anonymous bucket and a metering problem
+     * there has nothing to point at. They ride on relay attempts only: a direct
+     * pairing goes to the operator's own computer, which meters nothing and has no
+     * use for an account hash.
+     */
+    private val relayHeaders: Map<String, String> = emptyMap(),
 ) {
 
     /** `GET /mizar/v1/hello` — is this address a Mizar host, and is a code open? */
@@ -130,16 +141,19 @@ class PairingClient(
     ): PairingOutcome {
         val routes = PairingRoute.plan(authority, baseUrl)
         if (routes.isEmpty()) throw noRoute(authority, baseUrl)
-        var last: Throwable? = null
+        val attempts = mutableListOf<PairingFailure.Attempt>()
         for (route in routes) {
             try {
                 return PairingOutcome(pair(code, deviceName, deviceModel, route), route)
             } catch (error: Throwable) {
-                last = error
-                if (!nothingAnswered(error)) throw error
+                attempts += PairingFailure.Attempt(route, error)
+                if (!nothingAnswered(error)) throw PairingFailure(attempts, error)
             }
         }
-        throw last ?: noRoute(authority, baseUrl)
+        // Nothing got through. The last error is the one to act on: with direct
+        // then relay, it is the relay's -- the route that was supposed to be the
+        // fallback, and therefore the failure worth diagnosing.
+        throw PairingFailure(attempts, attempts.last().error)
     }
 
     /** Pair over one named route, with that route's own deadline. */
@@ -158,11 +172,18 @@ class PairingClient(
             PairRequest.serializer(),
             PairRequest(code = code, deviceName = deviceName, deviceModel = deviceModel, appVersion = appVersion),
         )
+        // The relay meters by identity; a direct attempt has nothing to meter and
+        // the computer would only have to strip the headers again.
+        val headers = buildMap {
+            put("content-type", "application/json")
+            put("accept", "application/json")
+            if (route is PairingRoute.Relay) putAll(relayHeaders)
+        }
         val response = send(
             HttpRequest(
                 method = "POST",
                 url = url,
-                headers = mapOf("content-type" to "application/json", "accept" to "application/json"),
+                headers = headers,
                 body = body,
                 timeoutMillis = route.timeoutMillis,
             ),

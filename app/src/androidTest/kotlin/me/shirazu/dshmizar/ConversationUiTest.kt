@@ -6,14 +6,20 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import me.shirazu.dshmizar.ui.MizarTheme
 import me.shirazu.dshmizar.ui.conversation.ConversationItemView
+import me.shirazu.dshmizar.ui.conversation.InteractionsDock
 import me.shirazu.dshmizar.ui.conversation.SubagentPanel
 import me.shirazu.dshmizar.ui.design.LocalSlowTypewriter
+import me.shirazu.mizar.kit.ApprovalOutcome
 import me.shirazu.mizar.kit.ConversationItem
+import me.shirazu.mizar.kit.PendingApproval
+import me.shirazu.mizar.kit.PendingInteractions
 import me.shirazu.mizar.kit.SessionRow
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -92,5 +98,80 @@ class ConversationUiTest {
             rule.onAllNodesWithText(answer).fetchSemanticsNodes().isNotEmpty()
         }
         rule.onNodeWithText(answer).assertExists()
+    }
+
+    /**
+     * A formatted answer types as blocks, not as raw Markdown.
+     *
+     * The regression this pins is the one the app had for two releases: a body with
+     * any Markdown in it skipped the typewriter entirely, because cutting the raw
+     * source would crawl `##` and `**` across the screen. The fix cuts the parsed
+     * blocks, so the heading appears *without* its markers and the paragraph after
+     * it arrives later.
+     */
+    @Test
+    fun aFormattedAnswerRevealsItsBlocks() {
+        val heading = "Release notes"
+        val paragraph = "The paragraph under the heading arrives after it."
+        val markdown = "## $heading\n\n$paragraph"
+        rule.setContent {
+            MizarTheme {
+                CompositionLocalProvider(LocalSlowTypewriter provides true) {
+                    ConversationItemView(
+                        item = ConversationItem.Message(
+                            id = "formatted",
+                            role = ConversationItem.Role.ASSISTANT,
+                            text = markdown,
+                            atMillis = null,
+                        ),
+                        isLastPrompt = false,
+                        onCopy = {},
+                        typing = true,
+                    )
+                }
+            }
+        }
+
+        // Nothing whole at the start: the old behaviour drew the entire body here.
+        rule.onAllNodesWithText(paragraph).assertCountEquals(0)
+        rule.onAllNodesWithText(markdown).assertCountEquals(0)
+
+        // The heading is its own node, with the `##` stripped -- that is the block
+        // reveal, not a character cut.
+        rule.waitUntil(timeoutMillis = 12_000) {
+            rule.onAllNodesWithText(heading).fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.waitUntil(timeoutMillis = 20_000) {
+            rule.onAllNodesWithText(paragraph).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    @Test
+    fun anApprovalAnswersWithTheOutcomeThatWasTapped() {
+        var answered: ApprovalOutcome? = null
+        val approval = PendingApproval(
+            requestId = "req-1",
+            sessionId = "session-1",
+            toolName = "shell",
+            reason = "The agent wants to run a command.",
+        )
+        rule.setContent {
+            MizarTheme {
+                InteractionsDock(
+                    pending = PendingInteractions(approvals = listOf(approval)),
+                    titles = mapOf("session-1" to "Fix the test"),
+                    selectedSessionId = "session-1",
+                    composerFocused = false,
+                    onExpand = {},
+                    onApproval = { _, outcome -> answered = outcome },
+                    onQuestions = { _, _ -> },
+                )
+            }
+        }
+
+        rule.onNodeWithText(text(R.string.allow_once)).performClick()
+        rule.runOnIdle {
+            assertEquals(ApprovalOutcome.ALLOWED_ONCE, answered)
+        }
     }
 }

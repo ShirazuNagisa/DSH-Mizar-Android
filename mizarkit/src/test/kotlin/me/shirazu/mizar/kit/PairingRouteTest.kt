@@ -69,7 +69,7 @@ class PairingRouteTest {
         }
         val client = PairingClient(transport)
 
-        val error = assertThrows<MizarError> {
+        val failure = assertThrows<PairingFailure> {
             runBlocking {
                 client.pairWithFallback(
                     code = "ABCD-EFGH",
@@ -79,8 +79,53 @@ class PairingRouteTest {
             }
         }
 
-        assertEquals("PAIRING_CODE_INVALID", error.code)
+        assertEquals("PAIRING_CODE_INVALID", (failure.finalError as MizarError).code)
         assertEquals(1, transport.requests.size)
+        // The route that was refused is the whole list: the code is single use, so
+        // asking the relay would spend it twice for the same answer.
+        assertEquals(1, failure.attempts.size)
+        assertTrue(failure.attempts[0].route is PairingRoute.Direct)
+    }
+
+    @Test
+    fun `a pairing that reaches no route reports every attempt`() = runBlocking {
+        val transport = RouteTransport { null }
+        val client = PairingClient(transport)
+
+        val failure = assertThrows<PairingFailure> {
+            runBlocking {
+                client.pairWithFallback(
+                    code = "ABCD-EFGH",
+                    authority = "10.0.2.2:19390",
+                    baseUrl = "https://relay.test/r/room",
+                )
+            }
+        }
+
+        assertEquals(2, failure.attempts.size)
+        assertTrue(failure.attempts[0].route is PairingRoute.Direct)
+        assertTrue(failure.attempts[1].route is PairingRoute.Relay)
+        // The relay is the fallback, so its failure is the one worth reading.
+        assertTrue(failure.finalError is IOException)
+        assertTrue(failure.lines().size == 2)
+        assertTrue(failure.lines()[0].startsWith("direct 10.0.2.2:19390"))
+    }
+
+    @Test
+    fun `identity headers ride on the relay attempt only`() = runBlocking {
+        val transport = RouteTransport { request ->
+            if (request.url.startsWith("http://10.0.2.2")) null else HttpResponse(200, PAIRED)
+        }
+        val client = PairingClient(transport, relayHeaders = mapOf("x-mizar-client-id" to "install-1234"))
+
+        client.pairWithFallback(
+            code = "ABCD-EFGH",
+            authority = "10.0.2.2:19390",
+            baseUrl = "https://relay.test/r/room",
+        )
+
+        assertNull(transport.requests[0].headers["x-mizar-client-id"])
+        assertEquals("install-1234", transport.requests[1].headers["x-mizar-client-id"])
     }
 
     @Test

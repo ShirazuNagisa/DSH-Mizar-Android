@@ -26,6 +26,8 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import me.shirazu.dshmizar.push.PushTokens
 import me.shirazu.dshmizar.push.ConnectionService
+import me.shirazu.dshmizar.push.LiveTurn
+import me.shirazu.dshmizar.push.LiveTurnCommands
 import me.shirazu.dshmizar.push.Notifications
 import me.shirazu.dshmizar.store.ActivityStore
 import me.shirazu.dshmizar.store.ConversationCache
@@ -69,7 +71,12 @@ import me.shirazu.mizar.kit.ModelSelection
 import me.shirazu.mizar.kit.PairedHost
 import me.shirazu.mizar.kit.PairingTarget
 import me.shirazu.mizar.kit.PairingClient
+import me.shirazu.mizar.kit.PairingFailure
 import me.shirazu.mizar.kit.PairingRoute
+import me.shirazu.mizar.kit.label
+import me.shirazu.mizar.kit.ProtocolLog
+import me.shirazu.mizar.kit.SyncEta
+import me.shirazu.mizar.kit.SyncProgress
 import me.shirazu.mizar.kit.PendingInteractions
 import me.shirazu.mizar.kit.PermissionCatalog
 import me.shirazu.mizar.kit.PromptResult
@@ -142,6 +149,10 @@ data class UiState(
     val phase: Phase = Phase.LAUNCHING,
     /** Set while a fresh pairing is between its steps; null once connected. */
     val pairingStage: PairingStage? = null,
+    /** How far the first pairing's index warm-up has got, while it runs. */
+    val syncProgress: SyncProgress? = null,
+    /** Milliseconds left in that warm-up, once there is a rate to go on. */
+    val syncEtaMillis: Long? = null,
     /** Showing the cached session list while the host is unreachable. */
     val offlineBrowser: Boolean = false,
     /** Titles read from the delegated children themselves, by session id. */
@@ -285,6 +296,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
 
+    init {
+        // The live update's stop button is a broadcast: it reaches this model through
+        // a slot that exists only while the model does, so a dead process cannot be
+        // asked to cancel anything and the receiver falls back to opening the app.
+        LiveTurnCommands.install { sessionId ->
+            cancelSession(sessionId)
+            true
+        }
+    }
+
+    override fun onCleared() {
+        LiveTurnCommands.install(null)
+        LiveTurn.hide(getApplication())
+        super.onCleared()
+    }
+
     private var connection: MizarConnection? = null
     /** Watches the live connection's state, so a dropped socket is noticed. */
     private var connectionObserver: Job? = null
@@ -332,6 +359,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** The app's own events, newest last, for the diagnostics export. */
     private val recentNotes = ArrayDeque<String>()
 
+    /**
+     * What crossed the wire, newest last, for the diagnostics export.
+     *
+     * The other half of [recentNotes]: a note says what the app decided, this says
+     * whether the frame left and what came back. Bounded in the kit, so a long
+     * session cannot grow it.
+     */
+    private val traffic = ProtocolLog()
+
     /** Signature of the pending set already announced, so a batch buzzes once. */
     private var lastNotified: String? = null
     private var watchers: Job? = null
@@ -357,6 +393,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The sentence the permanent notice currently shows, so it is only rewritten on change. */
     private var lastLinkNotice: String? = null
+
+    /**
+     * When each running session's turn was first seen running.
+     *
+     * The host reports that a turn is running, not when it started, so the live
+     * update's chronometer is based on the earliest moment this phone could observe.
+     * The open conversation's own `startedAtMillis` is used instead whenever it is
+     * available -- that is the host's number rather than an observation.
+     */
+    private val runningSince = mutableMapOf<String, Long>()
+
+    /** The session the live update is currently about, so a settle knows to take it down. */
+    private var liveSessionId: String? = null
+
+    /**
+     * What the live update last said, so the ten-second poll does not repost it.
+     *
+     * A live update is a status surface: re-notifying it every poll resets the
+     * system's own promotion bookkeeping for no visible gain.
+     */
+    private var liveSignature: String? = null
 
     /** Guards the load, and remembers a request that arrived during one. */
     private var loading = false
@@ -665,7 +722,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun pair(target: PairingTarget, deviceName: String) {
         viewModelScope.launch {
             _state.update { it.copy(phase = Phase.CONNECTING, problem = null, pairingStage = PairingStage.PAIRING) }
-            val client = PairingClient(appVersion = appVersion)
+            // Relay attempts carry the install's identity: pairing is the first
+            // request a fresh install makes, and the one the relay meters. A
+            // direct attempt gets none of this -- see PairingClient.
+            val client = PairingClient(
+                appVersion = appVersion,
+                relayHeaders = AccountIdentity.headers(
+                    installId = accounts.installId,
+                    token = _state.value.account.session?.token,
+                    relayBaseUrl = target.baseUrl,
+                    accountBaseUrl = BuildConfig.ACCOUNT_BASE_URL,
+                ),
+            )
             try {
                 // The QR carries a direct address and a relay; a phone that cannot
                 // reach the first must still be able to pair through the second.
@@ -677,6 +745,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     baseUrl = target.baseUrl,
                 )
                 val paired = outcome.host
+                note("paired over ${outcome.route.label}")
                 credentials.save(paired)
                 val hosts = credentials.loadAll().sortedBy { it.pairedAtMillis }
                 _state.update {
@@ -684,16 +753,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 // Start on the route that just answered, so the first connect does
                 // not spend the other route's timeout before it.
-                connect(paired, preferred = outcome.route)
+                connect(paired, preferred = outcome.route, warm = true)
             } catch (error: Throwable) {
+                // One line per route: "pairing failed" and "the relay refused the
+                // code" are the same screen and different problems.
+                if (error is PairingFailure) error.lines().forEach { note("pair route $it") }
+                val cause = (error as? PairingFailure)?.finalError ?: error
                 _state.update {
-                    it.copy(phase = Phase.FAILED, problem = messageOf(error, target.authority ?: target.baseUrl), pairingStage = null)
+                    it.copy(
+                        phase = Phase.FAILED,
+                        problem = messageOf(cause, target.authority ?: target.baseUrl),
+                        pairingStage = null,
+                        syncProgress = null,
+                    )
                 }
             }
         }
     }
 
-    private suspend fun connect(host: PairedHost, preferred: PairingRoute? = null) {
+    private suspend fun connect(host: PairedHost, preferred: PairingRoute? = null, warm: Boolean = false) {
         stopWatchers()
         connection?.disconnect()
         connection = null
@@ -715,7 +793,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 relayBaseUrl = host.baseUrl,
                 accountBaseUrl = BuildConfig.ACCOUNT_BASE_URL,
             )
-            val candidate = MizarConnection(host.configurationFor(endpoint, appVersion, deviceModel, identityHeaders))
+            val candidate = MizarConnection(host.configurationFor(endpoint, appVersion, deviceModel, identityHeaders), traffic)
             try {
                 val welcome = candidate.connect()
                 connection = candidate
@@ -726,7 +804,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         welcome = welcome,
                         problem = null,
                         needsPairing = false,
-                        pairingStage = null,
+                        // A first pairing stays on the connecting screen while it
+                        // warms the index; a reconnect has nothing to warm.
+                        pairingStage = if (warm) PairingStage.SYNCING else null,
                         offlineBrowser = false,
                         seenAt = activity.seenAt(host.hostId),
                         isLocalNetwork = endpoint is MizarConnection.Endpoint.Direct,
@@ -740,7 +820,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 startWatchers(candidate)
                 watchConnection(candidate, host)
                 note("connected to $endpoint")
-                refreshSessions()
+                if (warm) {
+                    refreshSessionsNow()
+                    warmTitles(candidate)
+                    _state.update { it.copy(pairingStage = null, syncProgress = null, syncEtaMillis = null) }
+                } else {
+                    refreshSessions()
+                }
                 registerPush(candidate)
                 // A relay socket is the fallback, not the goal: when the operator asked
                 // for LAN-first, look for the computer's own addresses now that a socket
@@ -1315,27 +1401,110 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (!rowRunning && lastInFlight) refreshConversationQuietly()
         }
         announceFinishedTurns(list.items)
+        syncLiveTurn(list.items)
         // The screen opens on what was last read, once: after that the operator is in
         // control of where they are.
         maybeRestoreLastSession()
     }
 
-    /** Load titles for rows about to be drawn, one request per session, once each. */
-    fun loadTitles(sessionIds: List<String>) {
+    /**
+     * Keep the live update in step with the session list.
+     *
+     * One card, for the session that changed most recently: the lock screen has room
+     * for one running turn, and the operator's attention is on the one they just
+     * started. When nothing is running the card comes down here, which is the path
+     * that covers a host too old to broadcast `turn.settled`.
+     */
+    private fun syncLiveTurn(rows: List<SessionRow>) {
+        val running = rows.filter { it.running }
+        runningSince.keys.retainAll(running.map { it.sessionId }.toSet())
+        val shown = running.maxByOrNull { it.updatedMillis }
+        if (shown == null) {
+            liveSessionId = null
+            liveSignature = null
+            LiveTurn.hide(getApplication())
+            return
+        }
+        // The host's own start time when this is the open conversation; otherwise the
+        // first moment this phone could see the row running.
+        val hostedStart = if (shown.sessionId == _state.value.selectedSessionId) {
+            _state.value.turns.lastOrNull()?.startedAtMillis
+        } else {
+            null
+        }
+        val since = runningSince.getOrPut(shown.sessionId) { hostedStart ?: System.currentTimeMillis() }
+        liveSessionId = shown.sessionId
+        val title = _state.value.titles[shown.sessionId] ?: shown.sessionId.takeLast(8)
+        val signature = "${shown.sessionId}|$title|$since"
+        if (signature == liveSignature) return
+        liveSignature = signature
+        LiveTurn.show(getApplication(), shown.sessionId, title, since)
+    }
+
+    /** Load titles for rows about to be drawn, one request per session, once each. */    fun loadTitles(sessionIds: List<String>) {
         viewModelScope.launch {
             val socket = connection ?: return@launch
             var learned = false
             for (id in sessionIds) {
                 if (_state.value.titles.containsKey(id)) continue
-                val title = runCatching { socket.call<SessionStatsResult>("session.stats", payload("sessionId" to jsonString(id))).stats?.title }
-                    .getOrNull()
-                if (!title.isNullOrBlank()) {
-                    _state.update { it.copy(titles = it.titles + (id to title)) }
-                    learned = true
-                }
+                if (learnTitle(socket, id)) learned = true
             }
             if (learned) persistIndex()
         }
+    }
+
+    /** One session's title, remembered when the host has one. */
+    private suspend fun learnTitle(socket: MizarConnection, sessionId: String): Boolean {
+        val title = runCatching {
+            socket.call<SessionStatsResult>("session.stats", payload("sessionId" to jsonString(sessionId))).stats?.title
+        }.getOrNull()
+        if (title.isNullOrBlank()) return false
+        _state.update { it.copy(titles = it.titles + (sessionId to title)) }
+        return true
+    }
+
+    /**
+     * Read the titles a fresh pairing has none of, with progress on screen.
+     *
+     * A phone that has just paired knows the session list but no names: every title
+     * behind it is its own `session.stats` call, which the list otherwise fetches one
+     * row at a time as the operator scrolls. On a first pairing that reads as a list
+     * of blanks, so they are read once, here, while the connecting screen can still
+     * say how far along it is.
+     *
+     * Bounded by [WARM_TITLE_LIMIT] and newest first: a host with four hundred
+     * sessions should not make first pairing wait on four hundred round trips, and
+     * the rows the operator is about to see are the recent ones. Whatever is left
+     * over keeps the lazy path in [loadTitles].
+     */
+    private suspend fun warmTitles(socket: MizarConnection) {
+        val known = _state.value.titles
+        val pending = _state.value.sessions
+            .asSequence()
+            .filter { !known.containsKey(it.sessionId) }
+            .sortedByDescending { it.updatedMillis }
+            .take(WARM_TITLE_LIMIT)
+            .map { it.sessionId }
+            .toList()
+        if (pending.isEmpty()) return
+
+        val recent = ArrayDeque<Long>()
+        var done = 0
+        _state.update { it.copy(syncProgress = SyncProgress(done = 0, total = pending.size), syncEtaMillis = null) }
+        for (id in pending) {
+            val started = System.nanoTime()
+            learnTitle(socket, id)
+            val elapsed = (System.nanoTime() - started) / 1_000_000L
+            done++
+            recent.addLast(elapsed)
+            while (recent.size > SyncEta.SAMPLE_SIZE) recent.removeFirst()
+            val eta = SyncEta.estimateMillis(done, pending.size, recent.toList())
+            _state.update {
+                it.copy(syncProgress = SyncProgress(done = done, total = pending.size), syncEtaMillis = eta)
+            }
+        }
+        persistIndex()
+        note("warmed $done/${pending.size} titles")
     }
 
     /**
@@ -1852,11 +2021,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun cancelTurn() {
+        val sessionId = _state.value.selectedSessionId ?: return
+        cancelSession(sessionId)
+    }
+
+    /**
+     * Cancel one session's turn, from the screen or from the live update's stop button.
+     *
+     * Split from [cancelTurn] because the notification names its own session: the
+     * operator can stop a turn without the conversation being the open one.
+     */
+    fun cancelSession(sessionId: String) {
         viewModelScope.launch {
             val socket = connection ?: return@launch
-            val sessionId = _state.value.selectedSessionId ?: return@launch
             runCatching { socket.call<AcceptanceResult>("session.cancel", payload("sessionId" to jsonString(sessionId))) }
-            reload()
+            if (_state.value.selectedSessionId == sessionId) reload()
+            // The card is about a turn that was just asked to stop; waiting for the
+            // host's `turn.settled` would leave it up for however long the stop takes.
+            LiveTurn.hide(getApplication())
+            liveSessionId = null
+            liveSignature = null
         }
     }
 
@@ -2556,8 +2740,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun exportLogs(onReady: (File?) -> Unit) {
         val snapshot = _state.value
         val notes = recentNotes.toList()
+        val requests = traffic.jsonLines()
         viewModelScope.launch(Dispatchers.IO) {
-            val file = runCatching { LogArchive.build(getApplication(), snapshot, notes) }.getOrNull()
+            val file = runCatching { LogArchive.build(getApplication(), snapshot, notes, requests) }.getOrNull()
             withContext(Dispatchers.Main) { onReady(file) }
         }
     }
@@ -2621,6 +2806,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun onTurnSettled(data: kotlinx.serialization.json.JsonElement) {
         val sessionId = (data["sessionId"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
             ?: run { note("settled: no sessionId in the frame"); return }
+        // The turn this card reports on is over: take it down before anything else,
+        // so a slow refresh below cannot leave it up on the lock screen.
+        if (liveSessionId == sessionId) {
+            LiveTurn.hide(getApplication())
+            liveSessionId = null
+            liveSignature = null
+            runningSince.remove(sessionId)
+        }
         // Before any decision about the notice: the transcript is stale the moment the
         // turn ends, in the foreground as much as in the background. A refresh that
         // only happened off screen is what left the row saying "running" while the
@@ -2768,6 +2961,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         const val ACTIVITY_POLL_MILLIS = 1_000L
         /** Older pages accumulate up to this many lines before the oldest are dropped. */
         const val MAX_ACTIVITY_ENTRIES = 1500
+
+        /**
+         * How many session titles a first pairing reads before letting the list lazy-load.
+         *
+         * One `session.stats` per row: a hundred rows is a hundred round trips, and a
+         * host on a slow tunnel would turn "pairing" into a minute of waiting for
+         * names nobody is looking at yet.
+         */
+        const val WARM_TITLE_LIMIT = 80
 
         /**
          * How long a poll waits before deciding the host is not there.

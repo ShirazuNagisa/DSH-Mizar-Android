@@ -60,3 +60,36 @@ data class PairingOutcome(
     val host: PairedHost,
     val route: PairingRoute,
 )
+
+/**
+ * Every route a pairing tried, and why it stopped.
+ *
+ * One error rather than only the last failure, because the list of routes is what
+ * turns "pairing failed" into a diagnosis: a pairing that never left the phone and
+ * one that reached the relay and was refused look identical on screen.
+ *
+ * @property attempts every route that was dialled, in order.
+ * @property finalError the answer to act on: the host's refusal when it answered,
+ *   otherwise the last route's transport error.
+ */
+class PairingFailure(
+    val attempts: List<Attempt>,
+    val finalError: Throwable,
+) : Exception(finalError.message, finalError) {
+
+    /** One route that did not pair. */
+    data class Attempt(val route: PairingRoute, val error: Throwable) {
+        /** How this attempt reads in a log line. */
+        val line: String get() = "${route.label} — ${error.message ?: error::class.simpleName}"
+    }
+
+    /** One line per route, for `activity.log`. */
+    fun lines(): List<String> = attempts.map { it.line }
+}
+
+/** How a route reads in a log line, e.g. `direct 10.0.0.5:19390`. */
+val PairingRoute.label: String
+    get() = when (this) {
+        is PairingRoute.Direct -> "direct $authority"
+        is PairingRoute.Relay -> "relay $baseUrl"
+    }

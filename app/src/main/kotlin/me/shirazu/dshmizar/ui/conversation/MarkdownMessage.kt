@@ -268,10 +268,176 @@ internal fun MarkdownMessage(
     modifier: Modifier = Modifier,
 ) {
     val blocks = remember(text) { MarkdownBlocks.parse(text) }
+    MarkdownBlocksView(blocks, color, codeColor, linkColor, onCopy, modifier)
+}
+
+/**
+ * The same column, from blocks the caller already parsed.
+ *
+ * The typewriter needs this: it re-cuts the *parsed* blocks on every frame, and
+ * parsing the source again per frame would make a long answer's reveal cost more
+ * than the answer did.
+ */
+@Composable
+internal fun MarkdownBlocksView(
+    blocks: List<MarkdownBlock>,
+    color: Color,
+    codeColor: Color,
+    linkColor: Color,
+    onCopy: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.sm + 2.dp)) {
         for (block in blocks) {
             MarkdownBlockView(block, color, codeColor, linkColor, onCopy)
         }
+    }
+}
+
+/**
+ * Cutting a message's blocks down to what has been typed so far.
+ *
+ * Ported from iOS `MizarKit/MarkdownReveal.swift`, and the reason the Android
+ * typewriter used to skip formatted answers entirely: revealing a *raw* Markdown
+ * body crawls `**` and fence markers across the screen. Revealing the parsed blocks
+ * types the message as the text it will be, so a reader never sees the syntax.
+ *
+ * Characters are counted in reading order: block by block, and inside a block its
+ * text. Markers (`•`, `1.`), table pipes and a code block's language label carry no
+ * characters and appear with the first character of what they introduce.
+ */
+internal object MarkdownReveal {
+
+    /** Every character the reveal counts, in reading order. */
+    fun plainText(blocks: List<MarkdownBlock>): String = fragments(blocks).joinToString("")
+
+    /** How many characters the reveal has to get through. */
+    fun characterCount(blocks: List<MarkdownBlock>): Int = fragments(blocks).sumOf { it.length }
+
+    /**
+     * The blocks with only the first [visibleCharacters] characters shown.
+     *
+     * Zero draws nothing; a value at or past the length returns the blocks as they
+     * are, which is also the cheapest path for a finished reveal.
+     */
+    fun blocks(blocks: List<MarkdownBlock>, visibleCharacters: Int): List<MarkdownBlock> {
+        if (visibleCharacters <= 0) return emptyList()
+        if (visibleCharacters >= characterCount(blocks)) return blocks
+
+        var remaining = visibleCharacters
+        val revealed = mutableListOf<MarkdownBlock>()
+        for (block in blocks) {
+            when (block) {
+                is MarkdownBlock.Paragraph -> {
+                    val kept = take(remaining, block.text) ?: return revealed
+                    remaining -= kept.length
+                    revealed += MarkdownBlock.Paragraph(kept)
+                }
+
+                is MarkdownBlock.Heading -> {
+                    val kept = take(remaining, block.text) ?: return revealed
+                    remaining -= kept.length
+                    revealed += MarkdownBlock.Heading(block.level, kept)
+                }
+
+                is MarkdownBlock.Quote -> {
+                    val kept = take(remaining, block.text) ?: return revealed
+                    remaining -= kept.length
+                    revealed += MarkdownBlock.Quote(kept)
+                }
+
+                is MarkdownBlock.Code -> {
+                    val kept = take(remaining, block.text) ?: return revealed
+                    remaining -= kept.length
+                    revealed += MarkdownBlock.Code(block.language, kept)
+                }
+
+                is MarkdownBlock.ListBlock -> {
+                    if (remaining <= 0) return revealed
+                    val keptItems = mutableListOf<MarkdownBlock.ListItem>()
+                    for (item in block.items) {
+                        if (remaining <= 0) break
+                        val kept = item.text.take(minOf(remaining, item.text.length))
+                        remaining -= kept.length
+                        keptItems += MarkdownBlock.ListItem(item.marker, kept, item.indent)
+                        if (remaining == 0) break
+                    }
+                    if (keptItems.isNotEmpty()) revealed += MarkdownBlock.ListBlock(keptItems)
+                    if (remaining == 0) return revealed
+                }
+
+                is MarkdownBlock.Table -> {
+                    if (remaining <= 0) return revealed
+                    val (table, left) = revealedTable(block, remaining)
+                    remaining = left
+                    revealed += table
+                    if (remaining == 0) return revealed
+                }
+
+                MarkdownBlock.Divider -> {
+                    // Zero characters: it costs nothing and is shown once the
+                    // reveal has reached it.
+                    if (remaining > 0) revealed += MarkdownBlock.Divider
+                }
+            }
+        }
+        return revealed
+    }
+
+    /** The counted text pieces of a message, in reading order. */
+    private fun fragments(blocks: List<MarkdownBlock>): List<String> = blocks.flatMap { block ->
+        when (block) {
+            is MarkdownBlock.Paragraph -> listOf(block.text)
+            is MarkdownBlock.Heading -> listOf(block.text)
+            is MarkdownBlock.Quote -> listOf(block.text)
+            is MarkdownBlock.Code -> listOf(block.text)
+            is MarkdownBlock.ListBlock -> block.items.map { it.text }
+            is MarkdownBlock.Table -> block.header + block.rows.flatten()
+            MarkdownBlock.Divider -> emptyList()
+        }
+    }
+
+    /**
+     * As much of one piece of text as the budget allows.
+     *
+     * `null` when the budget is exhausted and this block should not be drawn at all,
+     * which is how a block that has not been reached yet disappears entirely.
+     */
+    private fun take(remaining: Int, text: String): String? {
+        if (remaining <= 0) return null
+        return text.take(minOf(remaining, text.length))
+    }
+
+    /** A table with the cells the budget reaches, the rest blank, and what is left. */
+    private fun revealedTable(
+        table: MarkdownBlock.Table,
+        budget: Int,
+    ): Pair<MarkdownBlock.Table, Int> {
+        var remaining = budget
+        val header = mutableListOf<String>()
+        for (cell in table.header) {
+            if (remaining <= 0) break
+            val kept = cell.take(minOf(remaining, cell.length))
+            remaining -= kept.length
+            header += kept
+        }
+        while (header.size < table.header.size) header += ""
+
+        val rows = mutableListOf<List<String>>()
+        for (row in table.rows) {
+            if (remaining <= 0) break
+            val keptRow = mutableListOf<String>()
+            for (cell in row) {
+                if (remaining <= 0) break
+                val kept = cell.take(minOf(remaining, cell.length))
+                remaining -= kept.length
+                keptRow += kept
+            }
+            while (keptRow.size < table.header.size) keptRow += ""
+            rows += keptRow
+            if (remaining == 0) break
+        }
+        return MarkdownBlock.Table(header, table.align, rows) to remaining
     }
 }
 

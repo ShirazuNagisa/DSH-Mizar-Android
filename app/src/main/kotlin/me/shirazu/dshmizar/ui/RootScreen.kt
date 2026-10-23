@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -119,6 +120,33 @@ fun RootScreen(model: AppViewModel, incomingUri: String?, onUriHandled: () -> Un
                                     },
                                 ),
                             )
+                            // The first pairing reads every session's title, which is
+                            // the only part of it that takes visible time. A count and
+                            // an estimate say whether to wait or put the phone down.
+                            state.syncProgress?.let { progress ->
+                                Spacer(Modifier.height(14.dp))
+                                LinearProgressIndicator(
+                                    progress = { progress.fraction },
+                                    modifier = Modifier.width(180.dp),
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = stringResource(
+                                        R.string.pairing_sync_count,
+                                        progress.done,
+                                        progress.total,
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                state.syncEtaMillis?.let { eta ->
+                                    Text(
+                                        text = etaLabel(eta),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -225,4 +253,21 @@ private fun ReconnectingBanner(reason: String?) {
 @Composable
 private fun Centered(content: @Composable () -> Unit) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
+}
+
+/**
+ * "About 1 min 12 s left".
+ *
+ * Rounded up, because an estimate that says "0 s left" and then takes two more
+ * seconds is the one that makes an operator stop believing the rest of the screen.
+ */
+@Composable
+private fun etaLabel(millis: Long): String {
+    val seconds = ((millis + 999) / 1000).coerceAtLeast(0)
+    val span = if (seconds < 60) {
+        stringResource(R.string.sync_eta_seconds, seconds)
+    } else {
+        stringResource(R.string.sync_eta_minutes, seconds / 60, seconds % 60)
+    }
+    return stringResource(R.string.pairing_sync_eta, span)
 }

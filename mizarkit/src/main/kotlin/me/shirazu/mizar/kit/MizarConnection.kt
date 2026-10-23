@@ -30,6 +30,17 @@ import java.util.UUID
  */
 class MizarConnection(
     private val configuration: Configuration,
+    /**
+     * Where the round trips are recorded, when the caller wants them.
+     *
+     * Null in the protocol's own tests: a log nobody reads is a cost. The app
+     * passes one so the diagnostics archive can answer "did this frame leave, and
+     * what came back" without the operator reproducing it.
+     *
+     * Declared before the transport so a trailing lambda still builds the
+     * transport, which is how every existing call site reads.
+     */
+    private val traffic: ProtocolLog? = null,
     private val makeTransport: () -> WebSocketTransport = { OkHttpWebSocketTransport() },
 ) {
 
@@ -86,6 +97,19 @@ class MizarConnection(
     private var readJob: Job? = null
     // Upload calls run on IO alongside the normal UI/poll calls and the socket reader.
     private val pending = java.util.concurrent.ConcurrentHashMap<String, CompletableDeferred<JsonElement?>>()
+
+    /**
+     * What each in-flight request was, so its answer can be recorded with a name.
+     *
+     * The protocol correlates by id and nothing else, so without this the reply to
+     * `session.list` and the reply to `session.prompt` are the same line in a log.
+     */
+    private val inFlight = java.util.concurrent.ConcurrentHashMap<String, InFlight>()
+
+    private data class InFlight(val method: String, val startedAtNanos: Long) {
+        /** Whole milliseconds since the request went out. */
+        fun elapsedMillis(): Long = (System.nanoTime() - startedAtNanos) / 1_000_000L
+    }
     private var handshake: CompletableDeferred<ServerFrame.Welcome>? = null
     private val subscribers = LinkedHashMap<String, Channel<ServerFrame>>()
 
@@ -212,11 +236,16 @@ class MizarConnection(
         val id = UUID.randomUUID().toString().uppercase()
         val awaiting = CompletableDeferred<JsonElement?>()
         pending[id] = awaiting
+        inFlight[id] = InFlight(type, System.nanoTime())
 
         try {
-            socket.send(Frames.encodeRequest(type, id, payload))
+            val frame = Frames.encodeRequest(type, id, payload)
+            socket.send(frame)
+            traffic?.sent(type, frame.toByteArray(Charsets.UTF_8).size)
         } catch (_: Throwable) {
             pending.remove(id)
+            inFlight.remove(id)
+            traffic?.failed(type, "unsent")
             throw MizarError("SOCKET_CLOSED", "the request could not be sent", retryable = true)
         }
 
@@ -224,6 +253,7 @@ class MizarConnection(
         return try {
             withTimeout(budget) { awaiting.await() }
         } catch (_: TimeoutCancellationException) {
+            inFlight.remove(id)?.let { traffic?.failed(type, "timeout", it.elapsedMillis()) }
             throw MizarError("REQUEST_TIMEOUT", "$type did not answer in time", retryable = true)
         } finally {
             // Navigation/remove can cancel an upload while awaiting its acknowledgement.
@@ -289,18 +319,32 @@ class MizarConnection(
                 handshake = null
             }
 
-            is ServerFrame.Ok -> pending.remove(frame.id)?.complete(frame.result)
+            is ServerFrame.Ok -> {
+                inFlight.remove(frame.id)?.let { traffic?.answered(it.method, it.elapsedMillis(), null) }
+                pending.remove(frame.id)?.complete(frame.result)
+            }
 
             is ServerFrame.Failure -> {
                 // An answer nobody is waiting for is a socket-level complaint, and
                 // the operator is the only one who can act on it: it goes to the
                 // subscribers rather than being dropped.
                 val id = frame.id
+                id?.let { inFlight.remove(it) }?.let {
+                    traffic?.refused(it.method, it.elapsedMillis(), frame.error.code)
+                }
                 val waiting = if (id == null) null else pending.remove(id)
                 if (waiting != null) waiting.completeExceptionally(frame.error) else publish(frame)
             }
 
-            is ServerFrame.Event, is ServerFrame.Unknown -> publish(frame)
+            is ServerFrame.Event -> {
+                traffic?.event(frame.name, null)
+                publish(frame)
+            }
+
+            is ServerFrame.Unknown -> {
+                traffic?.event(frame.type, null)
+                publish(frame)
+            }
         }
     }
 
@@ -325,6 +369,9 @@ class MizarConnection(
     private fun failAll(error: MizarError) {
         val waiting = pending.values.toList()
         pending.clear()
+        // Whatever was in flight did not answer; its metadata must not outlive the
+        // socket and mislabel the next connection's ids.
+        inFlight.clear()
         for (deferred in waiting) deferred.completeExceptionally(error)
     }
 

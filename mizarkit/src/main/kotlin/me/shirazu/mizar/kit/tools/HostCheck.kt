@@ -13,6 +13,9 @@ import me.shirazu.mizar.kit.ModelCatalog
 import me.shirazu.mizar.kit.PairRequest
 import me.shirazu.mizar.kit.PairingClient
 import me.shirazu.mizar.kit.PairingUri
+import me.shirazu.mizar.kit.replay.HttpReplay
+import me.shirazu.mizar.kit.replay.RecordingTransport
+import me.shirazu.mizar.kit.OkHttpHttpTransport
 import me.shirazu.mizar.kit.pairRequestBody
 import me.shirazu.mizar.kit.PendingInteractions
 import me.shirazu.mizar.kit.PermissionCatalog
@@ -61,7 +64,12 @@ fun main(): Unit = runBlocking {
     println("mizar hostCheck: $base")
 
     // ── unauthenticated surface ───────────────────────────────────────────────
-    val client = PairingClient(appVersion = "0.7.1-android")
+    // With MIZAR_RECORD set, every HTTP exchange is also written to a replay
+    // fixture: that is how the offline pairing tests get bytes a host really sent,
+    // instead of a hand-written guess at what one would say.
+    val recordDir = System.getenv("MIZAR_RECORD")?.takeIf { it.isNotBlank() }
+    val recorder = recordDir?.let { RecordingTransport(OkHttpHttpTransport()) }
+    val client = PairingClient(transport = recorder ?: OkHttpHttpTransport(), appVersion = "0.7.1-android")
     val hello: HelloResponse = try {
         client.hello(authority = authority)
     } catch (error: Throwable) {
@@ -83,6 +91,12 @@ fun main(): Unit = runBlocking {
     }
     check("a valid code pairs", paired.deviceToken.startsWith("mz_"))
     check("pairing returns the host identity", paired.hostId.isNotEmpty())
+
+    if (recorder != null && recordDir != null) {
+        val file = java.io.File(recordDir, "pairing.json")
+        HttpReplay.save(file, recorder.snapshot("pairing", java.time.Instant.now().toString()))
+        println("  wrote  ${file.absolutePath}")
+    }
 
     // ── the socket ────────────────────────────────────────────────────────────
     val connection = MizarConnection(
