@@ -144,7 +144,8 @@
     <string name="stop">停止</string>
     <string name="model">模型</string>
     <string name="context">上下文</string>
-    <string name="context_percent">上下文 %1$d%%</string>
+    <string name="context_percent">%1$d%%</string>
+    <string name="context_percent_spoken">上下文已用 %1$d%%</string>
     <string name="context_unknown">上下文 —</string>
     <string name="commands">命令</string>
     <string name="command_goal">目标</string>

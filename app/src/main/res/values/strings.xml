@@ -174,7 +174,10 @@
     <string name="stop">Stop</string>
     <string name="model">Model</string>
     <string name="context">Context</string>
-    <string name="context_percent">Context %1$d%%</string>
+    <!-- The pill shows the dial and the figure; the word lives in the accessible
+         label, where there is room for it. -->
+    <string name="context_percent">%1$d%%</string>
+    <string name="context_percent_spoken">Context %1$d%% used</string>
     <!-- The host reported no context figure: an em dash, never 0%. -->
     <string name="context_unknown">Context —</string>
     <string name="commands">Commands</string>

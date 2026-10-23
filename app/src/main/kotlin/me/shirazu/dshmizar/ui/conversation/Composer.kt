@@ -66,6 +66,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -391,13 +393,20 @@ private fun ModelPill(
 private fun ContextPill(state: UiState, onClick: () -> Unit) {
     val context = state.stats?.context
     val percent = context?.percent
+    // The pill itself says only the figure -- the dial beside it already says what
+    // the figure is about, and the word made the row wide enough to crowd the model
+    // pill next to it. A screen reader still gets the whole sentence.
+    val spoken = percent?.let { stringResource(R.string.context_percent_spoken, it) }
     Row(
         modifier = Modifier
             .height(32.dp)
             .background(Glass.fill(), Corner.lg)
             .border(Glass.Hairline, MaterialTheme.colorScheme.outlineVariant, Corner.lg)
             .then(if (context != null) Modifier.pressable().shapedClickable(Corner.lg, onClick = onClick) else Modifier)
-            .padding(horizontal = 9.dp),
+            .padding(horizontal = 9.dp)
+            .semantics(mergeDescendants = true) {
+                if (spoken != null) contentDescription = spoken
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ContextRing(percent = percent)
