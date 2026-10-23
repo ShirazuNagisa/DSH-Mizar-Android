@@ -571,16 +571,35 @@ describe('method table', () => {
     ).rejects.toMatchObject({ code: 'WRITER_HELD' })
   })
 
+  it('reads a delegated child through its parent, and a session as itself', async () => {
+    // DSH will not address a child as a session -- it answers `session/agent-busy`
+    // and refuses the read before touching the log -- so the parent the phone
+    // learned from `session.list` has to survive the bridge intact.
+    const { ctx, calls } = fakeContext((request: Invocation) =>
+      request.method === 'projections'
+        ? { asOfSeq: 5, values: {} }
+        : { records: [], hasMore: false },
+    )
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+
+    await table['session.messages']?.({ sessionId: 'child', parentSessionId: 'parent' }, context)
+    await table['session.messages']?.({ sessionId: 'top' }, context)
+
+    const addresses = calls
+      .filter((call) => call.method === 'page')
+      .map((call) => (call.args['request'] as { address?: unknown }).address)
+    expect(addresses).toEqual([
+      { kind: 'subagent', parentSessionId: 'parent', childSessionId: 'child', mode: 'unknown' },
+      { kind: 'session', sessionId: 'top' },
+    ])
+  })
+
   it('exposes every documented method', () => {
     const { ctx } = fakeContext({})
     expect(Object.keys(createMethodTable(ctx, facts, new InteractionBroker())).sort()).toEqual(
       [
+        'account.balance',
         'approval.answer',
-        'attachment.abort',
-        'attachment.begin',
-        'attachment.capabilities',
-        'attachment.chunk',
-        'attachment.finish',
         'host.info',
         'interactions.pending',
         'model.catalog',
@@ -592,6 +611,7 @@ describe('method table', () => {
         'session.archive',
         'session.cancel',
         'session.create',
+        'session.fork',
         'session.list',
         'session.model.set',
         'session.permission.set',
@@ -600,6 +620,7 @@ describe('method table', () => {
         'question.answer',
         'upload.abort',
         'upload.begin',
+        'upload.capabilities',
         'upload.chunk',
         'upload.finish',
         'session.messages',
@@ -623,6 +644,7 @@ describe('method table', () => {
       hostName: 'mac',
       home: '/home',
       protocolVersion: 1,
+      plugin: { id: 'dsh-mizar', capabilities: ['deepseek.balance.v1'] },
       addresses: ['192.168.1.10:19390', '127.0.0.1:19390'],
     })
   })
@@ -636,7 +658,7 @@ describe('method table', () => {
       undefined,
       context,
     )) as Record<string, unknown>
-    expect(info).toEqual({ hostId: 'h1', hostName: 'mac', home: '/home', protocolVersion: 1 })
+    expect(info).toEqual({ hostId: 'h1', hostName: 'mac', home: '/home', protocolVersion: 1, plugin: { id: 'dsh-mizar', capabilities: ['deepseek.balance.v1'] } })
     expect('addresses' in info).toBe(false)
   })
 
@@ -1339,7 +1361,7 @@ describe('prompt attachments', () => {
 
   it('turns a finished image into an inline base64 content part', async () => {
     const { table, calls } = await attachmentTable({})
-    const bytes = Buffer.from('jpegdata')
+    const bytes = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('jpeg')])
     const finished = await uploadThroughTable(
       table,
       device,
@@ -1917,5 +1939,99 @@ describe('session.activity (method table)', () => {
     expect(forward.entries.map((entry) => entry.id)).toEqual(['seq-2'])
     // None of the refusals read the log; only the forward answer did.
     expect(calls.filter((call) => call.method === 'page')).toHaveLength(1)
+  })
+})
+
+describe('relay selection over the wire', () => {
+  const context = { deviceId: 'd1', deviceName: 'iPhone', remote: '127.0.0.1' }
+  const facts = { hostId: 'h1', hostName: 'mac', home: '/home', protocolVersion: 1 }
+  const free = 'https://dshmizar.shirazu-nagisa.com'
+  const paid = 'https://dshmizar-1.shirazu-nagisa.com'
+
+  /** A host that can move between the two public relays, and remembers requests. */
+  function movable() {
+    const calls: string[] = []
+    let current = { url: free, room: 'ROOM1', baseURL: `${free}/r/ROOM1` }
+    return {
+      calls,
+      control: {
+        current: () => current,
+        set: async (url: string) => {
+          calls.push(url)
+          current = { url, room: 'ROOM1', baseURL: `${url}/r/ROOM1` }
+          return current
+        },
+      },
+    }
+  }
+
+  it('reports the relay facts in host.info when the host can move', async () => {
+    const { ctx } = fakeContext({})
+    const { control } = movable()
+    const table = createMethodTable(ctx, { ...facts, relay: control }, new InteractionBroker())
+    await expect(table['host.info']?.(undefined, context)).resolves.toEqual({
+      hostId: 'h1',
+      hostName: 'mac',
+      home: '/home',
+      protocolVersion: 1,
+      plugin: { id: 'dsh-mizar', capabilities: ['deepseek.balance.v1'] },
+      relay: { url: free, room: 'ROOM1', baseURL: `${free}/r/ROOM1` },
+    })
+  })
+
+  it('leaves relay out of host.info when the host cannot move', async () => {
+    const { ctx } = fakeContext({})
+    const info = (await createMethodTable(ctx, facts, new InteractionBroker())['host.info']?.(
+      undefined,
+      context,
+    )) as Record<string, unknown>
+    expect('relay' in info).toBe(false)
+  })
+
+  it('moves the tunnel to the requested public relay', async () => {
+    const { ctx } = fakeContext({})
+    const { control, calls } = movable()
+    const table = createMethodTable(ctx, { ...facts, relay: control }, new InteractionBroker())
+    await expect(table['relay.set']?.({ url: paid }, context)).resolves.toEqual({
+      url: paid,
+      room: 'ROOM1',
+      baseURL: `${paid}/r/ROOM1`,
+    })
+    expect(calls).toEqual([paid])
+  })
+
+  it('accepts the free relay and a trailing slash', async () => {
+    const { ctx } = fakeContext({})
+    const { control, calls } = movable()
+    const table = createMethodTable(ctx, { ...facts, relay: control }, new InteractionBroker())
+    await expect(table['relay.set']?.({ url: `${free}/` }, context)).resolves.toMatchObject({
+      url: free,
+    })
+    expect(calls).toEqual([free])
+  })
+
+  it('refuses a URL outside the allowlist before the host sees it', async () => {
+    const { ctx } = fakeContext({})
+    const { control, calls } = movable()
+    const table = createMethodTable(ctx, { ...facts, relay: control }, new InteractionBroker())
+    await expect(
+      table['relay.set']?.({ url: 'https://evil.example.com' }, context),
+    ).rejects.toMatchObject({ code: 'MALFORMED_FRAME' })
+    expect(calls).toHaveLength(0)
+  })
+
+  it('refuses a payload without a url', async () => {
+    const { ctx } = fakeContext({})
+    const { control } = movable()
+    const table = createMethodTable(ctx, { ...facts, relay: control }, new InteractionBroker())
+    await expect(table['relay.set']?.({}, context)).rejects.toMatchObject({
+      code: 'MALFORMED_FRAME',
+    })
+  })
+
+  it('is absent when the host has no selectable relay', async () => {
+    const { ctx } = fakeContext({})
+    const table = createMethodTable(ctx, facts, new InteractionBroker())
+    expect(table['relay.set']).toBeUndefined()
   })
 })

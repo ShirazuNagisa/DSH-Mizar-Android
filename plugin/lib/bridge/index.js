@@ -14,14 +14,16 @@
 import { join } from 'node:path';
 import { isLiveActivityToken } from '../auth/devices.js';
 import { deliverQuestionAnswers } from './answerers.js';
+import { accountBalance } from './balance.js';
 import { toMethodError } from './errors.js';
 import { CLIENT_APPROVAL_OUTCOMES, InteractionBroker, } from './interactions.js';
 import { MethodError, optionalBoolean, optionalObject, optionalString, requireObject, requireString } from './method-error.js';
 import { modelCatalog, selectModel } from './models.js';
 import { permissionCatalog, setPermissionPreset } from './permissions.js';
 import { archiveSession, listWorkspaces } from './workspaces.js';
-import { cancelSession, createSession, listSessions, promptSession, renameSession, sessionActivity, sessionMessages, sessionStats, } from './sessions.js';
-import { parseUploadBegin, parseUploadChunk, UploadStore } from './uploads.js';
+import { cancelSession, createSession, forkSession, listSessions, promptSession, renameSession, sessionActivity, sessionMessages, sessionStats, } from './sessions.js';
+import { parseUploadBegin, parseUploadChunk, PromptReplayGuard, UploadStore } from './uploads.js';
+import { canonicalRelayURL, isSelectableRelayURL } from '../relay/selection.js';
 /**
  * Translate any thrown value into a wire-coded failure.
  * @param handler - the raw implementation.
@@ -282,23 +284,19 @@ function readRegistration(payload) {
  *   `facts.home`; a caller that wants to share or test one may pass it.
  * @returns the table, keyed by wire method name.
  */
-export function createMethodTable(ctx, facts, broker, push, delivery, uploadsOrAttachments, attachments) {
-    // The attachment extension predates the upload store and used to be passed in
-    // the sixth slot; tests written against that shape still do. Accept either.
-    const attachmentBridge = attachments ??
-        (uploadsOrAttachments !== undefined && typeof uploadsOrAttachments.capabilities === 'function'
-            ? uploadsOrAttachments
-            : undefined);
-    const attachmentService = () => {
-        if (!attachmentBridge)
-            throw new MethodError('NOT_IMPLEMENTED', 'install the attachment-enabled host plugin');
-        return attachmentBridge;
-    };
-    const uploadStore = (uploadsOrAttachments instanceof UploadStore ? uploadsOrAttachments : undefined) ??
+export function createMethodTable(ctx, facts, broker, push, delivery, uploads) {
+    const uploadStore = uploads ??
         new UploadStore({
             root: join(facts.home, 'uploads'),
             attachmentsRoot: join(facts.home, 'attachments'),
         });
+    // A prompt that carries attachments is retried with the same requestId when
+    // its answer is lost. That is safe only while the request is identical: DSH
+    // deduplicates by (session, requestId), so the same key with different
+    // content must be refused before it can borrow the first answer. Ported
+    // from XEPX2's PR #2.
+    const replayGuard = new PromptReplayGuard();
+    const relay = facts.relay;
     const table = {
         /**
          * Host identity and protocol facts.
@@ -316,8 +314,36 @@ export function createMethodTable(ctx, facts, broker, push, delivery, uploadsOrA
             hostName: facts.hostName,
             home: facts.home,
             protocolVersion: facts.protocolVersion,
+            plugin: { id: 'dsh-mizar', capabilities: ['deepseek.balance.v1'] },
             ...(facts.authorities === undefined ? {} : { addresses: facts.authorities() }),
+            ...(relay === undefined ? {} : { relay: relay.current() }),
         }),
+        /** Native official-account wallets; no account grant or identity leaves the host. */
+        'account.balance': async (payload) => accountBalance(ctx, payload),
+        /**
+         * Move this computer's tunnel to the free or the paid relay.
+         *
+         * The phone asks because only the phone knows the account tier; the host
+         * owns the allowlist and the persistence so a paired device cannot point
+         * this computer's tunnel at an arbitrary server. The tunnel credential is
+         * unchanged, so the room is unchanged and every existing pairing survives;
+         * what changes is the address a phone dials, and the answer carries it.
+         *
+         * Additive, so no protocol version bump: an old host answers
+         * `NOT_IMPLEMENTED`, which is how the app knows to keep its current relay.
+         */
+        ...(relay === undefined
+            ? {}
+            : {
+                'relay.set': async (payload) => {
+                    const requested = requireString(payload, 'url', 'relay.set');
+                    const canonical = canonicalRelayURL(requested);
+                    if (canonical === null || !isSelectableRelayURL(canonical)) {
+                        throw new MethodError('MALFORMED_FRAME', 'relay.set: payload."url" must be the free or the paid relay');
+                    }
+                    return relay.set(canonical);
+                },
+            }),
         /** Every session DSH would list, newest activity first. */
         'session.list': async () => listSessions(ctx),
         /**
@@ -358,6 +384,11 @@ export function createMethodTable(ctx, facts, broker, push, delivery, uploadsOrA
             const before = fields?.['beforeSeq'];
             const after = fields?.['afterSeq'];
             const sessionId = requireString(payload, 'sessionId', 'session.messages');
+            // A delegated child is not addressable as a session: the host refuses the
+            // read with `session/agent-busy` unless the child is named through its
+            // parent. The phone knows the lineage from `session.list` and sends it
+            // back here, so the address can be rebuilt on the way in.
+            const parentSessionId = optionalString(payload, 'parentSessionId');
             const explicit = typeof after === 'number' && Number.isFinite(after) ? after : undefined;
             // `null` is the phone saying it holds nothing -- a reinstall, a cleared
             // cache. Silence is not that claim: it is a request with no cursor, which
@@ -366,7 +397,7 @@ export function createMethodTable(ctx, facts, broker, push, delivery, uploadsOrA
             const remembered = holdsNothing || explicit !== undefined
                 ? undefined
                 : delivery?.deliveredThrough(context.deviceId, sessionId);
-            return sessionMessages(ctx, sessionId, typeof limit === 'number' ? limit : undefined, typeof before === 'number' ? before : undefined, explicit ?? remembered);
+            return sessionMessages(ctx, sessionId, typeof limit === 'number' ? limit : undefined, typeof before === 'number' ? before : undefined, explicit ?? remembered, parentSessionId);
         },
         /**
          * The running turn's compact process detail.
@@ -408,6 +439,18 @@ export function createMethodTable(ctx, facts, broker, push, delivery, uploadsOrA
                 agentPreset: optionalString(args, 'agentPreset'),
             });
         },
+        /** Fork the exact completed-turn prefix selected by the phone. */
+        'session.fork': async (payload) => {
+            const args = requireObject(payload, 'session.fork');
+            const atSeq = args['atSeq'];
+            if (typeof atSeq !== 'number' || !Number.isSafeInteger(atSeq) || atSeq < 0) {
+                throw new MethodError('MALFORMED_FRAME', 'session.fork: payload."atSeq" must be a non-negative safe integer');
+            }
+            return forkSession(ctx, {
+                sessionId: requireString(payload, 'sessionId', 'session.fork'),
+                atSeq,
+            });
+        },
         /**
          * Send a prompt. The client should reuse one `requestId` across retries:
          * the host treats it as an idempotency key and will not insert the same
@@ -418,15 +461,21 @@ export function createMethodTable(ctx, facts, broker, push, delivery, uploadsOrA
          * connection's device and this session before anything is read.
          */
         'session.prompt': async (payload, context) => {
-            if (optionalObject(payload, 'session.prompt')['attachments'] !== undefined) {
-                return attachmentService().prompt(context.deviceId, payload, readMode(payload));
-            }
             const sessionId = requireString(payload, 'sessionId', 'session.prompt');
             const text = readPromptText(payload);
             const attachmentIds = readAttachmentIds(payload);
             const mode = readMode(payload);
             if (text === undefined && attachmentIds.length === 0) {
                 throw new MethodError('MALFORMED_FRAME', 'session.prompt: payload."text" must be a non-empty string when no attachments are given');
+            }
+            const requestId = optionalString(payload, 'requestId');
+            if (attachmentIds.length > 0 && requestId !== undefined) {
+                replayGuard.check(context.deviceId, sessionId, requestId, {
+                    text,
+                    mode,
+                    clientTimeZone: optionalString(payload, 'clientTimeZone'),
+                    attachmentIds,
+                });
             }
             const attachments = attachmentIds.length === 0
                 ? []
@@ -436,15 +485,10 @@ export function createMethodTable(ctx, facts, broker, push, delivery, uploadsOrA
                 ...(text === undefined ? {} : { text }),
                 ...(attachments.length === 0 ? {} : { attachments }),
                 mode,
-                requestId: optionalString(payload, 'requestId'),
+                requestId,
                 clientTimeZone: optionalString(payload, 'clientTimeZone'),
             });
         },
-        'attachment.capabilities': async () => attachmentService().capabilities(),
-        'attachment.begin': async (payload, context) => attachmentService().begin(context.deviceId, payload),
-        'attachment.chunk': async (payload, context) => attachmentService().uploads.chunk(context.deviceId, payload),
-        'attachment.finish': async (payload, context) => attachmentService().uploads.finish(context.deviceId, payload),
-        'attachment.abort': async (payload, context) => attachmentService().uploads.abort(context.deviceId, payload),
         /**
          * Start an attachment upload.
          *
@@ -464,6 +508,14 @@ export function createMethodTable(ctx, facts, broker, push, delivery, uploadsOrA
         'upload.finish': async (payload, context) => uploadStore.finish(context.deviceId, requireString(payload, 'uploadId', 'upload.finish')),
         /** Discard a half-sent upload and its bytes. */
         'upload.abort': async (payload, context) => uploadStore.abort(context.deviceId, requireString(payload, 'uploadId', 'upload.abort')),
+        /**
+         * The attachment limits as this host enforces them.
+         *
+         * Additive and optional: a client may hardcode the documented numbers and
+         * never call this, but one that asks first survives a host that tunes
+         * them. Ported from XEPX2's PR #2.
+         */
+        'upload.capabilities': async () => uploadStore.capabilities(),
         /** Interrupt the running turn. */
         'session.cancel': async (payload) => cancelSession(ctx, requireString(payload, 'sessionId', 'session.cancel')),
         /** Rename a session. */

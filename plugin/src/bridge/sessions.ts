@@ -38,7 +38,7 @@ import type { Context } from '../dsh.js'
 import { recordSeq } from './delivery.js'
 import { invokeRemote, streamRemote } from './invoke.js'
 import { MethodError } from './method-error.js'
-import { buildStatsFrame, STATS_KEYS, type SessionStatsFrame } from './stats.js'
+import { buildContextPressure, buildStatsFrame, STATS_KEYS, type ContextPressureView, type SessionStatsFrame } from './stats.js'
 import { enforcePromptLimits, filePartName, type PromptAttachment } from './uploads.js'
 import { archivedSessionIds, resolveWorkspaceId } from './workspaces.js'
 
@@ -352,7 +352,62 @@ function assistantText(event: Record<string, unknown>): string | null {
  * @param records - one page, oldest first, exactly as the gateway returned it.
  * @returns the records worth sending.
  */
-function summaryRecords(records: readonly unknown[]): unknown[] {
+type UsageFold = typeof import('@deepseek-ai/dsh-token-meter/client').deriveTurnTokenUsage
+let usageFold: Promise<UsageFold | undefined> | undefined
+function loadUsageFold(): Promise<UsageFold | undefined> {
+  // Local published bundle: missing/broken accounting never breaks session reads.
+  return usageFold ??= import('./turn-usage-fold.js').then((module) => module.deriveTurnTokenUsage).catch(() => undefined)
+}
+
+/** Keep only complete contiguous turn-local windows; never sum a paged fragment. */
+function turnWindows(records: readonly unknown[]): Map<unknown, Record<string, unknown>[]> {
+  const windows = new Map<unknown, Record<string, unknown>[]>()
+  let current: Record<string, unknown>[] = []
+  let turn: unknown
+  let previous: number | undefined
+  for (const record of records) {
+    const event = eventOf(record)
+    if (event === null) continue
+    const seq = event['seq']
+    if (event['type'] === 'turn/start') {
+      current = []
+      turn = turnOf(event)
+      previous = undefined
+    }
+    if (turn === undefined) continue
+    if (typeof seq !== 'number' || !Number.isSafeInteger(seq) || (previous !== undefined && seq !== previous + 1)) {
+      current = []; turn = undefined; previous = undefined; continue
+    }
+    current.push(event)
+    previous = seq
+    if (event['type'] === 'turn/end') {
+      if (turnOf(event) === turn) windows.set(turn, current)
+      current = []; turn = undefined; previous = undefined
+    }
+  }
+  return windows
+}
+
+/** Desktop tail rule: the last text must also be the last transcript content. */
+function branchUnavailable(events: readonly Record<string, unknown>[]): boolean {
+  let closing: number | undefined
+  let latest: number | undefined
+  for (const event of events) {
+    const seq = event['seq']
+    if (typeof seq !== 'number') continue
+    const type = event['type']
+    if (type === 'assistant/message') {
+      latest = seq
+      if (assistantText(event) !== null) closing = seq
+    } else if (type === 'tool/call' || (type === 'tool/result' && event['surfaceOp'] === 'append') || type === 'llm/retry'
+      || (type === 'turn/end' && (event['data'] as { reason?: { kind?: string } } | undefined)?.reason?.kind === 'error')) latest = seq
+  }
+  return closing === undefined || latest !== closing
+}
+
+async function summaryRecords(records: readonly unknown[]): Promise<unknown[]> {
+  const derive = await loadUsageFold()
+  const windows = turnWindows(records)
   /** Assistant messages that are their turn's last word, and have one. */
   const summaries = new Set<unknown>()
   const ended = new Set<unknown>()
@@ -395,6 +450,23 @@ function summaryRecords(records: readonly unknown[]): unknown[] {
     // is appended. See {@link withAttachmentPlaceholders}.
     .map((record) => {
       const event = eventOf(record)
+      if (event?.['type'] === 'turn/end') {
+        const events = windows.get(turnOf(event))
+        // A partial page cannot establish branch safety either. Re-reading a
+        // complete turn may upgrade this metadata, but never invents usage.
+        let usage: ReturnType<UsageFold>
+        try { usage = events === undefined ? undefined : derive?.(events as unknown as Parameters<UsageFold>[0]) } catch { usage = undefined }
+        const enriched = {
+          ...event,
+          data: {
+            ...(event['data'] as Record<string, unknown>),
+            ...(events === undefined ? {} : { mizarBranchUnavailable: branchUnavailable(events) }),
+            ...(usage === undefined ? {} : { mizarTokenUsage: usage }),
+          },
+        }
+        return typeof (record as { event?: unknown }).event === 'object'
+          ? { ...(record as Record<string, unknown>), event: enriched } : enriched
+      }
       return event?.['type'] === 'user/message' ? withAttachmentPlaceholders(record, event) : record
     })
 }
@@ -503,6 +575,49 @@ function turnOf(event: Record<string, unknown>): unknown {
 const FOLLOW_TIMEOUT_MS = 30_000
 
 /**
+ * The durable address DSH reads one log by.
+ *
+ * An ordinary session is addressed by its id alone. A delegated child is **not**
+ * a session as far as the history API is concerned: `session/follow` and
+ * `session/page` refuse `{kind: 'session'}` for a log whose header says
+ * `origin: 'subagent'` --
+ *
+ *     session/agent-busy: subagent Sessions require their durable parent address
+ *
+ * -- and require the child to be named through its parent instead. The failure
+ * is raised before any log is read, so a phone that only knew a session id could
+ * never page a child's history at all; that is why the parent travels with the
+ * request.
+ *
+ * The mode is `'unknown'` on purpose: `session/list` carries the child's lineage
+ * but not its delegation mode (`one-shot` or `continuable`), and the host treats
+ * `unknown` as "either" rather than as a mismatch. Guessing a mode would trade a
+ * readable page for a `subagent/unauthorized`.
+ */
+type SessionLogAddress =
+  | { readonly kind: 'session'; readonly sessionId: string }
+  | {
+      readonly kind: 'subagent'
+      readonly parentSessionId: string
+      readonly childSessionId: string
+      readonly mode: 'unknown'
+    }
+
+/**
+ * Address one session's log, as a child when its parent is known.
+ *
+ * @param sessionId - the session whose log is being read.
+ * @param parentSessionId - the parent of a delegated child, or absent for an
+ *   ordinary conversation (and for a fork, which is a session of its own).
+ * @returns the address to send.
+ */
+function logAddress(sessionId: string, parentSessionId?: string): SessionLogAddress {
+  return parentSessionId === undefined
+    ? { kind: 'session', sessionId }
+    : { kind: 'subagent', parentSessionId, childSessionId: sessionId, mode: 'unknown' }
+}
+
+/**
  * The log cut, from the opening frame of `session/follow`.
  *
  * **Why the stream, and not the projection read it replaces.** `throughSeq` is
@@ -529,29 +644,41 @@ const FOLLOW_TIMEOUT_MS = 30_000
  * session live for as long as the request, and one subscription per refresh is a
  * leak that only shows up after an hour of use.
  *
+ * The same frame also carries the projection baseline, which is where
+ * {@link readLogPage} gets the page's context figure. It is the read a page
+ * already pays for; the context figure costs no second one.
+ *
  * @param ctx - a context observing `ctx.typertGateway`.
- * @param sessionId - the session to open.
- * @returns the cursor, or `null` when the host would not answer this way.
+ * @param address - the durable address to open; see {@link logAddress}.
+ * @returns the opening frame, or `null` when the host would not answer this way.
  */
-async function followCursor(ctx: Context, sessionId: string): Promise<number | null> {
+async function followOpening(ctx: Context, address: SessionLogAddress): Promise<ProjectionBaseline | null> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), FOLLOW_TIMEOUT_MS)
   try {
     const iterable = await streamRemote(ctx, {
       namespace: 'session',
       method: 'follow',
-      args: { request: { address: { kind: 'session', sessionId } } },
+      args: { request: { address } },
       signal: controller.signal,
     })
     const iterator = iterable[Symbol.asyncIterator]()
     try {
       const first = await iterator.next()
-      const frame = first.value as { type?: unknown; cursor?: unknown } | undefined
+      const frame = first.value as {
+        type?: unknown
+        cursor?: unknown
+        projections?: unknown
+      } | undefined
       // Only a snapshot is a cut. An event frame first would mean the stream
       // opened mid-log, and paging at a cursor taken from the middle of one is
       // how half a turn ends up on the screen.
       if (frame === undefined || frame.type !== 'snapshot') return null
-      return typeof frame.cursor === 'number' && Number.isFinite(frame.cursor) ? frame.cursor : null
+      if (typeof frame.cursor !== 'number' || !Number.isFinite(frame.cursor)) return null
+      // The same frame carries the projection baseline, which is where the
+      // page's context figure comes from -- no second read. See
+      // {@link projectionValues}.
+      return { cut: frame.cursor, values: projectionValues(frame.projections) }
     } finally {
       // Closes the stream. Without it the subscription outlives the request.
       // Best effort: a carrier that dies while being closed must not turn an
@@ -582,8 +709,37 @@ async function followCursor(ctx: Context, sessionId: string): Promise<number | n
  */
 const READ_TIMEOUT_MS = 30_000
 
+/** A cut and the projection values read at it. */
+interface ProjectionBaseline {
+  /** The inclusive log cut, or `null` when the host named none. */
+  readonly cut: number | null
+  /** Every projection value available at that cut; empty when none came back. */
+  readonly values: Readonly<Record<string, unknown>>
+}
+
 /**
- * The log cut, from a `session/projections` read.
+ * Projection values from a baseline-shaped object, or an empty set.
+ *
+ * Both reads that can name the cut -- the follow opening frame and the
+ * `session/projections` fallback -- carry the projection baseline. The page
+ * derives the context figure from those values rather than paying for another
+ * projections read on every refresh, which is the read this file already
+ * refuses to make when the stream answers. A host that sends no baseline (or
+ * an older one without the context projections) yields no values, and with
+ * them no context figure: unknown, never zero.
+ *
+ * @param value - a projection baseline, or anything else.
+ * @returns its `values` object, or an empty record.
+ */
+function projectionValues(value: unknown): Readonly<Record<string, unknown>> {
+  const values = (value as { values?: unknown } | null | undefined)?.values
+  return typeof values === 'object' && values !== null
+    ? (values as Record<string, unknown>)
+    : {}
+}
+
+/**
+ * The log cut and projection values, from a `session/projections` read.
  *
  * The fallback, for a host that cannot open a follow stream -- older than the
  * endpoint, or composed without a stream carrier -- and for a first frame that
@@ -593,9 +749,9 @@ const READ_TIMEOUT_MS = 30_000
  *
  * @param ctx - a context observing `ctx.typertGateway`.
  * @param sessionId - the session to read.
- * @returns the cut, or `null` when the session is unknown.
+ * @returns the cut (or `null` when the session is unknown) and its values.
  */
-async function projectionsCut(ctx: Context, sessionId: string): Promise<number | null> {
+async function projectionsAt(ctx: Context, sessionId: string): Promise<ProjectionBaseline> {
   const value = (await invokeRemote(ctx, {
     namespace: 'session',
     method: 'projections',
@@ -603,7 +759,10 @@ async function projectionsCut(ctx: Context, sessionId: string): Promise<number |
     signal: AbortSignal.timeout(READ_TIMEOUT_MS),
   })) as { asOfSeq?: unknown } | null | undefined
 
-  return typeof value?.asOfSeq === 'number' && Number.isFinite(value.asOfSeq) ? value.asOfSeq : null
+  return {
+    cut: typeof value?.asOfSeq === 'number' && Number.isFinite(value.asOfSeq) ? value.asOfSeq : null,
+    values: projectionValues(value),
+  }
 }
 
 /** One raw page of a session's log, as the host returned it. */
@@ -614,6 +773,11 @@ interface LogPage {
   readonly records: readonly unknown[]
   /** Whether the host says older records exist before this page. */
   readonly hasMore: boolean
+  /**
+   * Context-window occupancy and breakdown at the page's cut, or `null` when
+   * the host answered from a baseline without the context projections.
+   */
+  readonly context: ContextPressureView | null
 }
 
 /**
@@ -627,9 +791,12 @@ interface LogPage {
  * spans a long tool run still returns the requests around it rather than a
  * window of deltas.
  *
- * The cut comes from {@link followCursor}, and from {@link projectionsCut} when
+ * The cut comes from {@link followOpening}, and from {@link projectionsAt} when
  * that cannot answer. Works for a cold session: neither read activates an agent,
- * which was measured for the follow path before it was adopted here.
+ * which was measured for the follow path before it was adopted here. Both reads
+ * already carry the projection baseline, which is where the page's
+ * {@link LogPage.context} comes from -- the page does not make a second
+ * projections read for it.
  *
  * Shared by {@link sessionMessages} and {@link sessionActivity}: both start from
  * exactly the same current page, and only differ in what they keep from it.
@@ -638,6 +805,8 @@ interface LogPage {
  * @param sessionId - the session to read.
  * @param maxMessages - how many messages to ask for; absent uses the host default.
  * @param beforeSeq - the exclusive upper bound, for paging backwards.
+ * @param parentSessionId - the parent of a delegated child; absent reads the
+ *   session as a session. See {@link logAddress}.
  * @returns the page, or `null` when the session has no log to read.
  */
 async function readLogPage(
@@ -645,8 +814,11 @@ async function readLogPage(
   sessionId: string,
   maxMessages?: number,
   beforeSeq?: number,
+  parentSessionId?: string,
 ): Promise<LogPage | null> {
-  const cut = (await followCursor(ctx, sessionId)) ?? (await projectionsCut(ctx, sessionId))
+  const address = logAddress(sessionId, parentSessionId)
+  const baseline = (await followOpening(ctx, address)) ?? (await projectionsAt(ctx, sessionId))
+  const cut = baseline.cut
   if (cut === null) {
     // No cut, no page: the session has no log to read.
     return null
@@ -657,7 +829,7 @@ async function readLogPage(
     method: 'page',
     args: {
       request: {
-        address: { kind: 'session', sessionId },
+        address,
         throughSeq: cut,
         // The lower bound. Without it a page starts at the beginning of the log,
         // which for a session with any history means a conversation view made
@@ -675,6 +847,10 @@ async function readLogPage(
     cut,
     records: Array.isArray(value?.records) ? value.records : [],
     hasMore: value?.hasMore === true,
+    // The same derivation `session.stats` uses for its `context` field: the
+    // full and incremental page alike carries the occupancy and its breakdown,
+    // so a refresh the open screen actually runs keeps the figure current.
+    context: buildContextPressure(baseline.values['contextPressure'], baseline.values['contextBreakdown']),
   }
 }
 
@@ -693,6 +869,10 @@ async function readLogPage(
  * @param afterSeq - the log position the caller already holds; only records
  *   after it travel. Ignored together with `beforeSeq`, because a page paged
  *   backwards is not a page of new records.
+ * @param parentSessionId - the parent of a delegated child. Supplying it is what
+ *   makes a child's history readable at all: without it the host refuses the
+ *   read outright (`session/agent-busy`), because a child is not addressable as
+ *   a session. See {@link logAddress}.
  * @returns the page, or no records when the session is unknown.
  */
 export async function sessionMessages(
@@ -701,14 +881,15 @@ export async function sessionMessages(
   maxMessages?: number,
   beforeSeq?: number,
   afterSeq?: number,
+  parentSessionId?: string,
 ): Promise<SessionMessagesResult> {
-  const page = await readLogPage(ctx, sessionId, maxMessages, beforeSeq)
+  const page = await readLogPage(ctx, sessionId, maxMessages, beforeSeq, parentSessionId)
   if (page === null) {
-    return { sessionId, asOfSeq: null, records: [], hasMore: false }
+    return { sessionId, asOfSeq: null, records: [], hasMore: false, context: null }
   }
 
   const records = page.records
-  const summarized = summaryRecords(records)
+  const summarized = await summaryRecords(records)
   // Only what the phone does not already hold. Filtered after the summary and
   // before the budget, for the same two reasons in opposite directions: the
   // summary decides which records are worth sending at all, and an old record
@@ -729,6 +910,9 @@ export async function sessionMessages(
           return seq === null || seq > floor
         })
 
+  // Carried by the same read that named the cut, so neither the full nor the
+  // incremental refresh pays for an extra projections read: see
+  // {@link projectionValues}.
   return {
     sessionId,
     asOfSeq: page.cut,
@@ -737,6 +921,7 @@ export async function sessionMessages(
     // dropped a line later.
     records: withinBudget(fresh),
     hasMore: page.hasMore,
+    context: page.context,
   }
 }
 
@@ -762,6 +947,19 @@ export interface SessionMessagesResult {
    */
   readonly records: readonly unknown[]
   readonly hasMore: boolean
+  /**
+   * Context-window occupancy and its breakdown, as of this read.
+   *
+   * Always present: every page carries it, full and incremental both, so the
+   * figure above the composer updates with whatever refresh the screen runs
+   * rather than only with a separate `session.stats` read an incremental
+   * refresh never makes. Same derivation as `session.stats`'s `context` field
+   * (see the `buildContextPressure` call in {@link readLogPage}); `null` when
+   * the host has no `contextPressure` projection to answer from -- absent is
+   * unknown, never zero. Additive: an older client ignores the key and an older
+   * host omits it, so this needs no protocol version change.
+   */
+  readonly context: ContextPressureView | null
 }
 
 /** One compact line of a running turn's process. */
@@ -1303,14 +1501,17 @@ function cappedActivityEntries(
  * @param ctx - a context observing `ctx.typertGateway`.
  * @param sessionId - the session to inspect.
  * @param maxEntries - how many rows the client wants; capped, default 200.
+ * @param parentSessionId - the parent of a delegated child, naming the log
+ *   through its lineage. See {@link logAddress}.
  * @returns the running turn's rows, or an empty feed when nothing runs.
  */
 async function currentActivity(
   ctx: Context,
   sessionId: string,
   maxEntries: number | undefined,
+  parentSessionId: string | undefined,
 ): Promise<SessionActivityResult> {
-  const page = await readLogPage(ctx, sessionId, ACTIVITY_PAGE_MESSAGES)
+  const page = await readLogPage(ctx, sessionId, ACTIVITY_PAGE_MESSAGES, undefined, parentSessionId)
   if (page === null) {
     // No cut, no page: the session has no log to read.
     return { sessionId, asOfSeq: null, turn: null, entries: [], hasMore: false, oldestSeq: null }
@@ -1365,6 +1566,8 @@ async function currentActivity(
  * @param beforeSeq - read the page before this log position.
  * @param turn - the running turn the page belongs to.
  * @param maxEntries - how many rows the client wants; capped, default 200.
+ * @param parentSessionId - the parent of a delegated child, naming the log
+ *   through its lineage. See {@link logAddress}.
  * @returns the turn's rows in that page, oldest first.
  */
 async function olderActivity(
@@ -1373,8 +1576,9 @@ async function olderActivity(
   beforeSeq: number,
   turn: number,
   maxEntries: number | undefined,
+  parentSessionId: string | undefined,
 ): Promise<SessionActivityResult> {
-  const page = await readLogPage(ctx, sessionId, ACTIVITY_PAGE_MESSAGES, beforeSeq)
+  const page = await readLogPage(ctx, sessionId, ACTIVITY_PAGE_MESSAGES, beforeSeq, parentSessionId)
   if (page === null) {
     // The session is unknown, or has no readable log. The turn is echoed
     // because the caller named it, and `hasMore: false` is the stop it needs.
@@ -1438,6 +1642,12 @@ async function olderActivity(
  *   newest one. Requires `turn`.
  * @param turn - the running turn a backwards page belongs to. Ignored without
  *   `beforeSeq`, because a forward read names its own turn.
+ * @param parentSessionId - the parent of a delegated child. The activity read
+ *   opens the same log the same way `session.messages` does, so a child named
+ *   bare is refused with `session/agent-busy` before anything is read; the
+ *   parent is what makes a child's activity readable at all. No shipped
+ *   client polls a child's activity yet -- the parameter is the pure addition
+ *   that keeps a future poller from reintroducing the refused read.
  * @returns the running turn's rows, or an empty feed when nothing runs.
  * @throws MethodError when `beforeSeq` is given without `turn`.
  */
@@ -1447,6 +1657,7 @@ export async function sessionActivity(
   maxEntries?: number,
   beforeSeq?: number,
   turn?: number,
+  parentSessionId?: string,
 ): Promise<SessionActivityResult> {
   if (beforeSeq !== undefined) {
     // The wire refuses this pair in the other order too; here it is a caller
@@ -1454,9 +1665,9 @@ export async function sessionActivity(
     if (turn === undefined) {
       throw new MethodError('MALFORMED_FRAME', 'session.activity: a backwards page needs a turn')
     }
-    return olderActivity(ctx, sessionId, beforeSeq, turn, maxEntries)
+    return olderActivity(ctx, sessionId, beforeSeq, turn, maxEntries, parentSessionId)
   }
-  return currentActivity(ctx, sessionId, maxEntries)
+  return currentActivity(ctx, sessionId, maxEntries, parentSessionId)
 }
 
 /** A newly created or resumed session. */
@@ -1534,6 +1745,35 @@ export async function createSession(
   }
 }
 
+/** Fork only a proven completed response boundary, never a guessed latest turn. */
+export async function forkSession(
+  ctx: Context,
+  options: { sessionId: string; atSeq: number },
+): Promise<{ sessionId: string }> {
+  if (!Number.isSafeInteger(options.atSeq) || options.atSeq < 0 || options.atSeq >= Number.MAX_SAFE_INTEGER) {
+    throw new MethodError('MALFORMED_FRAME', 'The branch boundary is not a safe log position.')
+  }
+  const page = await readLogPage(ctx, options.sessionId, 1000, options.atSeq + 1)
+  const end = page?.records.map(eventOf).find((event) => event?.['seq'] === options.atSeq)
+  if (end?.['type'] !== 'turn/end') {
+    throw new MethodError('REMOTE_ERROR', 'The selected completed turn boundary could not be verified. Refresh the conversation and try again.')
+  }
+  const events = turnWindows(page?.records ?? []).get(turnOf(end))
+  if (events === undefined || branchUnavailable(events)) {
+    throw new MethodError('REMOTE_ERROR', 'This response cannot be branched: its complete closing boundary is unavailable or later tool activity or an error follows it.')
+  }
+  const value = await invokeRemote(ctx, {
+    namespace: 'session',
+    method: 'fork',
+    args: { request: { sessionId: options.sessionId, atSeq: options.atSeq } },
+    signal: AbortSignal.timeout(60_000),
+  }) as { sessionId?: unknown } | undefined
+  if (typeof value?.sessionId !== 'string' || value.sessionId === '') {
+    throw new MethodError('REMOTE_ERROR', 'session.fork returned no session id')
+  }
+  return { sessionId: value.sessionId }
+}
+
 /** Acceptance of a prompt. */
 export interface PromptResult {
   /** Always true when the call succeeds; the host rejects rather than queues silently. */
@@ -1543,7 +1783,7 @@ export interface PromptResult {
 }
 
 /** One content part of a prompt the bridge builds. */
-export type PromptPart =
+type PromptPart =
   | { readonly type: 'text'; readonly text: string }
   | {
       readonly type: 'image'
@@ -1768,8 +2008,6 @@ export async function promptSession(
     mode?: 'queue' | 'steer'
     requestId?: string
     clientTimeZone?: string
-    attachmentParts?: readonly PromptPart[]
-    signal?: AbortSignal
   },
 ): Promise<PromptResult> {
   const requestId = options.requestId ?? randomUUID()
@@ -1786,7 +2024,6 @@ export async function promptSession(
   for (const attachment of attachments) {
     content.push(await promptPart(ctx, options.sessionId, attachment))
   }
-  if (options.attachmentParts !== undefined) content.push(...options.attachmentParts)
   if (content.length === 0) {
     throw new MethodError(
       'MALFORMED_FRAME',
@@ -1806,10 +2043,7 @@ export async function promptSession(
         ...(options.clientTimeZone === undefined ? {} : { clientTimeZone: options.clientTimeZone }),
       },
     },
-    signal:
-      options.signal !== undefined
-        ? AbortSignal.any([options.signal, AbortSignal.timeout(60_000)])
-        : AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(60_000),
   })
 
   return { accepted: true, requestId }

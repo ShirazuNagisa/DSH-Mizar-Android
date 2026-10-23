@@ -15,15 +15,11 @@ import { Config, listenerBindMode } from './config.js'
 import type { Config as MizarConfig } from './config.js'
 import { registerAnswerers } from './bridge/answerers.js'
 import { DeliveryLedger } from './bridge/delivery.js'
-import { UploadStore } from './attachments/store.js'
-import { AttachmentBridge } from './attachments/bridge.js'
-import { optionalService } from './attachments/services.js'
-import { createMethodTable } from './bridge/index.js'
+import { createMethodTable, type HostRelayControl, type HostRelayState } from './bridge/index.js'
 import { InteractionBroker } from './bridge/interactions.js'
 import { listSessions, sessionStats } from './bridge/sessions.js'
 import { registerPanelApi } from './panel/api.js'
 import { createPushBinding } from './push/binding.js'
-import { MissedCompletions } from './push/missed.js'
 import { PushNotifier } from './push/notifier.js'
 import {
   anyNotifiableSessionRunning,
@@ -45,11 +41,51 @@ import { MizarListener } from './server/listener.js'
 import { RelayClient, phoneBaseURL } from './relay/client.js'
 import { sharedMountRegistry, type Mounted } from './mount.js'
 import { loadOrCreateTunnelSecret } from './relay/identity.js'
+import {
+  isSelectableRelayURL,
+  readRelayOverride,
+  writeRelayOverride,
+} from './relay/selection.js'
 import type { RelayClientState } from './relay/client.js'
 import { runSpike } from './spike.js'
 
 /** Cordis plugin name. */
 export const name = 'mizar'
+
+/**
+ * A push transport whose relay can change under the notifier.
+ *
+ * Notifications, like tunnel requests, are addressed to whichever relay this
+ * computer currently dials. The notifier and the push binding are built once
+ * around this façade, so a relay switch swaps the destination without rebuilding
+ * either of them.
+ */
+class SwitchableTransport implements PushTransport {
+  #current: PushTransport
+
+  constructor(initial: PushTransport) {
+    this.#current = initial
+  }
+
+  /** Point subsequent push calls at another relay's API. */
+  use(next: PushTransport): void {
+    this.#current = next
+  }
+
+  register(...args: Parameters<PushTransport['register']>): ReturnType<PushTransport['register']> {
+    return this.#current.register(...args)
+  }
+
+  unregister(
+    ...args: Parameters<PushTransport['unregister']>
+  ): ReturnType<PushTransport['unregister']> {
+    return this.#current.unregister(...args)
+  }
+
+  send(...args: Parameters<PushTransport['send']>): ReturnType<PushTransport['send']> {
+    return this.#current.send(...args)
+  }
+}
 
 /**
  * The two shapes the session-event observer needs, declared structurally.
@@ -94,7 +130,7 @@ const systemLocale = (() => {
  * code in place and every symptom unchanged. One line at boot turns that from a
  * guess into a fact.
  */
-const MIZAR_VERSION = '0.8.7'
+const MIZAR_VERSION = '0.8.9'
 
 /**
  * Services this plugin must observe before it activates.
@@ -254,17 +290,32 @@ async function startListener(
       ? config.relay.token
       : await loadOrCreateTunnelSecret(stateDir, report)
 
+  // Only the two public relays are addressable from a phone; a self-hosted
+  // relay keeps whatever the operator configured and does not offer `relay.set`.
+  const configuredRelayURL = config.relay.url
+  const relayIsSelectable = config.relay.enabled && isSelectableRelayURL(configuredRelayURL)
+  // The remembered choice is the account tier's last word: a paid account leaves
+  // this computer on the paid relay, a logout or expiry puts it back on the free
+  // one. A stale or unreadable file is ignored in favour of the configuration.
+  let currentRelayURL = relayIsSelectable
+    ? ((await readRelayOverride(stateDir, report)) ?? configuredRelayURL)
+    : configuredRelayURL
+  if (currentRelayURL !== configuredRelayURL) {
+    report(`relay: using the remembered ${currentRelayURL} instead of ${configuredRelayURL}`)
+  }
+
   const relayBaseURL =
-    config.relay.enabled && config.relay.url !== ''
-      ? phoneBaseURL(config.relay.url, config.relay.publicUrl)
+    config.relay.enabled && currentRelayURL !== ''
+      ? phoneBaseURL(currentRelayURL, config.relay.publicUrl)
       : null
 
   // With no relay there is nowhere to send a notification: pushing needs a
   // server that can reach Apple, and a phone that is asleep has no socket here.
-  const pushTransport: PushTransport =
+  const pushTransport = new SwitchableTransport(
     relayBaseURL === null
       ? new NoopTransport()
-      : new RelayTransport({ baseURL: relayBaseURL, token: tunnelToken, log: report })
+      : new RelayTransport({ baseURL: relayBaseURL, token: tunnelToken, log: report }),
+  )
 
   // The question a finished turn has to answer before it may take the Live
   // Activity down: is anything the phone would show still working? Read through
@@ -335,31 +386,56 @@ async function startListener(
   // listener is bound to, and the listener is created after the table.
   const holder: { current: MizarListener | null } = { current: null }
 
-  /** Completions announced to nobody, for the next client that connects. */
-  const missed = new MissedCompletions()
+  // Read by `relay.set` and `host.info`. Declared before the method table
+  // because that table closes over them; the tunnel itself is created after the
+  // listener, which is the only thing that can give it a local port.
+  let relayState: RelayClientState = { connected: false, room: null, lastError: null }
+  let relay: RelayClient | null = null
 
-  /**
-   * How long to wait after a client connects before handing it what it missed.
-   *
-   * The client's event collector starts after its own `connect()` returns, so a
-   * frame written with the welcome would be dropped on the floor. Two seconds is
-   * short enough to beat the eye and long enough to cover a slow phone.
-   */
-  const MISSED_FLUSH_DELAY_MS = 2_000
+  /** The relay facts a phone reads, including the base URL once a room exists. */
+  const relayFacts = (): HostRelayState => {
+    const baseURL =
+      config.relay.enabled && relayState.room !== null
+        ? phoneBaseURL(currentRelayURL, config.relay.publicUrl, relayState.room)
+        : null
+    return { url: currentRelayURL, room: relayState.room, baseURL }
+  }
 
-  const uploads = await UploadStore.open({
-    maxImageBytes: optionalService(ctx, 'attachments')?.imageLimits.maxImageBytes,
-    log: report,
-  })
-  const attachments = new AttachmentBridge(ctx, uploads)
-  const stopAttachments = (): void => {
-    void attachments.dispose().catch(() => report('attachment shutdown cleanup failed'))
-  }
-  signal.addEventListener('abort', stopAttachments, { once: true })
-  if (signal.aborted) {
-    await attachments.dispose()
-    signal.throwIfAborted()
-  }
+  const relayControl: HostRelayControl | undefined = relayIsSelectable
+    ? {
+        current: relayFacts,
+        async set(url: string): Promise<HostRelayState> {
+          await writeRelayOverride(stateDir, url)
+          const room = relayState.room
+          const next: HostRelayState = {
+            url,
+            room,
+            baseURL:
+              room === null ? null : phoneBaseURL(url, config.relay.publicUrl, room),
+          }
+          if (url === currentRelayURL) return next
+          report(`relay: a phone asked to move the tunnel to ${url}`)
+          // Announce before the tunnel moves: the phones whose socket survives
+          // long enough to read it can correct the address they hold, and the
+          // one that asked already has the answer frame on the way.
+          holder.current?.broadcast({
+            v: PROTOCOL_VERSION,
+            type: 'event',
+            event: 'relay.changed',
+            data: next,
+          })
+          // Answer first, move a beat later. The answer travels over the tunnel
+          // that is about to be replaced, so switching inside the handler would
+          // lose it.
+          setTimeout(() => {
+            void applyRelayURL(url).catch((error: unknown) => {
+              report(`relay: could not move to ${url} — ${describe(error)}`)
+            })
+          }, 250)
+          return next
+        },
+      }
+    : undefined
 
   const methods = createMethodTable(
     ctx,
@@ -371,12 +447,11 @@ async function startListener(
       // Read through the holder when `host.info` is answered rather than here,
       // so a rebind is reported without rebuilding the table.
       authorities: () => holder.current?.authorities ?? [],
+      relay: relayControl,
     },
     broker,
     push,
     delivery,
-    undefined,
-    attachments,
   )
 
   const listener = await MizarListener.start({
@@ -391,22 +466,6 @@ async function startListener(
     log: report,
     onSession: (session) => {
       report(`client connected: ${session.deviceName} from ${session.remote}`)
-      // A turn that ended while this phone was away is handed over here, because
-      // nothing else would ever tell it: the broadcast went to nobody, and the list
-      // poll only sees a transition it was present for. Delayed by a moment on
-      // purpose -- the client subscribes to the socket's events only once its own
-      // connect() returns, so a frame written with the welcome is dropped.
-      const flush = setTimeout(() => {
-        for (const item of missed.take()) {
-          session.send({
-            v: 1,
-            type: 'event',
-            event: 'turn.settled',
-            data: { sessionId: item.sessionId, reason: item.reason },
-          } as never)
-        }
-      }, MISSED_FLUSH_DELAY_MS)
-      flush.unref?.()
     },
     // Dropping to zero clients is the broker's fail-closed trigger: an approval
     // with nobody left to answer it must settle rather than hang the agent.
@@ -440,51 +499,70 @@ async function startListener(
   // The tunnel is started after the listener and stopped before it: the client
   // replays phone requests onto the listener's port, so it has nothing to talk
   // to until the port exists, and nothing to say once it is gone.
-  let relayState: RelayClientState = { connected: false, room: null, lastError: null }
+  //
+  // One client per relay address, because the address is constructor state.
+  // Moving between relays keeps the token, and therefore the room, so this is a
+  // redial rather than a re-pairing.
+  function createRelayClient(url: string): RelayClient {
+    return new RelayClient({
+      url,
+      token: tunnelToken,
+      localPort: listener.port,
+      log: report,
+      reconnectBaseMs: config.relay.reconnectBaseMs,
+      reconnectMaxMs: config.relay.reconnectMaxMs,
+      watchdogMs: config.relay.watchdogMs,
+      onState: (state) => {
+        const wasConnected = relayState.connected
+        relayState = state
+        if (!state.connected) return
+        if (state.room !== null && !wasConnected) {
+          const base = phoneBaseURL(url, config.relay.publicUrl, state.room)
+          if (base !== null) report(`relay: phones should pair against ${base}`)
+        }
+        // Every reconnect, not only the first. The relay holds push
+        // registrations in memory, so a relay restarted under a live tunnel
+        // comes back knowing about nobody -- and the tunnel reconnecting is
+        // exactly how this computer finds out. The roster is the durable copy.
+        if (!wasConnected) {
+          void push
+            .republish()
+            .then((count) => {
+              if (count > 0) report(`push: re-registered ${count} device(s) with the relay`)
+            })
+            .catch((error: unknown) => {
+              // Swallowing this is how push dies quietly: the relay keeps
+              // its registrations in memory, so a reconnect that failed to
+              // hand them over leaves every phone silent with nothing in
+              // the log to say why.
+              report(`push: could not re-register with the relay — ${describe(error)}`)
+            })
+        }
+      },
+    })
+  }
 
-  const relay =
-    config.relay.enabled && config.relay.url !== ''
-      ? new RelayClient({
-          url: config.relay.url,
-          token: tunnelToken,
-          localPort: listener.port,
-          log: report,
-          reconnectBaseMs: config.relay.reconnectBaseMs,
-          reconnectMaxMs: config.relay.reconnectMaxMs,
-          watchdogMs: config.relay.watchdogMs,
-          onState: (state) => {
-            const wasConnected = relayState.connected
-            relayState = state
-            if (!state.connected) return
-            if (state.room !== null && !wasConnected) {
-              const base = phoneBaseURL(config.relay.url, config.relay.publicUrl, state.room)
-              if (base !== null) report(`relay: phones should pair against ${base}`)
-            }
-            // Every reconnect, not only the first. The relay holds push
-            // registrations in memory, so a relay restarted under a live tunnel
-            // comes back knowing about nobody -- and the tunnel reconnecting is
-            // exactly how this computer finds out. The roster is the durable copy.
-            if (!wasConnected) {
-              void push
-                .republish()
-                .then((count) => {
-                  if (count > 0) report(`push: re-registered ${count} device(s) with the relay`)
-                })
-                .catch((error: unknown) => {
-                  // Swallowing this is how push dies quietly: the relay keeps
-                  // its registrations in memory, so a reconnect that failed to
-                  // hand them over leaves every phone silent with nothing in
-                  // the log to say why.
-                  report(`push: could not re-register with the relay — ${describe(error)}`)
-                })
-            }
-          },
-        })
-      : null
-  if (config.relay.enabled && relay === null) {
+  /** Apply a relay choice: retarget push, then redial the tunnel. */
+  async function applyRelayURL(url: string): Promise<void> {
+    const base = phoneBaseURL(url, config.relay.publicUrl)
+    pushTransport.use(
+      base === null
+        ? new NoopTransport()
+        : new RelayTransport({ baseURL: base, token: tunnelToken, log: report }),
+    )
+    relay?.stop()
+    relay = null
+    currentRelayURL = url
+    relay = createRelayClient(url)
+    relay.start()
+  }
+
+  if (config.relay.enabled && currentRelayURL !== '') {
+    relay = createRelayClient(currentRelayURL)
+    relay.start()
+  } else if (config.relay.enabled) {
     report('relay: enabled but no url is configured — not connecting')
   }
-  relay?.start()
 
   // Panel routes ride DSH's own authenticated /api channel; a composition with
   // no browser carrier simply gets no panel and keeps everything else.
@@ -544,7 +622,7 @@ async function startListener(
       },
       get pairBaseURL() {
         if (relayState.room === null) return null
-        return phoneBaseURL(config.relay.url, config.relay.publicUrl, relayState.room)
+        return phoneBaseURL(currentRelayURL, config.relay.publicUrl, relayState.room)
       },
     },
     log: report,
@@ -577,25 +655,13 @@ async function startListener(
       // Google services cannot receive at all, so the same moment goes out as an event:
       // a connected client hears it immediately instead of polling the list and losing
       // whichever transition happened while it was away.
-      const frame = {
+      holder.current?.broadcast({
         v: 1,
         type: 'event',
         event: 'turn.settled',
         data: { sessionId: session.id, reason: kind },
-      } as never
-      holder.current?.broadcast(frame)
-      // Nobody was listening. Keep it for the next phone that connects: a turn that
-      // starts and ends inside one outage leaves no other trace, because the list a
-      // client polls never saw the session running.
-      if ((holder.current?.clientCount ?? 0) === 0) {
-        missed.remember({ sessionId: session.id, reason: kind, at: Date.now() })
-      }
+      } as never)
       return
-    }
-    if (event.type === 'turn/start') {
-      // A new turn supersedes any completion still waiting for a phone: announcing
-      // the previous one would describe work that has already been built on.
-      missed.forget(session.id)
     }
     // A continuation that starts before the quiet period runs out cancels the
     // announcement it was about to earn, which is what keeps one instruction
@@ -698,8 +764,6 @@ export function apply(ctx: Context, config: MizarConfig): void {
       try {
         next = await startListener(ctx, config, controller.signal)
       } catch (error) {
-        // Tear down attachment staging even when the listener never bound a port.
-        controller.abort()
         report(`listener failed to start — ${describe(error)}`)
         return null
       }

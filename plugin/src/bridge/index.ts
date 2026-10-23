@@ -12,10 +12,10 @@
  * @module dsh-mizar/bridge
  */
 import { join } from 'node:path'
-import type { AttachmentBridge } from '../attachments/bridge.js'
 import type { Context } from '../dsh.js'
 import { isLiveActivityToken } from '../auth/devices.js'
 import { deliverQuestionAnswers } from './answerers.js'
+import { accountBalance } from './balance.js'
 import type { DeliveryLedger } from './delivery.js'
 import { toMethodError } from './errors.js'
 import {
@@ -32,6 +32,7 @@ import { archiveSession, listWorkspaces } from './workspaces.js'
 import {
   cancelSession,
   createSession,
+  forkSession,
   listSessions,
   promptSession,
   renameSession,
@@ -39,7 +40,8 @@ import {
   sessionMessages,
   sessionStats,
 } from './sessions.js'
-import { parseUploadBegin, parseUploadChunk, UploadStore } from './uploads.js'
+import { parseUploadBegin, parseUploadChunk, PromptReplayGuard, UploadStore } from './uploads.js'
+import { canonicalRelayURL, isSelectableRelayURL } from '../relay/selection.js'
 
 /** Per-connection facts handed to a method. */
 export interface MethodContext {
@@ -53,6 +55,29 @@ export interface MethodContext {
 
 /** A wire method implementation. */
 export type MethodHandler = (payload: unknown, context: MethodContext) => Promise<unknown>
+
+/**
+ * Where this computer's tunnel currently points, as a phone reads it.
+ *
+ * `baseURL` is the address a phone should dial for this room (the relay origin
+ * plus `/r/<room>`), and is `null` until the relay has assigned a room.
+ */
+export interface HostRelayState {
+  /** The canonical relay origin the tunnel dials. */
+  readonly url: string
+  /** The room the relay assigned, once connected. */
+  readonly room: string | null
+  /** The base URL a phone should dial, or `null` before the first welcome. */
+  readonly baseURL: string | null
+}
+
+/** Move this computer's tunnel between the public relays, or report where it is. */
+export interface HostRelayControl {
+  /** Read the current relay facts. */
+  current(): HostRelayState
+  /** Remember and apply a new relay; the caller has already checked the allowlist. */
+  set(url: string): Promise<HostRelayState>
+}
 
 /** What the bridge needs from its host to answer `host.info`. */
 export interface HostFacts {
@@ -75,6 +100,15 @@ export interface HostFacts {
    * the second justifies a phone giving up on the direct route.
    */
   readonly authorities?: () => readonly string[]
+
+  /**
+   * Relay control, when this host may be moved between the two public relays.
+   *
+   * Absent for a self-hosted relay: there is no account tier to move between,
+   * so `relay.set` is not in the method table and an old-style host answers
+   * `NOT_IMPLEMENTED` exactly as it would for any other method it does not know.
+   */
+  readonly relay?: HostRelayControl
 }
 
 /**
@@ -379,26 +413,21 @@ export function createMethodTable(
   broker: InteractionBroker,
   push?: PushBinding,
   delivery?: DeliveryLedger,
-  uploadsOrAttachments?: UploadStore | AttachmentBridge,
-  attachments?: AttachmentBridge,
+  uploads?: UploadStore,
 ): Record<string, MethodHandler> {
-  // The attachment extension predates the upload store and used to be passed in
-  // the sixth slot; tests written against that shape still do. Accept either.
-  const attachmentBridge =
-    attachments ??
-    (uploadsOrAttachments !== undefined && typeof (uploadsOrAttachments as AttachmentBridge).capabilities === 'function'
-      ? (uploadsOrAttachments as AttachmentBridge)
-      : undefined)
-  const attachmentService = (): AttachmentBridge => {
-    if (!attachmentBridge) throw new MethodError('NOT_IMPLEMENTED', 'install the attachment-enabled host plugin')
-    return attachmentBridge
-  }
   const uploadStore =
-    (uploadsOrAttachments instanceof UploadStore ? uploadsOrAttachments : undefined) ??
+    uploads ??
     new UploadStore({
       root: join(facts.home, 'uploads'),
       attachmentsRoot: join(facts.home, 'attachments'),
     })
+  // A prompt that carries attachments is retried with the same requestId when
+  // its answer is lost. That is safe only while the request is identical: DSH
+  // deduplicates by (session, requestId), so the same key with different
+  // content must be refused before it can borrow the first answer. Ported
+  // from XEPX2's PR #2.
+  const replayGuard = new PromptReplayGuard()
+  const relay = facts.relay
 
   const table: Record<string, MethodHandler> = {
     /**
@@ -417,8 +446,41 @@ export function createMethodTable(
       hostName: facts.hostName,
       home: facts.home,
       protocolVersion: facts.protocolVersion,
+      plugin: { id: 'dsh-mizar', capabilities: ['deepseek.balance.v1'] },
       ...(facts.authorities === undefined ? {} : { addresses: facts.authorities() }),
+      ...(relay === undefined ? {} : { relay: relay.current() }),
     }),
+
+    /** Native official-account wallets; no account grant or identity leaves the host. */
+    'account.balance': async (payload) => accountBalance(ctx, payload),
+
+    /**
+     * Move this computer's tunnel to the free or the paid relay.
+     *
+     * The phone asks because only the phone knows the account tier; the host
+     * owns the allowlist and the persistence so a paired device cannot point
+     * this computer's tunnel at an arbitrary server. The tunnel credential is
+     * unchanged, so the room is unchanged and every existing pairing survives;
+     * what changes is the address a phone dials, and the answer carries it.
+     *
+     * Additive, so no protocol version bump: an old host answers
+     * `NOT_IMPLEMENTED`, which is how the app knows to keep its current relay.
+     */
+    ...(relay === undefined
+      ? {}
+      : {
+          'relay.set': async (payload: unknown) => {
+            const requested = requireString(payload, 'url', 'relay.set')
+            const canonical = canonicalRelayURL(requested)
+            if (canonical === null || !isSelectableRelayURL(canonical)) {
+              throw new MethodError(
+                'MALFORMED_FRAME',
+                'relay.set: payload."url" must be the free or the paid relay',
+              )
+            }
+            return relay.set(canonical)
+          },
+        }),
 
     /** Every session DSH would list, newest activity first. */
     'session.list': async () => listSessions(ctx),
@@ -464,6 +526,11 @@ export function createMethodTable(
       const before = fields?.['beforeSeq']
       const after = fields?.['afterSeq']
       const sessionId = requireString(payload, 'sessionId', 'session.messages')
+      // A delegated child is not addressable as a session: the host refuses the
+      // read with `session/agent-busy` unless the child is named through its
+      // parent. The phone knows the lineage from `session.list` and sends it
+      // back here, so the address can be rebuilt on the way in.
+      const parentSessionId = optionalString(payload, 'parentSessionId')
       const explicit = typeof after === 'number' && Number.isFinite(after) ? after : undefined
       // `null` is the phone saying it holds nothing -- a reinstall, a cleared
       // cache. Silence is not that claim: it is a request with no cursor, which
@@ -479,6 +546,7 @@ export function createMethodTable(
         typeof limit === 'number' ? limit : undefined,
         typeof before === 'number' ? before : undefined,
         explicit ?? remembered,
+        parentSessionId,
       )
     },
 
@@ -530,6 +598,19 @@ export function createMethodTable(
       })
     },
 
+    /** Fork the exact completed-turn prefix selected by the phone. */
+    'session.fork': async (payload) => {
+      const args = requireObject(payload, 'session.fork')
+      const atSeq = args['atSeq']
+      if (typeof atSeq !== 'number' || !Number.isSafeInteger(atSeq) || atSeq < 0) {
+        throw new MethodError('MALFORMED_FRAME', 'session.fork: payload."atSeq" must be a non-negative safe integer')
+      }
+      return forkSession(ctx, {
+        sessionId: requireString(payload, 'sessionId', 'session.fork'),
+        atSeq,
+      })
+    },
+
     /**
      * Send a prompt. The client should reuse one `requestId` across retries:
      * the host treats it as an idempotency key and will not insert the same
@@ -540,9 +621,6 @@ export function createMethodTable(
      * connection's device and this session before anything is read.
      */
     'session.prompt': async (payload, context) => {
-      if (optionalObject(payload, 'session.prompt')['attachments'] !== undefined) {
-        return attachmentService().prompt(context.deviceId, payload, readMode(payload))
-      }
       const sessionId = requireString(payload, 'sessionId', 'session.prompt')
       const text = readPromptText(payload)
       const attachmentIds = readAttachmentIds(payload)
@@ -553,6 +631,15 @@ export function createMethodTable(
           'session.prompt: payload."text" must be a non-empty string when no attachments are given',
         )
       }
+      const requestId = optionalString(payload, 'requestId')
+      if (attachmentIds.length > 0 && requestId !== undefined) {
+        replayGuard.check(context.deviceId, sessionId, requestId, {
+          text,
+          mode,
+          clientTimeZone: optionalString(payload, 'clientTimeZone'),
+          attachmentIds,
+        })
+      }
       const attachments =
         attachmentIds.length === 0
           ? []
@@ -562,16 +649,10 @@ export function createMethodTable(
         ...(text === undefined ? {} : { text }),
         ...(attachments.length === 0 ? {} : { attachments }),
         mode,
-        requestId: optionalString(payload, 'requestId'),
+        requestId,
         clientTimeZone: optionalString(payload, 'clientTimeZone'),
       })
     },
-
-    'attachment.capabilities': async () => attachmentService().capabilities(),
-    'attachment.begin': async (payload, context) => attachmentService().begin(context.deviceId, payload),
-    'attachment.chunk': async (payload, context) => attachmentService().uploads.chunk(context.deviceId, payload),
-    'attachment.finish': async (payload, context) => attachmentService().uploads.finish(context.deviceId, payload),
-    'attachment.abort': async (payload, context) => attachmentService().uploads.abort(context.deviceId, payload),
 
     /**
      * Start an attachment upload.
@@ -599,6 +680,15 @@ export function createMethodTable(
     /** Discard a half-sent upload and its bytes. */
     'upload.abort': async (payload, context) =>
       uploadStore.abort(context.deviceId, requireString(payload, 'uploadId', 'upload.abort')),
+
+    /**
+     * The attachment limits as this host enforces them.
+     *
+     * Additive and optional: a client may hardcode the documented numbers and
+     * never call this, but one that asks first survives a host that tunes
+     * them. Ported from XEPX2's PR #2.
+     */
+    'upload.capabilities': async () => uploadStore.capabilities(),
 
     /** Interrupt the running turn. */
     'session.cancel': async (payload) =>

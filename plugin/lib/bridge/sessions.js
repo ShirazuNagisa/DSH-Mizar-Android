@@ -37,7 +37,7 @@ import { readFile } from 'node:fs/promises';
 import { recordSeq } from './delivery.js';
 import { invokeRemote, streamRemote } from './invoke.js';
 import { MethodError } from './method-error.js';
-import { buildStatsFrame, STATS_KEYS } from './stats.js';
+import { buildContextPressure, buildStatsFrame, STATS_KEYS } from './stats.js';
 import { enforcePromptLimits, filePartName } from './uploads.js';
 import { archivedSessionIds, resolveWorkspaceId } from './workspaces.js';
 /** The projection key set requested for one session. */
@@ -261,53 +261,70 @@ function assistantText(event) {
         .join('\n');
     return text === '' ? null : text;
 }
-/**
- * Narrow a page to what a conversation screen actually draws.
- *
- * The host returns the whole log window -- ten to twenty records for every
- * message a person would recognise -- and almost none of it survives the trip.
- * Measured over the 47 session logs in a dev home, the full log of a session is
- * 1323 KB and its summary is 66 KB; for the largest of them, 65 KB of records
- * narrow to 10 KB. Since reading a page *is* reading the durable log and folding
- * every projection over it (see {@link sessionMessages}), the host pays for all
- * of it and the phone pays again in relay bandwidth.
- *
- * What is kept is what survives being read rather than scrolled:
- *
- *   - `turn/start` and `turn/end`, which are how a turn is timed, whether it is
- *     still running, and why it stopped -- a monitoring app's whole subject.
- *   - `step/start`, the only remaining signal of how much work a turn did. It is
- *     about 100 bytes, and it stands in for the narration, the tool calls and
- *     the attempts that used to carry the same information at a hundred times
- *     the size. `step/end` is not kept: it says nothing the start did not.
- *   - `user/message` a person wrote. DSH sends its own injected context through
- *     the same event, so {@link isInjectedContext} drops the two kinds that are
- *     not anybody's words.
- *   - **one** `assistant/message` per turn that **ended inside this page** -- the
- *     last one with readable text. That is the model's summary of the turn, and
- *     the per-step narration around it is not: the app draws one bubble per
- *     turn, so the earlier messages were downloaded and then discarded.
- *
- * A turn with no `turn/end` in the page gets no assistant message at all. That
- * covers two cases that look the same from here and want the same answer: a turn
- * still running, whose partial answer is not a summary of anything, and the turn
- * the page was cut through, whose end is in the next page back. Both are
- * re-read from a later page once they finish, and neither is worth the largest
- * thing on the wire to show half of.
- *
- * Everything else goes: `assistant/attempt`, `tool/call`, `tool/result`,
- * `system/message`, `request/header`, `request/context`, the inbox splices, and
- * every other assistant message. The set is an allowlist rather than a blocklist
- * because the alternative is the behaviour this replaces -- an unrecognised
- * event type adding weight to every page forever.
- *
- * The order of the records is the log's, and every kept record is one the host
- * sent: this decides what travels, not what it means.
- *
- * @param records - one page, oldest first, exactly as the gateway returned it.
- * @returns the records worth sending.
- */
-function summaryRecords(records) {
+let usageFold;
+function loadUsageFold() {
+    // Local published bundle: missing/broken accounting never breaks session reads.
+    return usageFold ??= import('./turn-usage-fold.js').then((module) => module.deriveTurnTokenUsage).catch(() => undefined);
+}
+/** Keep only complete contiguous turn-local windows; never sum a paged fragment. */
+function turnWindows(records) {
+    const windows = new Map();
+    let current = [];
+    let turn;
+    let previous;
+    for (const record of records) {
+        const event = eventOf(record);
+        if (event === null)
+            continue;
+        const seq = event['seq'];
+        if (event['type'] === 'turn/start') {
+            current = [];
+            turn = turnOf(event);
+            previous = undefined;
+        }
+        if (turn === undefined)
+            continue;
+        if (typeof seq !== 'number' || !Number.isSafeInteger(seq) || (previous !== undefined && seq !== previous + 1)) {
+            current = [];
+            turn = undefined;
+            previous = undefined;
+            continue;
+        }
+        current.push(event);
+        previous = seq;
+        if (event['type'] === 'turn/end') {
+            if (turnOf(event) === turn)
+                windows.set(turn, current);
+            current = [];
+            turn = undefined;
+            previous = undefined;
+        }
+    }
+    return windows;
+}
+/** Desktop tail rule: the last text must also be the last transcript content. */
+function branchUnavailable(events) {
+    let closing;
+    let latest;
+    for (const event of events) {
+        const seq = event['seq'];
+        if (typeof seq !== 'number')
+            continue;
+        const type = event['type'];
+        if (type === 'assistant/message') {
+            latest = seq;
+            if (assistantText(event) !== null)
+                closing = seq;
+        }
+        else if (type === 'tool/call' || (type === 'tool/result' && event['surfaceOp'] === 'append') || type === 'llm/retry'
+            || (type === 'turn/end' && event['data']?.reason?.kind === 'error'))
+            latest = seq;
+    }
+    return closing === undefined || latest !== closing;
+}
+async function summaryRecords(records) {
+    const derive = await loadUsageFold();
+    const windows = turnWindows(records);
     /** Assistant messages that are their turn's last word, and have one. */
     const summaries = new Set();
     const ended = new Set();
@@ -352,6 +369,28 @@ function summaryRecords(records) {
         // is appended. See {@link withAttachmentPlaceholders}.
         .map((record) => {
         const event = eventOf(record);
+        if (event?.['type'] === 'turn/end') {
+            const events = windows.get(turnOf(event));
+            // A partial page cannot establish branch safety either. Re-reading a
+            // complete turn may upgrade this metadata, but never invents usage.
+            let usage;
+            try {
+                usage = events === undefined ? undefined : derive?.(events);
+            }
+            catch {
+                usage = undefined;
+            }
+            const enriched = {
+                ...event,
+                data: {
+                    ...event['data'],
+                    ...(events === undefined ? {} : { mizarBranchUnavailable: branchUnavailable(events) }),
+                    ...(usage === undefined ? {} : { mizarTokenUsage: usage }),
+                },
+            };
+            return typeof record.event === 'object'
+                ? { ...record, event: enriched } : enriched;
+        }
         return event?.['type'] === 'user/message' ? withAttachmentPlaceholders(record, event) : record;
     });
 }
@@ -458,6 +497,19 @@ function turnOf(event) {
  */
 const FOLLOW_TIMEOUT_MS = 30_000;
 /**
+ * Address one session's log, as a child when its parent is known.
+ *
+ * @param sessionId - the session whose log is being read.
+ * @param parentSessionId - the parent of a delegated child, or absent for an
+ *   ordinary conversation (and for a fork, which is a session of its own).
+ * @returns the address to send.
+ */
+function logAddress(sessionId, parentSessionId) {
+    return parentSessionId === undefined
+        ? { kind: 'session', sessionId }
+        : { kind: 'subagent', parentSessionId, childSessionId: sessionId, mode: 'unknown' };
+}
+/**
  * The log cut, from the opening frame of `session/follow`.
  *
  * **Why the stream, and not the projection read it replaces.** `throughSeq` is
@@ -484,18 +536,22 @@ const FOLLOW_TIMEOUT_MS = 30_000;
  * session live for as long as the request, and one subscription per refresh is a
  * leak that only shows up after an hour of use.
  *
+ * The same frame also carries the projection baseline, which is where
+ * {@link readLogPage} gets the page's context figure. It is the read a page
+ * already pays for; the context figure costs no second one.
+ *
  * @param ctx - a context observing `ctx.typertGateway`.
- * @param sessionId - the session to open.
- * @returns the cursor, or `null` when the host would not answer this way.
+ * @param address - the durable address to open; see {@link logAddress}.
+ * @returns the opening frame, or `null` when the host would not answer this way.
  */
-async function followCursor(ctx, sessionId) {
+async function followOpening(ctx, address) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FOLLOW_TIMEOUT_MS);
     try {
         const iterable = await streamRemote(ctx, {
             namespace: 'session',
             method: 'follow',
-            args: { request: { address: { kind: 'session', sessionId } } },
+            args: { request: { address } },
             signal: controller.signal,
         });
         const iterator = iterable[Symbol.asyncIterator]();
@@ -507,7 +563,12 @@ async function followCursor(ctx, sessionId) {
             // how half a turn ends up on the screen.
             if (frame === undefined || frame.type !== 'snapshot')
                 return null;
-            return typeof frame.cursor === 'number' && Number.isFinite(frame.cursor) ? frame.cursor : null;
+            if (typeof frame.cursor !== 'number' || !Number.isFinite(frame.cursor))
+                return null;
+            // The same frame carries the projection baseline, which is where the
+            // page's context figure comes from -- no second read. See
+            // {@link projectionValues}.
+            return { cut: frame.cursor, values: projectionValues(frame.projections) };
         }
         finally {
             // Closes the stream. Without it the subscription outlives the request.
@@ -541,7 +602,27 @@ async function followCursor(ctx, sessionId) {
  */
 const READ_TIMEOUT_MS = 30_000;
 /**
- * The log cut, from a `session/projections` read.
+ * Projection values from a baseline-shaped object, or an empty set.
+ *
+ * Both reads that can name the cut -- the follow opening frame and the
+ * `session/projections` fallback -- carry the projection baseline. The page
+ * derives the context figure from those values rather than paying for another
+ * projections read on every refresh, which is the read this file already
+ * refuses to make when the stream answers. A host that sends no baseline (or
+ * an older one without the context projections) yields no values, and with
+ * them no context figure: unknown, never zero.
+ *
+ * @param value - a projection baseline, or anything else.
+ * @returns its `values` object, or an empty record.
+ */
+function projectionValues(value) {
+    const values = value?.values;
+    return typeof values === 'object' && values !== null
+        ? values
+        : {};
+}
+/**
+ * The log cut and projection values, from a `session/projections` read.
  *
  * The fallback, for a host that cannot open a follow stream -- older than the
  * endpoint, or composed without a stream carrier -- and for a first frame that
@@ -551,16 +632,19 @@ const READ_TIMEOUT_MS = 30_000;
  *
  * @param ctx - a context observing `ctx.typertGateway`.
  * @param sessionId - the session to read.
- * @returns the cut, or `null` when the session is unknown.
+ * @returns the cut (or `null` when the session is unknown) and its values.
  */
-async function projectionsCut(ctx, sessionId) {
+async function projectionsAt(ctx, sessionId) {
     const value = (await invokeRemote(ctx, {
         namespace: 'session',
         method: 'projections',
         args: { request: { sessionId } },
         signal: AbortSignal.timeout(READ_TIMEOUT_MS),
     }));
-    return typeof value?.asOfSeq === 'number' && Number.isFinite(value.asOfSeq) ? value.asOfSeq : null;
+    return {
+        cut: typeof value?.asOfSeq === 'number' && Number.isFinite(value.asOfSeq) ? value.asOfSeq : null,
+        values: projectionValues(value),
+    };
 }
 /**
  * Read the current tail page of a session's raw log.
@@ -573,9 +657,12 @@ async function projectionsCut(ctx, sessionId) {
  * spans a long tool run still returns the requests around it rather than a
  * window of deltas.
  *
- * The cut comes from {@link followCursor}, and from {@link projectionsCut} when
+ * The cut comes from {@link followOpening}, and from {@link projectionsAt} when
  * that cannot answer. Works for a cold session: neither read activates an agent,
- * which was measured for the follow path before it was adopted here.
+ * which was measured for the follow path before it was adopted here. Both reads
+ * already carry the projection baseline, which is where the page's
+ * {@link LogPage.context} comes from -- the page does not make a second
+ * projections read for it.
  *
  * Shared by {@link sessionMessages} and {@link sessionActivity}: both start from
  * exactly the same current page, and only differ in what they keep from it.
@@ -584,10 +671,14 @@ async function projectionsCut(ctx, sessionId) {
  * @param sessionId - the session to read.
  * @param maxMessages - how many messages to ask for; absent uses the host default.
  * @param beforeSeq - the exclusive upper bound, for paging backwards.
+ * @param parentSessionId - the parent of a delegated child; absent reads the
+ *   session as a session. See {@link logAddress}.
  * @returns the page, or `null` when the session has no log to read.
  */
-async function readLogPage(ctx, sessionId, maxMessages, beforeSeq) {
-    const cut = (await followCursor(ctx, sessionId)) ?? (await projectionsCut(ctx, sessionId));
+async function readLogPage(ctx, sessionId, maxMessages, beforeSeq, parentSessionId) {
+    const address = logAddress(sessionId, parentSessionId);
+    const baseline = (await followOpening(ctx, address)) ?? (await projectionsAt(ctx, sessionId));
+    const cut = baseline.cut;
     if (cut === null) {
         // No cut, no page: the session has no log to read.
         return null;
@@ -597,7 +688,7 @@ async function readLogPage(ctx, sessionId, maxMessages, beforeSeq) {
         method: 'page',
         args: {
             request: {
-                address: { kind: 'session', sessionId },
+                address,
                 throughSeq: cut,
                 // The lower bound. Without it a page starts at the beginning of the log,
                 // which for a session with any history means a conversation view made
@@ -614,6 +705,10 @@ async function readLogPage(ctx, sessionId, maxMessages, beforeSeq) {
         cut,
         records: Array.isArray(value?.records) ? value.records : [],
         hasMore: value?.hasMore === true,
+        // The same derivation `session.stats` uses for its `context` field: the
+        // full and incremental page alike carries the occupancy and its breakdown,
+        // so a refresh the open screen actually runs keeps the figure current.
+        context: buildContextPressure(baseline.values['contextPressure'], baseline.values['contextBreakdown']),
     };
 }
 /**
@@ -631,15 +726,19 @@ async function readLogPage(ctx, sessionId, maxMessages, beforeSeq) {
  * @param afterSeq - the log position the caller already holds; only records
  *   after it travel. Ignored together with `beforeSeq`, because a page paged
  *   backwards is not a page of new records.
+ * @param parentSessionId - the parent of a delegated child. Supplying it is what
+ *   makes a child's history readable at all: without it the host refuses the
+ *   read outright (`session/agent-busy`), because a child is not addressable as
+ *   a session. See {@link logAddress}.
  * @returns the page, or no records when the session is unknown.
  */
-export async function sessionMessages(ctx, sessionId, maxMessages, beforeSeq, afterSeq) {
-    const page = await readLogPage(ctx, sessionId, maxMessages, beforeSeq);
+export async function sessionMessages(ctx, sessionId, maxMessages, beforeSeq, afterSeq, parentSessionId) {
+    const page = await readLogPage(ctx, sessionId, maxMessages, beforeSeq, parentSessionId);
     if (page === null) {
-        return { sessionId, asOfSeq: null, records: [], hasMore: false };
+        return { sessionId, asOfSeq: null, records: [], hasMore: false, context: null };
     }
     const records = page.records;
-    const summarized = summaryRecords(records);
+    const summarized = await summaryRecords(records);
     // Only what the phone does not already hold. Filtered after the summary and
     // before the budget, for the same two reasons in opposite directions: the
     // summary decides which records are worth sending at all, and an old record
@@ -658,6 +757,9 @@ export async function sessionMessages(ctx, sessionId, maxMessages, beforeSeq, af
             // numbering, and phones merge by identity anyway.
             return seq === null || seq > floor;
         });
+    // Carried by the same read that named the cut, so neither the full nor the
+    // incremental refresh pays for an extra projections read: see
+    // {@link projectionValues}.
     return {
         sessionId,
         asOfSeq: page.cut,
@@ -666,6 +768,7 @@ export async function sessionMessages(ctx, sessionId, maxMessages, beforeSeq, af
         // dropped a line later.
         records: withinBudget(fresh),
         hasMore: page.hasMore,
+        context: page.context,
     };
 }
 /** How many entries `session.activity` returns unless the client asks for fewer. */
@@ -1154,10 +1257,12 @@ function cappedActivityEntries(entries, maxEntries) {
  * @param ctx - a context observing `ctx.typertGateway`.
  * @param sessionId - the session to inspect.
  * @param maxEntries - how many rows the client wants; capped, default 200.
+ * @param parentSessionId - the parent of a delegated child, naming the log
+ *   through its lineage. See {@link logAddress}.
  * @returns the running turn's rows, or an empty feed when nothing runs.
  */
-async function currentActivity(ctx, sessionId, maxEntries) {
-    const page = await readLogPage(ctx, sessionId, ACTIVITY_PAGE_MESSAGES);
+async function currentActivity(ctx, sessionId, maxEntries, parentSessionId) {
+    const page = await readLogPage(ctx, sessionId, ACTIVITY_PAGE_MESSAGES, undefined, parentSessionId);
     if (page === null) {
         // No cut, no page: the session has no log to read.
         return { sessionId, asOfSeq: null, turn: null, entries: [], hasMore: false, oldestSeq: null };
@@ -1210,10 +1315,12 @@ async function currentActivity(ctx, sessionId, maxEntries) {
  * @param beforeSeq - read the page before this log position.
  * @param turn - the running turn the page belongs to.
  * @param maxEntries - how many rows the client wants; capped, default 200.
+ * @param parentSessionId - the parent of a delegated child, naming the log
+ *   through its lineage. See {@link logAddress}.
  * @returns the turn's rows in that page, oldest first.
  */
-async function olderActivity(ctx, sessionId, beforeSeq, turn, maxEntries) {
-    const page = await readLogPage(ctx, sessionId, ACTIVITY_PAGE_MESSAGES, beforeSeq);
+async function olderActivity(ctx, sessionId, beforeSeq, turn, maxEntries, parentSessionId) {
+    const page = await readLogPage(ctx, sessionId, ACTIVITY_PAGE_MESSAGES, beforeSeq, parentSessionId);
     if (page === null) {
         // The session is unknown, or has no readable log. The turn is echoed
         // because the caller named it, and `hasMore: false` is the stop it needs.
@@ -1275,19 +1382,25 @@ async function olderActivity(ctx, sessionId, beforeSeq, turn, maxEntries) {
  *   newest one. Requires `turn`.
  * @param turn - the running turn a backwards page belongs to. Ignored without
  *   `beforeSeq`, because a forward read names its own turn.
+ * @param parentSessionId - the parent of a delegated child. The activity read
+ *   opens the same log the same way `session.messages` does, so a child named
+ *   bare is refused with `session/agent-busy` before anything is read; the
+ *   parent is what makes a child's activity readable at all. No shipped
+ *   client polls a child's activity yet -- the parameter is the pure addition
+ *   that keeps a future poller from reintroducing the refused read.
  * @returns the running turn's rows, or an empty feed when nothing runs.
  * @throws MethodError when `beforeSeq` is given without `turn`.
  */
-export async function sessionActivity(ctx, sessionId, maxEntries, beforeSeq, turn) {
+export async function sessionActivity(ctx, sessionId, maxEntries, beforeSeq, turn, parentSessionId) {
     if (beforeSeq !== undefined) {
         // The wire refuses this pair in the other order too; here it is a caller
         // contract, and guessing a turn would append another turn's rows to a feed.
         if (turn === undefined) {
             throw new MethodError('MALFORMED_FRAME', 'session.activity: a backwards page needs a turn');
         }
-        return olderActivity(ctx, sessionId, beforeSeq, turn, maxEntries);
+        return olderActivity(ctx, sessionId, beforeSeq, turn, maxEntries, parentSessionId);
     }
-    return currentActivity(ctx, sessionId, maxEntries);
+    return currentActivity(ctx, sessionId, maxEntries, parentSessionId);
 }
 /**
  * Create a session, or adopt/resume one when an id is supplied.
@@ -1344,6 +1457,31 @@ export async function createSession(ctx, options) {
         sessionId: value.sessionId,
         agentPreset: typeof value.agentPreset === 'string' ? value.agentPreset : null,
     };
+}
+/** Fork only a proven completed response boundary, never a guessed latest turn. */
+export async function forkSession(ctx, options) {
+    if (!Number.isSafeInteger(options.atSeq) || options.atSeq < 0 || options.atSeq >= Number.MAX_SAFE_INTEGER) {
+        throw new MethodError('MALFORMED_FRAME', 'The branch boundary is not a safe log position.');
+    }
+    const page = await readLogPage(ctx, options.sessionId, 1000, options.atSeq + 1);
+    const end = page?.records.map(eventOf).find((event) => event?.['seq'] === options.atSeq);
+    if (end?.['type'] !== 'turn/end') {
+        throw new MethodError('REMOTE_ERROR', 'The selected completed turn boundary could not be verified. Refresh the conversation and try again.');
+    }
+    const events = turnWindows(page?.records ?? []).get(turnOf(end));
+    if (events === undefined || branchUnavailable(events)) {
+        throw new MethodError('REMOTE_ERROR', 'This response cannot be branched: its complete closing boundary is unavailable or later tool activity or an error follows it.');
+    }
+    const value = await invokeRemote(ctx, {
+        namespace: 'session',
+        method: 'fork',
+        args: { request: { sessionId: options.sessionId, atSeq: options.atSeq } },
+        signal: AbortSignal.timeout(60_000),
+    });
+    if (typeof value?.sessionId !== 'string' || value.sessionId === '') {
+        throw new MethodError('REMOTE_ERROR', 'session.fork returned no session id');
+    }
+    return { sessionId: value.sessionId };
 }
 /** How long staging one file with the host may take. */
 const FILE_STAGE_TIMEOUT_MS = 60_000;
@@ -1523,8 +1661,6 @@ export async function promptSession(ctx, options) {
     for (const attachment of attachments) {
         content.push(await promptPart(ctx, options.sessionId, attachment));
     }
-    if (options.attachmentParts !== undefined)
-        content.push(...options.attachmentParts);
     if (content.length === 0) {
         throw new MethodError('MALFORMED_FRAME', 'session.prompt: a prompt needs text or at least one attachment');
     }
@@ -1540,9 +1676,7 @@ export async function promptSession(ctx, options) {
                 ...(options.clientTimeZone === undefined ? {} : { clientTimeZone: options.clientTimeZone }),
             },
         },
-        signal: options.signal !== undefined
-            ? AbortSignal.any([options.signal, AbortSignal.timeout(60_000)])
-            : AbortSignal.timeout(60_000),
+        signal: AbortSignal.timeout(60_000),
     });
     return { accepted: true, requestId };
 }

@@ -17,7 +17,7 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '../src/dsh.js'
-import { sessionActivity, sessionMessages } from '../src/bridge/sessions.js'
+import { forkSession, sessionActivity, sessionMessages } from '../src/bridge/sessions.js'
 
 /** One gateway invocation as the bridge issues it. */
 interface Invocation {
@@ -95,6 +95,7 @@ function fakeGateway(script: Script = {}): { ctx: Context; wire: Wire; closed: (
       if (request.method === 'projections') {
         return script.projections === undefined ? { asOfSeq: 7, values: {} } : script.projections
       }
+      if (request.method === 'fork') return { sessionId: 'branch-child' }
       if (request.method === 'page') {
         return {
           records: script.pageRecords ?? pageRecordsOf(frames),
@@ -248,6 +249,75 @@ describe('the page cut', () => {
     // One open subscription per refresh is a leak that only shows up after an
     // hour of use.
     expect(closed()).toBe(1)
+  })
+
+  it('addresses a delegated child through its parent, on both reads', async () => {
+    // DSH refuses a child's log read with `session/agent-busy` -- "subagent
+    // Sessions require their durable parent address" -- before it touches the
+    // log, so a request that named only the child could never page it. The mode
+    // is `unknown` because the list carries lineage but not delegation mode, and
+    // the host treats `unknown` as either rather than as a mismatch.
+    const { ctx, wire } = fakeGateway({
+      frames: [{ type: 'snapshot', cursor: 9, records: [] }],
+    })
+
+    await sessionMessages(ctx, 'child-1', undefined, undefined, undefined, 'parent-1')
+
+    const child = {
+      kind: 'subagent',
+      parentSessionId: 'parent-1',
+      childSessionId: 'child-1',
+      mode: 'unknown',
+    }
+    expect(wire.streams[0]).toEqual({
+      namespace: 'session',
+      method: 'follow',
+      args: { request: { address: child } },
+    })
+    const page = wire.invokes.find((call) => call.method === 'page')
+    expect((page?.args['request'] as { address?: unknown }).address).toEqual(child)
+  })
+
+  it('addresses a child activity page through its parent, the way messages does', async () => {
+    // The activity read opens the same log the same way, so a child named bare
+    // would earn the same refusal. No shipped client polls a child's activity
+    // yet; the parameter is the pure addition that keeps a future poller from
+    // reintroducing the refused read.
+    const { ctx, wire } = fakeGateway({
+      frames: [{ type: 'snapshot', cursor: 9, records: [] }],
+    })
+
+    await sessionActivity(ctx, 'child-1', undefined, undefined, undefined, 'parent-1')
+    await sessionActivity(ctx, 'top-1')
+
+    const child = {
+      kind: 'subagent',
+      parentSessionId: 'parent-1',
+      childSessionId: 'child-1',
+      mode: 'unknown',
+    }
+    const address = (call: Invocation | undefined) =>
+      (call?.args['request'] as { address?: unknown }).address
+    expect(address(wire.streams[0])).toEqual(child)
+    expect(address(wire.invokes.find((call) => call.method === 'page'))).toEqual(child)
+    expect(wire.streams[1]?.args).toEqual({
+      request: { address: { kind: 'session', sessionId: 'top-1' } },
+    })
+  })
+
+  it('keeps a fork addressed as a session, because a fork is not a child', async () => {
+    // A fork carries a parent and is the operator's own conversation: it is
+    // addressable as a session, and claiming a parent for it would describe a
+    // log that is not a subagent's.
+    const { ctx, wire } = fakeGateway({
+      frames: [{ type: 'snapshot', cursor: 3, records: [] }],
+    })
+
+    await sessionMessages(ctx, 'fork-1')
+
+    expect(wire.streams[0]?.args).toEqual({
+      request: { address: { kind: 'session', sessionId: 'fork-1' } },
+    })
   })
 
   it('reads exactly one frame, because a second one activates the agent', async () => {
@@ -415,6 +485,7 @@ describe('the page cut', () => {
       asOfSeq: null,
       records: [],
       hasMore: false,
+      context: null,
     })
     expect(wire.invokes.map((call) => call.method)).toEqual(['projections'])
   })
@@ -436,6 +507,80 @@ describe('the page cut', () => {
       maxMessages: 25,
     })
     expect(result.hasMore).toBe(true)
+  })
+})
+
+describe('the context figure on a page', () => {
+  // What the composer's occupancy ring and its detail popover draw. The figure
+  // used to arrive only from `session.stats`, and an incremental refresh -- the
+  // refresh an open screen actually runs -- never asked for one, so a running
+  // turn's context use was frozen at whatever the last full load saw.
+  const pressure = { contextWindow: 128_000, projectedTokens: 64_000, pressureTokens: 60_000 }
+  const breakdown = { systemTokens: 1_000, toolsTokens: 2_000, messageTokens: 3_000 }
+  const expected = {
+    window: 128_000,
+    pressureTokens: 60_000,
+    projectedTokens: 64_000,
+    percent: 50,
+    breakdown: { systemTokens: 1_000, toolsTokens: 2_000, messageTokens: 3_000 },
+  }
+
+  it('rides on a full page from the follow opening frame, with no extra read', async () => {
+    const { ctx, wire } = fakeGateway({
+      frames: [{
+        type: 'snapshot',
+        cursor: 41,
+        records: [],
+        projections: { asOfSeq: 41, values: { contextPressure: pressure, contextBreakdown: breakdown } },
+      }],
+    })
+
+    const result = await sessionMessages(ctx, 's1')
+
+    expect(result.context).toEqual(expected)
+    // The opening frame already carried the baseline. A second projections read
+    // here is exactly the cost this file refuses to pay when the stream answers.
+    expect(wire.invokes.map((call) => call.method)).toEqual(['page'])
+  })
+
+  it('rides on an incremental page too, so a polling refresh keeps it current', async () => {
+    const { ctx } = fakeGateway({
+      frames: [{
+        type: 'snapshot',
+        cursor: 41,
+        records: [],
+        projections: { asOfSeq: 41, values: { contextPressure: pressure, contextBreakdown: breakdown } },
+      }],
+      pageRecords: [],
+    })
+
+    // The data-saving refresh: only records after the cursor travel, but the
+    // occupancy figure and its breakdown still come with the page.
+    const result = await sessionMessages(ctx, 's1', undefined, undefined, 40)
+
+    expect(result.context).toEqual(expected)
+  })
+
+  it('comes from the projections reply when the stream will not open', async () => {
+    const { ctx, wire } = fakeGateway({
+      streamThrows: true,
+      projections: { asOfSeq: 12, values: { contextPressure: pressure, contextBreakdown: breakdown } },
+    })
+
+    const result = await sessionMessages(ctx, 's1')
+
+    expect(result.context).toEqual(expected)
+    expect(wire.invokes.map((call) => call.method)).toEqual(['projections', 'page'])
+  })
+
+  it('says unknown rather than zero when the host has no context projection', async () => {
+    // An older host, or a deployment without the token-meter: absent is
+    // unknown. A zero here would draw an empty context window as a fact.
+    const { ctx } = fakeGateway({ frames: [{ type: 'snapshot', cursor: 2, records: [] }] })
+
+    const result = await sessionMessages(ctx, 's1')
+
+    expect(result.context).toBeNull()
   })
 })
 

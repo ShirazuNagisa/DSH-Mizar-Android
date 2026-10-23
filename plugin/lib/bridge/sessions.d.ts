@@ -1,5 +1,5 @@
 import type { Context } from '../dsh.js';
-import { type SessionStatsFrame } from './stats.js';
+import { type ContextPressureView, type SessionStatsFrame } from './stats.js';
 import { type PromptAttachment } from './uploads.js';
 /** One row in the session list. */
 export interface SessionRow {
@@ -72,9 +72,13 @@ export declare function sessionStats(ctx: Context, sessionId: string): Promise<S
  * @param afterSeq - the log position the caller already holds; only records
  *   after it travel. Ignored together with `beforeSeq`, because a page paged
  *   backwards is not a page of new records.
+ * @param parentSessionId - the parent of a delegated child. Supplying it is what
+ *   makes a child's history readable at all: without it the host refuses the
+ *   read outright (`session/agent-busy`), because a child is not addressable as
+ *   a session. See {@link logAddress}.
  * @returns the page, or no records when the session is unknown.
  */
-export declare function sessionMessages(ctx: Context, sessionId: string, maxMessages?: number, beforeSeq?: number, afterSeq?: number): Promise<SessionMessagesResult>;
+export declare function sessionMessages(ctx: Context, sessionId: string, maxMessages?: number, beforeSeq?: number, afterSeq?: number, parentSessionId?: string): Promise<SessionMessagesResult>;
 /** One page of a session's log. */
 export interface SessionMessagesResult {
     readonly sessionId: string;
@@ -97,6 +101,19 @@ export interface SessionMessagesResult {
      */
     readonly records: readonly unknown[];
     readonly hasMore: boolean;
+    /**
+     * Context-window occupancy and its breakdown, as of this read.
+     *
+     * Always present: every page carries it, full and incremental both, so the
+     * figure above the composer updates with whatever refresh the screen runs
+     * rather than only with a separate `session.stats` read an incremental
+     * refresh never makes. Same derivation as `session.stats`'s `context` field
+     * (see the `buildContextPressure` call in {@link readLogPage}); `null` when
+     * the host has no `contextPressure` projection to answer from -- absent is
+     * unknown, never zero. Additive: an older client ignores the key and an older
+     * host omits it, so this needs no protocol version change.
+     */
+    readonly context: ContextPressureView | null;
 }
 /** One compact line of a running turn's process. */
 export interface SessionActivityEntry {
@@ -176,10 +193,16 @@ export interface SessionActivityResult {
  *   newest one. Requires `turn`.
  * @param turn - the running turn a backwards page belongs to. Ignored without
  *   `beforeSeq`, because a forward read names its own turn.
+ * @param parentSessionId - the parent of a delegated child. The activity read
+ *   opens the same log the same way `session.messages` does, so a child named
+ *   bare is refused with `session/agent-busy` before anything is read; the
+ *   parent is what makes a child's activity readable at all. No shipped
+ *   client polls a child's activity yet -- the parameter is the pure addition
+ *   that keeps a future poller from reintroducing the refused read.
  * @returns the running turn's rows, or an empty feed when nothing runs.
  * @throws MethodError when `beforeSeq` is given without `turn`.
  */
-export declare function sessionActivity(ctx: Context, sessionId: string, maxEntries?: number, beforeSeq?: number, turn?: number): Promise<SessionActivityResult>;
+export declare function sessionActivity(ctx: Context, sessionId: string, maxEntries?: number, beforeSeq?: number, turn?: number, parentSessionId?: string): Promise<SessionActivityResult>;
 /** A newly created or resumed session. */
 export interface CreateSessionResult {
     readonly sessionId: string;
@@ -217,6 +240,13 @@ export declare function createSession(ctx: Context, options: {
     sessionId?: string;
     agentPreset?: string;
 }): Promise<CreateSessionResult>;
+/** Fork only a proven completed response boundary, never a guessed latest turn. */
+export declare function forkSession(ctx: Context, options: {
+    sessionId: string;
+    atSeq: number;
+}): Promise<{
+    sessionId: string;
+}>;
 /** Acceptance of a prompt. */
 export interface PromptResult {
     /** Always true when the call succeeds; the host rejects rather than queues silently. */
@@ -224,19 +254,6 @@ export interface PromptResult {
     /** The idempotency key the host recorded, echoed for the client's own retry bookkeeping. */
     readonly requestId: string;
 }
-/** One content part of a prompt the bridge builds. */
-export type PromptPart = {
-    readonly type: 'text';
-    readonly text: string;
-} | {
-    readonly type: 'image';
-    readonly data: string;
-    readonly mediaType: string;
-    readonly name?: string;
-} | {
-    readonly type: 'file';
-    readonly receiptId: string;
-};
 /**
  * Send a prompt.
  *
@@ -266,8 +283,6 @@ export declare function promptSession(ctx: Context, options: {
     mode?: 'queue' | 'steer';
     requestId?: string;
     clientTimeZone?: string;
-    attachmentParts?: readonly PromptPart[];
-    signal?: AbortSignal;
 }): Promise<PromptResult>;
 /**
  * Interrupt the running turn.

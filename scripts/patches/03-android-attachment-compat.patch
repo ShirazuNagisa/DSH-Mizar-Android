@@ -1,0 +1,102 @@
+diff --git a/src/bridge/index.ts b/src/bridge/index.ts
+--- a/src/bridge/index.ts
++++ b/src/bridge/index.ts
+@@ -420,6 +420,9 @@
+     new UploadStore({
+       root: join(facts.home, 'uploads'),
+       attachmentsRoot: join(facts.home, 'attachments'),
++      // The Android client's first attachment wire chunks at 64 KiB. The host
++      // advertises this through upload.capabilities, so iOS simply follows it.
++      chunkBytes: 64 * 1024,
+     })
+   // A prompt that carries attachments is retried with the same requestId when
+   // its answer is lost. That is safe only while the request is identical: DSH
+@@ -690,6 +693,88 @@
+      */
+     'upload.capabilities': async () => uploadStore.capabilities(),
+ 
++    // ── Android compatibility: the pre-upload.* attachment wire ────────────
++    // Android's first attachment client speaks attachment.*; upstream 0.8.9
++    // settled on upload.*. These aliases keep that phone working while it
++    // migrates, without a second staging store or a second limit to disagree
++    // with. They are deliberately thin: every byte still goes through the
++    // upstream UploadStore and its quotas, TTL and integrity checks.
++    'attachment.capabilities': async () => {
++      const limits = uploadStore.capabilities()
++      return {
++        version: 1,
++        maxFileBytes: limits.fileBytes,
++        maxImageBytes: limits.imageBytes,
++        maxAttachments: limits.attachments,
++        chunkBytes: limits.chunkBytes,
++        expiresSeconds: limits.expiresSeconds,
++        imageMediaTypes: limits.imageMediaTypes,
++      }
++    },
++
++    'attachment.begin': async (payload, context) => {
++      const record = payload as Record<string, unknown>
++      const kind = record['kind']
++      if (kind !== 'image' && kind !== 'file') {
++        throw new MethodError('MALFORMED_FRAME', 'attachment.begin: payload."kind" must be "image" or "file"')
++      }
++      const byteSize = record['bytes']
++      if (typeof byteSize !== 'number' || !Number.isFinite(byteSize) || byteSize <= 0) {
++        throw new MethodError('MALFORMED_FRAME', 'attachment.begin: payload."bytes" must be a positive number')
++      }
++      const mediaType = optionalString(payload, 'mediaType') ??
++        (kind === 'image' ? 'image/png' : 'application/octet-stream')
++      const sha256 = optionalString(payload, 'sha256')
++      const begun = await uploadStore.begin(context.deviceId, {
++        sessionId: requireString(payload, 'sessionId', 'attachment.begin'),
++        kind,
++        name: requireString(payload, 'name', 'attachment.begin'),
++        mediaType,
++        byteSize,
++        ...(sha256 === undefined ? {} : { sha256 }),
++      })
++      return { uploadId: begun.uploadId, chunkBytes: begun.chunkBytes, offset: 0 }
++    },
++
++    'attachment.chunk': async (payload, context) => {
++      const record = payload as Record<string, unknown>
++      const offset = record['offset']
++      if (typeof offset !== 'number' || !Number.isInteger(offset) || offset < 0) {
++        throw new MethodError('MALFORMED_FRAME', 'attachment.chunk: payload."offset" must be a non-negative integer')
++      }
++      const uploadId = requireString(payload, 'uploadId', 'attachment.chunk')
++      const data = requireString(payload, 'data', 'attachment.chunk')
++      const chunkBytes = uploadStore.capabilities().chunkBytes
++      if (offset % chunkBytes !== 0) {
++        throw new MethodError('MALFORMED_FRAME', 'attachment.chunk: offset is not on a chunk boundary')
++      }
++      await uploadStore.chunk(context.deviceId, {
++        uploadId,
++        index: offset / chunkBytes,
++        data,
++      })
++      return { offset: offset + Buffer.from(data, 'base64').length }
++    },
++
++    'attachment.finish': async (payload, context) => {
++      const finished = await uploadStore.finish(
++        context.deviceId,
++        requireString(payload, 'uploadId', 'attachment.finish'),
++      )
++      return {
++        attachmentId: finished.attachmentId,
++        name: finished.name,
++        bytes: finished.byteSize,
++        kind: finished.kind,
++        mediaType: finished.mediaType,
++      }
++    },
++
++    'attachment.abort': async (payload, context) => {
++      await uploadStore.abort(context.deviceId, requireString(payload, 'uploadId', 'attachment.abort'))
++      return { aborted: true }
++    },
++
+     /** Interrupt the running turn. */
+     'session.cancel': async (payload) =>
+       cancelSession(ctx, requireString(payload, 'sessionId', 'session.cancel')),
