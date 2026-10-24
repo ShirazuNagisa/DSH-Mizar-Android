@@ -51,18 +51,59 @@ class AccountClient(
     private val appVersion: String? = null,
 ) {
 
+    /**
+     * Create an account.
+     *
+     * A server with mail configured refuses this without a [code]
+     * (`EMAIL_VERIFICATION_REQUIRED`, 428) and wants [registerStart] first; one
+     * without mail ignores the field. The caller decides which by trying this
+     * once, so the same build works against both deployments.
+     */
     suspend fun register(
         username: String,
         email: String,
         password: String,
         device: AccountDevicePayload,
+        code: String? = null,
     ): AccountAuth = decode(
         send(
             "POST", "/register", token = null,
-            body = WIRE_JSON.encodeToString(RegisterBody.serializer(), RegisterBody(username, email, password, device)),
+            body = WIRE_JSON.encodeToString(
+                RegisterBody.serializer(),
+                RegisterBody(username, email, password, code?.takeIf { it.isNotBlank() }, device),
+            ),
         ),
         AccountAuth.serializer(),
     )
+
+    /**
+     * Ask for the registration code, creating nothing yet.
+     *
+     * A server with no mail configured answers `MAIL_UNAVAILABLE` (503): there is
+     * no code to send, so the caller falls back to registering without one.
+     */
+    suspend fun registerStart(
+        username: String,
+        email: String,
+        password: String,
+        device: AccountDevicePayload,
+    ): EmailChallenge {
+        val envelope = decode(
+            send(
+                "POST", "/register/start", token = null,
+                body = WIRE_JSON.encodeToString(
+                    RegisterBody.serializer(),
+                    RegisterBody(username, email, password, null, device),
+                ),
+            ),
+            EmailChallengeEnvelope.serializer(),
+        )
+        return EmailChallenge(
+            email = envelope.email.ifBlank { email },
+            expiresAt = envelope.expiresAt,
+            resendAfterSeconds = envelope.resendAfterSeconds,
+        )
+    }
 
     suspend fun login(
         identifier: String,
@@ -82,15 +123,15 @@ class AccountClient(
      * The service answers the same way for an unknown address, so this cannot be
      * used to find out whether an account exists.
      */
-    suspend fun resetStart(email: String): ResetChallenge {
+    suspend fun resetStart(email: String): EmailChallenge {
         val envelope = decode(
             send(
                 "POST", "/password/reset/start", token = null,
                 body = WIRE_JSON.encodeToString(EmailBody.serializer(), EmailBody(email)),
             ),
-            ResetStartEnvelope.serializer(),
+            EmailChallengeEnvelope.serializer(),
         )
-        return ResetChallenge(email, envelope.expiresAt, envelope.resendAfterSeconds)
+        return EmailChallenge(envelope.email.ifBlank { email }, envelope.expiresAt, envelope.resendAfterSeconds)
     }
 
     /**

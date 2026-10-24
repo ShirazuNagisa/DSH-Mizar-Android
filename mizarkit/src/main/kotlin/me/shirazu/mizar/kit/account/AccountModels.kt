@@ -123,14 +123,6 @@ data class GithubStart(
 
 // ── request bodies ──────────────────────────────────────────────────────────
 
-@Serializable
-internal data class RegisterBody(
-    val username: String,
-    val email: String,
-    val password: String,
-    val device: AccountDevicePayload,
-)
-
 /**
  * What a reset has to tell the screen: which address the code went to, when it
  * stops working, and how long before another may be asked for.
@@ -139,7 +131,7 @@ internal data class RegisterBody(
  * cannot use this to find out whether an account exists -- which is why the screen
  * says "if that address has an account" rather than confirming one.
  */
-data class ResetChallenge(
+data class EmailChallenge(
     val email: String,
     val expiresAt: Long,
     val resendAfterSeconds: Int,
@@ -149,9 +141,19 @@ data class ResetChallenge(
 internal data class EmailBody(val email: String)
 
 @Serializable
-internal data class ResetStartEnvelope(
+internal data class EmailChallengeEnvelope(
+    val email: String = "",
     val expiresAt: Long = 0,
     val resendAfterSeconds: Int = 60,
+)
+
+@Serializable
+internal data class RegisterBody(
+    val username: String,
+    val email: String,
+    val password: String,
+    val code: String? = null,
+    val device: AccountDevicePayload,
 )
 
 @Serializable

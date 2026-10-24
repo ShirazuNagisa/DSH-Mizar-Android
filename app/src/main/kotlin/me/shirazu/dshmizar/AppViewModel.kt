@@ -145,7 +145,13 @@ data class AccountUiState(
     /** The password-reset form is showing instead of the sign-in form. */
     val resetOpen: Boolean = false,
     /** Set once the reset code has been asked for: which address, and for how long. */
-    val resetChallenge: me.shirazu.mizar.kit.account.ResetChallenge? = null,
+    val resetChallenge: me.shirazu.mizar.kit.account.EmailChallenge? = null,
+    /**
+     * A registration waiting on its code. The service creates nothing until the
+     * code is accepted, so the form's three fields are held here and sent again.
+     */
+    val pendingRegistration: PendingRegistration? = null,
+    val registerChallenge: me.shirazu.mizar.kit.account.EmailChallenge? = null,
 ) {
     val profile get() = session?.profile
     val isPaid: Boolean get() = profile?.isPaid == true
@@ -163,6 +169,9 @@ data class BalanceUiState(
     val result: me.shirazu.mizar.kit.account.BalanceResult? = null,
     val failed: Boolean = false,
 )
+
+/** A registration whose code has been asked for and not yet typed. */
+data class PendingRegistration(val username: String, val email: String, val password: String)
 
 /** Everything the UI draws. */
 data class UiState(
@@ -689,7 +698,70 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             setAccountError(getApplication<Application>().getString(problem))
             return
         }
-        authenticate { accountClient.register(name, address, password, devicePayload()) }
+        // Two deployments, one build. A server with mail configured refuses this
+        // without a code (428) and wants `/register/start` first; one without mail
+        // accepts it here. Trying once is how the client tells them apart without a
+        // capability endpoint neither service has.
+        if (_state.value.account.working) return
+        viewModelScope.launch {
+            _state.update { it.copy(account = it.account.copy(working = true, error = null)) }
+            try {
+                adopt(accountClient.register(name, address, password, devicePayload()))
+            } catch (error: AccountError) {
+                if (error.code != "EMAIL_VERIFICATION_REQUIRED") {
+                    _state.update {
+                        it.copy(account = it.account.copy(working = false, error = messageFor(error)))
+                    }
+                    return@launch
+                }
+                try {
+                    val challenge = accountClient.registerStart(name, address, password, devicePayload())
+                    _state.update {
+                        it.copy(
+                            account = it.account.copy(
+                                working = false,
+                                error = null,
+                                pendingRegistration = PendingRegistration(name, address, password),
+                                registerChallenge = challenge,
+                            ),
+                        )
+                    }
+                } catch (startError: Throwable) {
+                    _state.update {
+                        it.copy(account = it.account.copy(working = false, error = messageFor(startError)))
+                    }
+                }
+            } catch (error: Throwable) {
+                _state.update {
+                    it.copy(account = it.account.copy(working = false, error = messageFor(error)))
+                }
+            }
+        }
+    }
+
+    /** Finish a registration whose code has arrived. */
+    fun completeRegistration(code: String) {
+        val pending = _state.value.account.pendingRegistration ?: return
+        if (code.trim().isEmpty()) {
+            setAccountError(getApplication<Application>().getString(R.string.account_error_code))
+            return
+        }
+        authenticate {
+            accountClient.register(
+                pending.username,
+                pending.email,
+                pending.password,
+                devicePayload(),
+                code.trim(),
+            )
+        }
+    }
+
+    /** Back out of the code step: nothing was created, so nothing is left behind. */
+    fun cancelRegistration() {
+        _state.update {
+            it.copy(account = it.account.copy(pendingRegistration = null, registerChallenge = null, error = null))
+        }
     }
 
     /** One path for login, registration and the GitHub exchange. */
@@ -698,33 +770,43 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _state.update { it.copy(account = it.account.copy(working = true, error = null)) }
             try {
-                val auth = block()
-                val session = AccountSession(auth.token, auth.user, System.currentTimeMillis())
-                // Writing the token is part of signing in: a session that only
-                // exists in memory would vanish on the next launch.
-                accounts.save(session)
-                _state.update {
-                    it.copy(
-                        account = it.account.copy(
-                            phase = AccountPhase.READY,
-                            session = session,
-                            notice = auth.notice,
-                            working = false,
-                            error = null,
-                            mode = AccountMode.SIGN_IN,
-                            handoffEntry = false,
-                            resetOpen = false,
-                            resetChallenge = null,
-                        ),
-                    )
-                }
-                reconnectForIdentity()
+                adopt(block())
             } catch (error: Throwable) {
                 _state.update {
                     it.copy(account = it.account.copy(working = false, error = messageFor(error)))
                 }
             }
         }
+    }
+
+    /**
+     * Take a session: save the token, show the profile, reconnect with identity.
+     *
+     * Shared by every path that ends signed in -- login, registration, the GitHub
+     * exchange, a password reset -- because a path that forgot one of these would
+     * look signed in until the next launch.
+     */
+    private suspend fun adopt(auth: AccountAuth) {
+        val session = AccountSession(auth.token, auth.user, System.currentTimeMillis())
+        accounts.save(session)
+        _state.update {
+            it.copy(
+                account = it.account.copy(
+                    phase = AccountPhase.READY,
+                    session = session,
+                    notice = auth.notice,
+                    working = false,
+                    error = null,
+                    mode = AccountMode.SIGN_IN,
+                    handoffEntry = false,
+                    resetOpen = false,
+                    resetChallenge = null,
+                    pendingRegistration = null,
+                    registerChallenge = null,
+                ),
+            )
+        }
+        reconnectForIdentity()
     }
 
     /** Open GitHub in the browser. With a session, this links instead of signing in. */

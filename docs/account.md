@@ -7,11 +7,23 @@
 
 | 方式 | 客户端 | 服务端 |
 |---|---|---|
-| 用户名或邮箱 + 密码 | 注册、登录 | `/account/v1/register`、`/login` |
+| 用户名或邮箱 + 密码 | 注册（可能要先收验证码）、登录 | `/account/v1/register`、`/login` |
 | 忘记密码 | 两步：邮箱 → 验证码 + 新密码，成功后直接登录 | `/account/v1/password/reset/start`、`/password/reset/complete` |
 | GitHub | 浏览器授权，回跳 `mizar://auth` | `/account/v1/github/*` |
 
 没有 Google 登录、没有邮箱验证码登录（`/login/code/*` 还没做）。一台手机只保留一个账户会话。
+
+### 注册的两条路（0.10.4 起）
+
+服务端配了邮件（`MIZAR_MAIL_ROLE` 不是 `off`）时，`/register` 无码会返回 **428
+`EMAIL_VERIFICATION_REQUIRED`**；没配邮件时它会直接建号。客户端不知道对面是哪一种，也不该知道——
+所以做法是**先单步试一次**：
+
+- 成功 → 结束（无邮件的服务器，一次往返）。
+- 428 → 调 `/register/start` 拿验证码，界面换成只剩一个输入框，提交时把 `code` 一起发回去。
+- `/register/start` 自己回 503 `MAIL_UNAVAILABLE` → 说明服务器说"要码"却又发不出码，按错误报给用户。
+
+这样同一个包在两种部署上都能注册。iOS 只走两步，因此在没配邮件的服务器上注册会 503——这一点安卓比 iOS 宽。
 
 重置的第一步对**不存在的地址也返回同样的成功**，所以界面写的是「如果这个地址有账户，验证码已经在路上」——
 这不是措辞选择，是服务端防止枚举账户的决定，客户端不能把它说成确认。`scripts/account-mock.mjs` 里

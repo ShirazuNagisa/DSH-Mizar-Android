@@ -150,6 +150,14 @@ private fun SignedOut(model: AppViewModel, account: AccountUiState) {
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
     )
 
+    // A server with mail configured answers the first attempt with 428 and sends a
+    // code; from there the form is one field, because nothing exists to edit until
+    // the code is accepted.
+    if (registering && account.registerChallenge != null) {
+        RegisterCode(model, account)
+        return
+    }
+
     if (registering) {
         Field(
             value = username,
@@ -496,6 +504,52 @@ internal fun DeleteDialog(busy: Boolean, onCancel: () -> Unit, onConfirm: () -> 
 }
 
 // ── pieces ──────────────────────────────────────────────────────────────────
+
+/** The last step of registration: the six digits the server mailed. */
+@Composable
+private fun RegisterCode(model: AppViewModel, account: AccountUiState) {
+    var code by remember { mutableStateOf("") }
+    val challenge = account.registerChallenge ?: return
+    val busy = account.working
+
+    Text(
+        stringResource(R.string.account_reset_sent, challenge.email),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 10.dp),
+    )
+    Field(
+        value = code,
+        onValueChange = { code = it.filter(Char::isDigit).take(6) },
+        label = stringResource(R.string.account_reset_code),
+        keyboard = KeyboardType.NumberPassword,
+    )
+    Button(
+        onClick = { model.completeRegistration(code) },
+        enabled = !busy,
+        shape = ButtonShape.Primary,
+        modifier = Modifier.fillMaxWidth().padding(top = 14.dp).height(50.dp),
+    ) {
+        if (busy) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.onPrimary,
+            )
+        } else {
+            Text(
+                stringResource(R.string.account_register_submit),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            )
+        }
+    }
+    TextButton(
+        onClick = { model.cancelRegistration() },
+        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+    ) {
+        Text(stringResource(R.string.account_register_back), style = MaterialTheme.typography.labelLarge)
+    }
+}
 
 /**
  * Two steps: the address, then the code and the new password.

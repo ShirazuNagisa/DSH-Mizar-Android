@@ -42,6 +42,59 @@ private val USER = """
 class AccountClientTest {
 
     /**
+     * A server with mail configured refuses the one-step registration, and the
+     * client has to be able to tell that apart from a real failure.
+     */
+    @Test
+    fun `register without a code reports that verification is required`() = runBlocking {
+        val transport = ScriptedTransport {
+            HttpResponse(
+                428,
+                """{"error":"EMAIL_VERIFICATION_REQUIRED","message":"request a code with /register/start"}""",
+            )
+        }
+        val client = AccountClient("https://relay.test/account/v1", transport, appVersion = "0.10.3")
+
+        val error = assertThrows<AccountError> {
+            runBlocking { client.register("shirazu", "a@b.com", "mizar-test-password", DEVICE) }
+        }
+
+        assertEquals("EMAIL_VERIFICATION_REQUIRED", error.code)
+        assertEquals(428, error.status)
+        // The body carries no `code` at all when the caller has none, so a server
+        // that ignores the field cannot tell the two paths apart.
+        val body = WIRE_JSON.parseToJsonElement(transport.requests.single().body!!).jsonObject
+        assertFalse(body.containsKey("code"))
+    }
+
+    @Test
+    fun `register start asks for the code and creates nothing`() = runBlocking {
+        val transport = ScriptedTransport {
+            ok("""{"email":"a@b.com","expiresAt":1760500000000,"resendAfterSeconds":60}""")
+        }
+        val client = AccountClient("https://relay.test/account/v1", transport, appVersion = "0.10.3")
+
+        val challenge = client.registerStart("shirazu", "a@b.com", "mizar-test-password", DEVICE)
+
+        assertEquals("https://relay.test/account/v1/register/start", transport.requests.single().url)
+        assertEquals("a@b.com", challenge.email)
+        assertEquals(1760500000000L, challenge.expiresAt)
+    }
+
+    @Test
+    fun `register sends the code when it has one`() = runBlocking {
+        val transport = ScriptedTransport {
+            ok("""{"token":"mza_token_value_1234567890","user":$USER}""")
+        }
+        val client = AccountClient("https://relay.test/account/v1", transport, appVersion = "0.10.3")
+
+        client.register("shirazu", "a@b.com", "mizar-test-password", DEVICE, "123456")
+
+        val body = WIRE_JSON.parseToJsonElement(transport.requests.single().body!!).jsonObject
+        assertEquals("123456", body.getValue("code").jsonPrimitive.content)
+    }
+
+    /**
      * A reset is two calls, and the first one must not say whether the account
      * exists: the service answers the same way for an unknown address, and the
      * screen's copy depends on that being true.

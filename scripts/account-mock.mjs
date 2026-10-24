@@ -427,7 +427,22 @@ const server = createServer(async (request, response) => {
       send(response, 409, { error: 'EMAIL_TAKEN', message: 'that email is already registered' })
       return
     }
-    const user = createUser({ username, email, passwordHash: hash(password), emailVerified: false })
+    // This mock behaves like a server with mail configured: the account is not
+    // created until the code from `/register/start` comes back. The client tries
+    // the one-step call first and lands here with 428, which is the path worth
+    // exercising.
+    const code = typeof body?.code === 'string' ? body.code.trim() : ''
+    const issuedCode = resetCodes.get(email.toLowerCase())
+    if (code === '') {
+      send(response, 428, { error: 'EMAIL_VERIFICATION_REQUIRED', message: 'request a code with /register/start and send it as "code"' })
+      return
+    }
+    if (issuedCode === undefined || issuedCode.code !== code || issuedCode.expiresAt < Date.now()) {
+      send(response, 401, { error: 'VERIFICATION_INVALID', message: 'that code is not right' })
+      return
+    }
+    resetCodes.delete(email.toLowerCase())
+    const user = createUser({ username, email, passwordHash: hash(password), emailVerified: true })
     const issued = issueSession(user, device)
     send(response, 200, {
       token: issued.token,
@@ -474,6 +489,30 @@ const server = createServer(async (request, response) => {
       user: publicUser(user, device.id),
       ...(session.notice === undefined ? {} : { notice: session.notice }),
     })
+    return
+  }
+
+  if (method === 'POST' && route === '/register/start') {
+    const body = await readBody(request)
+    const username = typeof body?.username === 'string' ? body.username.trim() : ''
+    const email = typeof body?.email === 'string' ? body.email.trim() : ''
+    const password = typeof body?.password === 'string' ? body.password : ''
+    if (username.length < 2 || username.length > 32 || /[\s@]/.test(username)
+      || !email.includes('@') || password.length < 8 || password.length > 128) {
+      send(response, 400, { error: 'INVALID_INPUT', message: 'that username, email or password is not valid' })
+      return
+    }
+    if ([...users.values()].some((user) => user.usernameKey === username.toLowerCase())) {
+      send(response, 409, { error: 'USERNAME_TAKEN', message: 'that username is already in use' })
+      return
+    }
+    if ([...users.values()].some((user) => user.emailKey === email.toLowerCase())) {
+      send(response, 409, { error: 'EMAIL_TAKEN', message: 'that email is already registered' })
+      return
+    }
+    const expiresAt = Date.now() + 10 * 60_000
+    resetCodes.set(email.toLowerCase(), { code: '123456', expiresAt })
+    send(response, 200, { email, expiresAt, resendAfterSeconds: 60 })
     return
   }
 
