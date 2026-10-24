@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -57,6 +58,7 @@ import me.shirazu.dshmizar.ui.ThemeMode
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.ButtonShape
 import me.shirazu.dshmizar.ui.design.Corner
+import me.shirazu.dshmizar.ui.design.shapedClickable
 import me.shirazu.dshmizar.ui.design.MizarMarkConnecting
 import me.shirazu.dshmizar.ui.design.PopoverRow
 import me.shirazu.dshmizar.ui.design.SegmentedControl
@@ -77,6 +79,7 @@ fun SettingsDialog(
     state: UiState,
     onDismiss: () -> Unit,
     onOpenAccount: () -> Unit,
+    onOpenBalance: () -> Unit,
     onForget: (String) -> Unit,
     onAddHost: () -> Unit,
     onTheme: (ThemeMode) -> Unit,
@@ -157,6 +160,31 @@ fun SettingsDialog(
         // among them: it is identity, not a setting.
         SectionLabel(stringResource(R.string.account))
         me.shirazu.dshmizar.ui.account.AccountRow(state.account, onClick = onOpenAccount)
+
+        // Under the account, because it is the other half of the same question: who
+        // this phone is, and what the computer it talks to has to spend. The figure
+        // belongs to that computer's DeepSeek account, never to the relay.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp)
+                .shapedClickable(Corner.md, onClick = onOpenBalance)
+                .padding(horizontal = 10.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Default.AccountBalanceWallet,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                stringResource(R.string.balance),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+        }
 
         // The palette is a preference, and the operator should not have to change
         // the system to get a dark screen at night.

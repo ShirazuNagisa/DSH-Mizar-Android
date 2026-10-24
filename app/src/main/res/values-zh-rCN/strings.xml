@@ -280,6 +280,15 @@
     <string name="greeting_night">夜深了</string>
 
     <!-- Account -->
+    <string name="balance">余额</string>
+    <string name="balance_explanation">这里显示所连电脑的 DeepSeek 官方钱包，不是这台手机的中继额度。</string>
+    <string name="balance_loading">读取中…</string>
+    <string name="balance_failed">读取失败。</string>
+    <string name="balance_unavailable">暂时查不到余额。</string>
+    <string name="balance_signed_out">那台电脑还没有登录 DeepSeek。</string>
+    <string name="balance_unsupported">这台电脑的插件版本还不会报余额。</string>
+    <string name="balance_bonus">赠送</string>
+    <string name="balance_top_up">去充值</string>
     <string name="account">账户</string>
     <string name="account_sign_in">登录</string>
     <string name="account_sign_out">退出登录</string>

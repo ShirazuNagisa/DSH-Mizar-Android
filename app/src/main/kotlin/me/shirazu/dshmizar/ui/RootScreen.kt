@@ -177,6 +177,15 @@ fun RootScreen(model: AppViewModel, incomingUri: String?, onUriHandled: () -> Un
                 onClose = { model.closeAccountScreen() },
             )
         }
+        // Above the shell and independent of the account screen: the figure is the
+        // computer's, so it opens whether or not this phone is signed in.
+        if (state.balance.open) {
+            me.shirazu.dshmizar.ui.account.BalanceScreen(
+                model = model,
+                balance = state.balance,
+                onClose = { model.closeBalance() },
+            )
+        }
     }
     }
 }

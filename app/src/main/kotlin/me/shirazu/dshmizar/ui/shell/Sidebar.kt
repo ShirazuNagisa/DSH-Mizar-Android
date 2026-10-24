@@ -496,6 +496,10 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
                 showingSettings = false
                 model.openAccountScreen()
             },
+            onOpenBalance = {
+                showingSettings = false
+                model.openBalance()
+            },
             onForget = { hostId ->
                 showingSettings = false
                 model.forget(hostId)

@@ -295,6 +295,15 @@
     <string name="greeting_night">UP LATE</string>
 
     <!-- Account -->
+    <string name="balance">Balance</string>
+    <string name="balance_explanation">The official DeepSeek wallets on the connected computer, not this phone\'s relay credits.</string>
+    <string name="balance_loading">Reading…</string>
+    <string name="balance_failed">Could not read the balance.</string>
+    <string name="balance_unavailable">The balance is not available right now.</string>
+    <string name="balance_signed_out">That computer is not signed in to DeepSeek.</string>
+    <string name="balance_unsupported">This host is too old to report a balance.</string>
+    <string name="balance_bonus">BONUS</string>
+    <string name="balance_top_up">Top up</string>
     <string name="account">Account</string>
     <string name="account_sign_in">Sign in</string>
     <string name="account_sign_out">Sign out</string>

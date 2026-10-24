@@ -147,6 +147,19 @@ data class AccountUiState(
     val isPaid: Boolean get() = profile?.isPaid == true
 }
 
+/**
+ * The balance screen's own state.
+ *
+ * Kept apart from the account's: the figure belongs to the computer, not to this
+ * phone's login, and it is refreshed on demand rather than on every profile read.
+ */
+data class BalanceUiState(
+    val open: Boolean = false,
+    val loading: Boolean = false,
+    val result: me.shirazu.mizar.kit.account.BalanceResult? = null,
+    val failed: Boolean = false,
+)
+
 /** Everything the UI draws. */
 data class UiState(
     val phase: Phase = Phase.LAUNCHING,
@@ -248,6 +261,7 @@ data class UiState(
     val seenAt: Map<String, Long> = emptyMap(),
     /** The account service, which is optional and never gates the free features. */
     val account: AccountUiState = AccountUiState(),
+    val balance: BalanceUiState = BalanceUiState(),
 ) {
     /**
      * The gate iOS uses for attachments and the running turn's detail: a paying
@@ -516,6 +530,62 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openAccountScreen() {
         _state.update { it.copy(account = it.account.copy(screenOpen = true, error = null)) }
+    }
+
+    // ── balance ─────────────────────────────────────────────────────────────
+
+    /**
+     * Open the balance screen and read it.
+     *
+     * The figure is the connected computer's, so it is read through the host rather
+     * than from this phone's account: `account.balance` is answered by the plugin,
+     * and a host that cannot ask DeepSeek says so instead of failing the screen.
+     */
+    fun openBalance() {
+        _state.update { it.copy(balance = it.balance.copy(open = true)) }
+        refreshBalance()
+    }
+
+    fun closeBalance() {
+        _state.update { it.copy(balance = it.balance.copy(open = false)) }
+    }
+
+    fun refreshBalance() {
+        _state.update { it.copy(balance = it.balance.copy(loading = true, failed = false)) }
+        viewModelScope.launch {
+            val socket = connection
+            if (socket == null) {
+                _state.update { it.copy(balance = it.balance.copy(loading = false, failed = true)) }
+                return@launch
+            }
+            // The host validates all three: a version, a locale and an offset, because
+            // DeepSeek's own answer is formatted for whoever asks.
+            val client = me.shirazu.mizar.kit.jsonObjectOf(
+                "version" to jsonString(appVersion),
+                "locale" to jsonString(java.util.Locale.getDefault().toLanguageTag()),
+                "timezoneOffsetSeconds" to me.shirazu.mizar.kit.jsonInt(
+                    java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000,
+                ),
+            )
+            val result = runCatching {
+                socket.call<me.shirazu.mizar.kit.account.BalanceResult>(
+                    "account.balance",
+                    payload("client" to client),
+                )
+            }
+            result.fold(
+                onSuccess = { answer ->
+                    _state.update {
+                        it.copy(balance = it.balance.copy(loading = false, failed = false, result = answer))
+                    }
+                    note("balance: ${answer.status}")
+                },
+                onFailure = { error ->
+                    _state.update { it.copy(balance = it.balance.copy(loading = false, failed = true)) }
+                    note("balance failed: ${error.message}")
+                },
+            )
+        }
     }
 
     fun closeAccountScreen() {

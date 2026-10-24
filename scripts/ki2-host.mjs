@@ -236,6 +236,22 @@ const listener = await MizarListener.start({
   },
   methods: {
     'session.list': async () => ({ items: sessions }),
+
+    // The host's own DeepSeek wallets. Two of them, plus a bonus one, so the
+    // screen's sections and its figures both get exercised.
+    'account.balance': async (payload) => {
+      const client = (payload ?? {})['client'] ?? {}
+      if (typeof client['version'] !== 'string' || typeof client['locale'] !== 'string'
+        || typeof client['timezoneOffsetSeconds'] !== 'number') {
+        throw new MethodError('MALFORMED_FRAME', 'account.balance: invalid client metadata')
+      }
+      return {
+        status: 'ready',
+        wallets: [{ currency: 'CNY', balance: '48.20' }, { currency: 'USD', balance: '6.75' }],
+        bonusWallets: [{ currency: 'CNY', balance: '5.00' }],
+        topUpURL: 'https://platform.deepseek.com/top_up',
+      }
+    },
     'workspace.list': async () => ({
       items: [{ workspaceId: 'ws-ki2', path: 'E:\\Projects\\DSH-Mizar-Android', title: 'DSH-Mizar-Android' }],
     }),
