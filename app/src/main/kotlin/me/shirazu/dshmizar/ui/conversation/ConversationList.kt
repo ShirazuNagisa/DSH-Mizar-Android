@@ -79,6 +79,9 @@ internal fun ConversationList(
     onCopy: (String) -> Unit,
     onRetry: (String) -> Unit,
     highlightTurn: Int? = null,
+    /** Whether this account may read a turn's whole log (paid, or on the LAN). */
+    canLoadDetail: Boolean = false,
+    onLoadDetail: (Int) -> Unit = {},
 ) {
     // What the host says about the session, and how fresh the newest record is: the
     // pair decides whether a copy of a turn can still be "in flight". A stale copy is
@@ -143,6 +146,8 @@ internal fun ConversationList(
                     waiting = index == state.turns.lastIndex &&
                         (turn.isRunning || turn.isPending) &&
                         (sessionRunning || recent),
+                    canLoadDetail = canLoadDetail,
+                    onLoadDetail = onLoadDetail,
                 )
             }
         }
@@ -197,6 +202,8 @@ private fun TurnSection(
     typing: Boolean = false,
     /** The turn is in flight: opened by the host, or its prompt just recorded. */
     waiting: Boolean = false,
+    canLoadDetail: Boolean = false,
+    onLoadDetail: (Int) -> Unit = {},
 ) {
     // The glow the turn index leaves behind: a wash that fades on its own, because the
     // point is to find the turn once, not to mark it. It comes up on the smooth spring
@@ -224,7 +231,14 @@ private fun TurnSection(
         }
 
         // Prompt, row, answer -- and the row does not move.
-        TurnSummary(turn, now, onRetry, waiting = waiting)
+        TurnSummary(
+            turn = turn,
+            now = now,
+            onRetry = onRetry,
+            waiting = waiting,
+            canLoadDetail = canLoadDetail,
+            onLoadDetail = onLoadDetail,
+        )
 
         turn.steps.forEach { step ->
             RiseOnce {
@@ -260,6 +274,8 @@ private fun TurnSummary(
     now: Long,
     onRetry: (String) -> Unit,
     waiting: Boolean = false,
+    canLoadDetail: Boolean = false,
+    onLoadDetail: (Int) -> Unit = {},
 ) {
     // One small tap when a turn the operator is watching finishes. Only on the
     // change, never on the first draw of a finished turn.
@@ -320,6 +336,20 @@ private fun TurnSummary(
 
         Spacer(Modifier.weight(1f))
 
+        // Only while the detail is still missing: once a tool row is on screen the
+        // turn already carries its full log, and the affordance would re-fetch what
+        // is here.
+        val turnNumber = turn.turn
+        if (canLoadDetail && turnNumber != null &&
+            turn.steps.none { it is ConversationItem.Tool }
+        ) {
+            TextButton(
+                onClick = { onLoadDetail(turnNumber) },
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+            ) {
+                Text(stringResource(R.string.turn_detail), style = MaterialTheme.typography.labelSmall)
+            }
+        }
         if (turn.failed || neverStarted) {
             // The prompt is already here, so the retry is one tap rather than
             // retyping the sentence the agent failed to answer.

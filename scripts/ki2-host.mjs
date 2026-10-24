@@ -257,6 +257,16 @@ const listener = await MizarListener.start({
           'session/agent-busy: subagent Sessions require their durable parent address',
         )
       }
+      // `full: true` with a `turn` is the client asking for one turn's whole log --
+      // the tool calls a summary page drops. The harness keeps raw records, so the
+      // filter is the whole implementation.
+      if (record['full'] === true && typeof record['turn'] === 'number') {
+        const only = records.filter(
+          (candidate) => candidate.event.sessionId === sessionId &&
+            (candidate.event.data ?? {})['turn'] === record['turn'],
+        )
+        return { sessionId, asOfSeq: only.at(-1)?.event.seq ?? null, records: only, hasMore: false }
+      }
       const page = pageFor(sessionId, {
         maxMessages: typeof record['maxMessages'] === 'number' ? record['maxMessages'] : 200,
         afterSeq: typeof record['afterSeq'] === 'number' ? record['afterSeq'] : null,
@@ -460,6 +470,25 @@ const ctl = createServer(async (request, response) => {
           return reply(200, { turn, outcome })
         }
         push({ type: 'step/start', time: base + 600, data: { turn, step: 1 } })
+        push({
+          type: 'tool/call',
+          time: base + 900,
+          data: { turn, step: 1, callId: `ki2-call-${turn}`, name: 'bash', arguments: '{"command":"ls -la ~/projects"}' },
+        })
+        push({
+          type: 'tool/result',
+          time: base + 1200,
+          data: {
+            turn,
+            step: 1,
+            message: {
+              role: 'tool',
+              toolCallId: `ki2-call-${turn}`,
+              content: [{ type: 'text', text: 'README.md\nplugin/\nsrc/' }],
+              isError: false,
+            },
+          },
+        })
         push({
           type: 'assistant/message',
           time: base + 1500,

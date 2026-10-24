@@ -225,6 +225,10 @@
 
     <string name="copy_code">Copy code</string>
 
+    <string name="tool_running">Running</string>
+    <string name="tool_done">Done</string>
+    <string name="tool_failed">Failed</string>
+    <string name="turn_detail">Full log</string>
     <string name="retry_turn">Retry</string>
 
     <string name="theme">Theme</string>

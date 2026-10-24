@@ -555,6 +555,8 @@ fun SessionScreen(
                         onCopy = onCopy,
                         onRetry = { model.sendPrompt(it) },
                         highlightTurn = highlightTurn,
+                        canLoadDetail = state.advancedFeaturesUnlocked,
+                        onLoadDetail = { model.loadTurnDetail(it) },
                     )
                 }
             }

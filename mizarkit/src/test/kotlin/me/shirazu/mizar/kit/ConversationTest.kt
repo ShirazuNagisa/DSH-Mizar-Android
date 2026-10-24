@@ -58,6 +58,39 @@ class ConversationTest {
     )
 
     /**
+     * A full-turn page carries the tools the agent ran, paired with what came back.
+     *
+     * Two rows for one command -- a call and its result -- is a transcript nobody
+     * can read, so the projection folds them; the pairing key is the host's own
+     * `callId`, which is the only thing that survives both records.
+     */
+    @Test
+    fun `tool calls are paired with their results`() {
+        val turns = turnsOf(
+            """
+            {"sessionId":"s","asOfSeq":8,"records":[
+              {"type":"event","event":{"type":"turn/start","seq":1,"time":1000,"data":{"turn":1}}},
+              {"type":"event","event":{"type":"tool/call","seq":2,"time":1100,
+                "data":{"turn":1,"step":1,"callId":"call_1","name":"bash","arguments":"{\"cmd\":\"ls\"}"}}},
+              {"type":"event","event":{"type":"tool/result","seq":3,"time":1200,
+                "data":{"turn":1,"step":1,"message":{"role":"tool","toolCallId":"call_1",
+                  "content":[{"type":"text","text":"a.txt"}],"isError":false}}}},
+              {"type":"event","event":{"type":"turn/end","seq":4,"time":1300,
+                "data":{"turn":1,"reason":{"kind":"completed"}}}}
+            ]}
+            """.trimIndent(),
+        )
+
+        val tools = turns.single().steps.filterIsInstance<ConversationItem.Tool>()
+        assertEquals(1, tools.size, "the result is folded into its call, not drawn beside it")
+        assertEquals("bash", tools.single().name)
+        assertEquals("a.txt", tools.single().result)
+        assertFalse(tools.single().failed)
+        // Nothing is left over as a loose result row.
+        assertTrue(turns.single().steps.none { it is ConversationItem.ToolResult })
+    }
+
+    /**
      * A prompt whose turn was stopped before it answered is unfinished.
      *
      * The two arrive on different pages: the prompt is written before its turn

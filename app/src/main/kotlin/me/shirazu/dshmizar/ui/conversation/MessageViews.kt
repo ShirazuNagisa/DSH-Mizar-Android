@@ -7,6 +7,11 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.runtime.mutableStateOf
+import me.shirazu.dshmizar.ui.design.Glass
+import me.shirazu.dshmizar.ui.design.shapedClickable
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -87,6 +92,86 @@ internal fun ConversationItemView(
 
         is ConversationItem.Activity -> ActivityRow(item)
         is ConversationItem.Failure -> FailureCard(item)
+        is ConversationItem.Tool -> ToolRow(item)
+        // Always folded into its call before anything draws; a loose one has no
+        // row to sit on, and inventing one would be a second copy of the call.
+        is ConversationItem.ToolResult -> Unit
+    }
+}
+
+/**
+ * A tool the agent ran: one line for the call, the rest behind a tap.
+ *
+ * These rows only exist on a full-turn read, which is what the paid-or-local
+ * gate buys -- a summary page carries none, because the screen draws one bubble
+ * per turn. Arguments are collapsed to one line because a shell command arrives
+ * as a JSON string with newlines in it, and an unbounded row would push the
+ * answer it belongs to off the screen.
+ */
+@Composable
+private fun ToolRow(tool: ConversationItem.Tool) {
+    var open by remember(tool.id) { mutableStateOf(false) }
+    val tint = when {
+        tool.failed -> MizarColors.Failure
+        tool.result == null -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> MizarColors.Running
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Glass.fill(), Corner.sm)
+            .border(Glass.Hairline, MaterialTheme.colorScheme.outlineVariant, Corner.sm)
+            .shapedClickable(Corner.sm, onClick = { open = !open })
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Default.Terminal,
+                contentDescription = null,
+                modifier = Modifier.size(13.dp),
+                tint = tint,
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                tool.name,
+                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                stringResource(
+                    when {
+                        tool.result == null -> R.string.tool_running
+                        tool.failed -> R.string.tool_failed
+                        else -> R.string.tool_done
+                    },
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = tint,
+            )
+        }
+        val arguments = tool.arguments?.replace(Regex("\\s+"), " ")?.trim()
+        if (!arguments.isNullOrEmpty()) {
+            Spacer(Modifier.height(3.dp))
+            Text(
+                if (open) arguments else arguments.take(90),
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = if (open) Int.MAX_VALUE else 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        val result = tool.result
+        if (open && result != null) {
+            Spacer(Modifier.height(5.dp))
+            Text(
+                result,
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                color = if (tool.failed) MizarColors.Failure else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

@@ -135,6 +135,21 @@ Android 16 的 Live Updates 是 iOS Live Activity 的对位：`push/LiveTurn.kt`
 
 完整说明、服务端配置与 AVD 测法见 [account.md](account.md)。
 
+## 一轮的完整记录（0.10.4 起）
+
+会话页每一轮下面有一行总结，右侧的「完整记录」把**这一轮**的原始日志拉下来：旁白、每次工具调用和它的
+结果。摘要页本来只带每轮最后一条回答（一屏一轮），所以这些内容平时根本到不了手机。
+
+- **门槛与附件相同**：付费账户，或者同一局域网。同一个 `advancedFeaturesUnlocked`，同一个理由——一次
+  按轮全量可能就顶一整页摘要的体积。
+- **按轮取，不整体取**：`session.messages { full: true, turn: N }`。整段会话全量在一个七轮的会话上实测
+  是 4.36 MB，而摘要页 199 KB；点开哪轮才付哪轮的钱。
+- **宿主丢掉的仍然丢掉**：`request/header`、`request/context`（系统提示词与工具表）不进这一页；回答里的
+  token `stream` 也不进——两个客户端都只画 `message.content`，而它通常是记录里最大的字段（实测一条
+  210 KB 的回答里 210 KB 都是 stream）。
+- **工具行**：`tool/call` 与 `tool/result` 按宿主的 `callId` 配对后画成一行，点一下展开参数和结果。没有配对
+  上的结果不画（半个配对没有行可落）。
+
 ## 平台决定
 
 - **明文 `ws://`**：宿主地址是配对时才知道的，Android 无法预先声明例外，所以

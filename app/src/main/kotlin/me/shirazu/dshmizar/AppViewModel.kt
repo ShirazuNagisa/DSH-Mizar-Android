@@ -1735,6 +1735,47 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Read one turn whole: the narration and the tool calls a summary page drops.
+     *
+     * Gated with the attachments -- a paid account, or a local link -- because it
+     * is the same kind of cost: one turn's detail can weigh what a whole summary
+     * page does. Asked for per turn, when the operator opens it, never as part of
+     * a refresh.
+     *
+     * The answer is merged rather than applied: a detail page carries one turn,
+     * and running it through {@link applyPage} would move the paging cursors to
+     * that turn's edges and break "load older".
+     */
+    fun loadTurnDetail(turn: Int) {
+        val state = _state.value
+        if (!state.advancedFeaturesUnlocked) return
+        val sessionId = state.selectedSessionId ?: return
+        viewModelScope.launch {
+            val socket = connection ?: return@launch
+            val page = runCatching {
+                socket.call<SessionMessagesResult>(
+                    "session.messages",
+                    payload(
+                        *pageAddress(sessionId),
+                        "full" to me.shirazu.mizar.kit.jsonBool(true),
+                        "turn" to me.shirazu.mizar.kit.jsonInt(turn),
+                    ),
+                )
+            }.onFailure { note("turn $turn detail failed: ${it.message}") }.getOrNull() ?: return@launch
+
+            val fresh = Conversation.turns(page)
+            val items = Conversation.items(page)
+            _state.update { current ->
+                current.copy(
+                    conversation = mergeConversations(current.conversation, items),
+                    turns = mergeTurns(current.turns, fresh),
+                )
+            }
+            note("turn $turn detail: ${page.records.size} records")
+        }
+    }
+
+    /**
      * A refresh in one round trip: transcript delta, figures and pending cards together.
      *
      * Three sequential calls on a tunnel is three times the latency for one screen

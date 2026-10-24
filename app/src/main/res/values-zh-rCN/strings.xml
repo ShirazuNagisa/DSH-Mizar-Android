@@ -191,6 +191,10 @@
 
     <string name="copy_code">复制代码</string>
 
+    <string name="tool_running">运行中</string>
+    <string name="tool_done">完成</string>
+    <string name="tool_failed">失败</string>
+    <string name="turn_detail">完整记录</string>
     <string name="retry_turn">重发</string>
 
     <string name="theme">主题</string>

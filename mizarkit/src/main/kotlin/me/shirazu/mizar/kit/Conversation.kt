@@ -112,6 +112,36 @@ sealed interface ConversationItem {
         override val atMillis: Long?,
     ) : ConversationItem
 
+    /**
+     * A tool the agent ran, as the operator sees it: what was called, with what,
+     * and what came back.
+     *
+     * Only a full-turn read produces these -- a summary page carries none, because
+     * the screen draws one bubble per turn -- so a conversation fetched the normal
+     * way has no `Tool` items at all.
+     */
+    data class Tool(
+        override val id: String,
+        /** The host's call id, which is what pairs a call with its result. */
+        val callId: String?,
+        val name: String,
+        /** The arguments as the host sent them: a JSON string, usually long. */
+        val arguments: String?,
+        /** What came back, once it did. `null` is a call still running. */
+        val result: String? = null,
+        val failed: Boolean = false,
+        override val atMillis: Long?,
+    ) : ConversationItem
+
+    /** What a [Tool] came back with. Folded into its call before it is drawn. */
+    data class ToolResult(
+        override val id: String,
+        val callId: String?,
+        val text: String,
+        val failed: Boolean,
+        override val atMillis: Long?,
+    ) : ConversationItem
+
     /** A turn that ended without an answer. Rendered as a card, never as an empty reply. */
     data class Failure(
         override val id: String,
@@ -373,7 +403,9 @@ object Conversation {
                     reason[turn] = record.payload["data"]["reason"]["kind"].stringValue()
                 }
 
-                "user/message", "assistant/message", "assistant/attempt", "system/message" -> {
+                "user/message", "assistant/message", "assistant/attempt", "system/message",
+                "tool/call", "tool/result",
+                -> {
                     val items = recordItems(record)
                     if (items.isEmpty()) continue
                     if (name == "user/message") {
@@ -405,7 +437,9 @@ object Conversation {
             ConversationTurn(
                 turn = key,
                 prompts = prompts[key] ?: emptyList(),
-                steps = steps[key] ?: emptyList(),
+                // A tool's result is folded into its call before anything draws: two
+                // rows for one command is a transcript nobody can read.
+                steps = pairTools(steps[key] ?: emptyList()),
                 startedAtMillis = started[key],
                 // Only a `turn/end` ends a turn. Falling back to the last step's time
                 // made every unfinished turn look finished, with a duration that was
@@ -422,6 +456,39 @@ object Conversation {
                 startSeq = if (key == null) null else openedAtSeq[key],
             )
         }
+    }
+
+    /**
+     * Fold each tool result into the call it answers.
+     *
+     * Paired by the host's `callId`. A result whose call is not in this page stays
+     * as a [ConversationItem.ToolResult] -- the screen does not draw those, which
+     * is the honest outcome for half a pair -- and a call with no result is a call
+     * still running.
+     *
+     * @param steps - a turn's steps, in log order.
+     * @returns the same steps with results attached and their own rows removed.
+     */
+    private fun pairTools(steps: List<ConversationItem>): List<ConversationItem> {
+        if (steps.none { it is ConversationItem.ToolResult }) return steps
+        val out = ArrayList<ConversationItem>(steps.size)
+        val indexOfCall = HashMap<String, Int>()
+        for (item in steps) {
+            when (item) {
+                is ConversationItem.Tool -> {
+                    item.callId?.let { indexOfCall[it] = out.size }
+                    out += item
+                }
+                is ConversationItem.ToolResult -> {
+                    val at = item.callId?.let { indexOfCall[it] }
+                    val call = at?.let { out.getOrNull(it) as? ConversationItem.Tool }
+                    if (at == null || call == null) out += item
+                    else out[at] = call.copy(result = item.text, failed = item.failed)
+                }
+                else -> out += item
+            }
+        }
+        return out
     }
 
     /** The items one record produces, which is often none. */
@@ -441,6 +508,40 @@ object Conversation {
             messageItem(record, ConversationItem.Role.ASSISTANT)?.let { listOf(it) } ?: attemptItems(record)
 
         "assistant/attempt" -> attemptItems(record)
+
+        "tool/call" -> {
+            val data = record.payload["data"]
+            val name = data["name"].stringValue()
+            if (name == null) emptyList() else listOf(
+                ConversationItem.Tool(
+                    id = record.recordId,
+                    callId = data["callId"].stringValue(),
+                    name = name,
+                    arguments = data["arguments"].stringValue(),
+                    atMillis = record.timestampMillis,
+                ),
+            )
+        }
+
+        "tool/result" -> {
+            val data = record.payload["data"]
+            val message = data["message"]
+            val text = messageText(record.payload) ?: message["content"].arrayValue()
+                ?.mapNotNull { it["text"].stringValue() }
+                ?.joinToString("\n")
+            val callId = message["toolCallId"].stringValue()
+                ?: message["source"]["callId"].stringValue()
+                ?: data["callId"].stringValue()
+            if (text == null) emptyList() else listOf(
+                ConversationItem.ToolResult(
+                    id = record.recordId,
+                    callId = callId,
+                    text = text,
+                    failed = message["isError"].boolValue() == true || data["ok"].boolValue() == false,
+                    atMillis = record.timestampMillis,
+                ),
+            )
+        }
 
         else -> emptyList()
     }
