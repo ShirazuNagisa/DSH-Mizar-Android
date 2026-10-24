@@ -61,6 +61,29 @@ discovered while verifying the new UI.
 - At 200% font the Pair button sits below the fold; the screen scrolls, so it is reachable.
 - `Format.kt` units stay hard-coded because the notification text uses the same formatter.
 
+## Deliberately not done (0.10.4)
+
+- **Hard sign-in gate.** iOS opens on a welcome screen and will not go further
+  without an account; Android keeps the account optional and every free feature
+  works without one. That is a product decision, not an unfinished port: turning
+  the gate on changes who can use the app, so it waits for a decision rather than
+  a sprint. If it is taken up, the work is one screen in front of `RootScreen`
+  plus the copy that says why, and the same `AccountPhase` the account screen
+  already has.
+- **In-app purchase.** The paid plan is granted by the service (invite codes,
+  admin) and by nothing else on Android, and that is the plan for now. Google Play
+  billing is **not** the intended route: the audience this app serves barely has
+  Play services, so a Play-only purchase button would be a door most of them
+  cannot open. The candidates, in the order they are worth doing:
+  1. **Sell codes, redeem in-app.** Nothing to build: `invite/redeem` already
+     turns a code into paid days. A shop page or a chat message can hand one out.
+  2. **WeChat Pay / Alipay H5.** The relay creates an order, the phone opens the
+     payment page, the provider's callback credits the account. Needs a merchant
+     account and a filed domain; the client half is one "open this URL, then poll
+     `/me`" — no SDK.
+  3. **Chinese store billing** (Huawei/Xiaomi/OPPO/vivo): one integration and one
+     server verifier per store. Only worth it if the app ships through one.
+
 ## Deferred beyond this release
 
 - T6 haptic grammar (needs a real-device round) and T7 answer-fold/peek-stack choreography.

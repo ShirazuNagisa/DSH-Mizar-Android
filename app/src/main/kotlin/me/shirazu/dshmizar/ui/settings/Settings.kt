@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -184,6 +185,34 @@ fun SettingsDialog(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f),
             )
+        }
+
+        // What the paid plan buys, and how it is obtained on this platform. It sits
+        // under the balance because both answer "what does money do here".
+        var showPaidDetail by remember { mutableStateOf(false) }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp)
+                .shapedClickable(Corner.md, onClick = { showPaidDetail = true })
+                .padding(horizontal = 10.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Default.Star,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                stringResource(R.string.paid_detail_title),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        if (showPaidDetail) {
+            me.shirazu.dshmizar.ui.account.PaidDetailDialog(onDismiss = { showPaidDetail = false })
         }
 
         // The palette is a preference, and the operator should not have to change

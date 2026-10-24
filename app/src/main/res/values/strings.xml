@@ -295,6 +295,10 @@
     <string name="greeting_night">UP LATE</string>
 
     <!-- Account -->
+    <string name="paid_detail_title">Mizar Paid</string>
+    <string name="paid_detail_body">Mizar Paid exists to provide what a high-bandwidth server can do: carrying a session\'s execution as it happens, attachments, and so on. Payment only shares the server cost and can barely be profitable. Free users can still use most features and the free server. Thank you for using it.</string>
+    <string name="paid_detail_how">Android has no in-app purchase yet. Paid time is granted by an invite code or by the operator of the service; redeem a code from the account screen.</string>
+    <string name="paid_detail_ok">Got it</string>
     <string name="balance">Balance</string>
     <string name="balance_explanation">The official DeepSeek wallets on the connected computer, not this phone\'s relay credits.</string>
     <string name="balance_loading">Reading…</string>
