@@ -78,7 +78,7 @@ export declare function sessionStats(ctx: Context, sessionId: string): Promise<S
  *   a session. See {@link logAddress}.
  * @returns the page, or no records when the session is unknown.
  */
-export declare function sessionMessages(ctx: Context, sessionId: string, maxMessages?: number, beforeSeq?: number, afterSeq?: number, parentSessionId?: string): Promise<SessionMessagesResult>;
+export declare function sessionMessages(ctx: Context, sessionId: string, maxMessages?: number, beforeSeq?: number, afterSeq?: number, parentSessionId?: string, fullTurn?: number): Promise<SessionMessagesResult>;
 /** One page of a session's log. */
 export interface SessionMessagesResult {
     readonly sessionId: string;

@@ -540,6 +540,14 @@ export function createMethodTable(
         holdsNothing || explicit !== undefined
           ? undefined
           : delivery?.deliveredThrough(context.deviceId, sessionId)
+      // `full: true` with a `turn` asks for that one turn's whole log -- the
+      // narration and the tool calls the summary drops. It is a separate ask
+      // because it is a separate cost: a page of it is up to the whole page
+      // budget, where a summary page carries every turn in it.
+      const fullTurn =
+        fields?.['full'] === true && typeof fields['turn'] === 'number' && Number.isFinite(fields['turn'])
+          ? fields['turn']
+          : undefined
       return sessionMessages(
         ctx,
         sessionId,
@@ -547,6 +555,7 @@ export function createMethodTable(
         typeof before === 'number' ? before : undefined,
         explicit ?? remembered,
         parentSessionId,
+        fullTurn,
       )
     },
 

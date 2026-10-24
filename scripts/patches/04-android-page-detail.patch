@@ -1,0 +1,240 @@
+diff --git a/src/bridge/sessions.ts b/src/bridge/sessions.ts
+index 2b4704f..3f23e0e 100644
+--- a/src/bridge/sessions.ts
++++ b/src/bridge/sessions.ts
+@@ -445,9 +445,11 @@ async function summaryRecords(records: readonly unknown[]): Promise<unknown[]> {
+           return false
+       }
+     })
+-    // Preserved byte for byte except for one case: a prompt that carried only an
++    // Preserved byte for byte except for two cases: a prompt that carried only an
+     // image or a file has no text for the conversation to draw, so a placeholder
+-    // is appended. See {@link withAttachmentPlaceholders}.
++    // is appended ({@link withAttachmentPlaceholders}); and an answer arrives
++    // without its token `stream`, which no client draws and which is usually the
++    // largest field on the record.
+     .map((record) => {
+       const event = eventOf(record)
+       if (event?.['type'] === 'turn/end') {
+@@ -467,10 +469,62 @@ async function summaryRecords(records: readonly unknown[]): Promise<unknown[]> {
+         return typeof (record as { event?: unknown }).event === 'object'
+           ? { ...(record as Record<string, unknown>), event: enriched } : enriched
+       }
++      // The model's token stream is not what the phone draws: it renders
++      // `message.content`, and only `assistant/attempt` -- which this page no
++      // longer carries -- ever read `stream`. Leaving it in spent most of a
++      // page's byte budget on something nobody displays: one answer's stream is
++      // routinely larger than the answer itself (measured: 210 KB of a 210 KB
++      // record), and the page cap is 256 KB.
++      if (event?.['type'] === 'assistant/message' && event['data'] !== undefined) {
++        const data = event['data'] as Record<string, unknown>
++        if (data['stream'] !== undefined) {
++          const { stream: _stream, ...rest } = data
++          const stripped = { ...event, data: rest }
++          return typeof (record as { event?: unknown }).event === 'object'
++            ? { ...(record as Record<string, unknown>), event: stripped } : stripped
++        }
++      }
+       return event?.['type'] === 'user/message' ? withAttachmentPlaceholders(record, event) : record
+     })
+ }
+ 
++/**
++ * Every record of one turn, minus what a phone cannot use.
++ *
++ * The summary exists because the screen draws one bubble per turn; this is the
++ * other half of that decision -- the detail is kept, but only when asked for.
++ *
++ * `request/header` and `request/context` are the system prompt and the tool
++ * table: hundreds of kilobytes that belong to no turn the operator reads, and
++ * `system/message` is that prompt as a message. The token `stream` goes for the
++ * same reason it goes from a summary page: no client draws it.
++ *
++ * @param records - the page's raw records, oldest first.
++ * @param turn - the turn to keep.
++ * @returns the turn's records, trimmed to the page budget from the oldest end.
++ */
++function fullTurnRecords(records: readonly unknown[], turn: number): unknown[] {
++  const kept: unknown[] = []
++  for (const record of records) {
++    const event = eventOf(record)
++    if (event === null) continue
++    const type = event['type']
++    if (type === 'request/header' || type === 'request/context' || type === 'system/message') continue
++    if (turnOf(event) !== turn) continue
++    const data = event['data']
++    if (type === 'assistant/message' && typeof data === 'object' && data !== null
++      && (data as Record<string, unknown>)['stream'] !== undefined) {
++      const { stream: _stream, ...rest } = data as Record<string, unknown>
++      const stripped = { ...(event as Record<string, unknown>), data: rest }
++      kept.push(typeof (record as { event?: unknown }).event === 'object'
++        ? { ...(record as Record<string, unknown>), event: stripped } : stripped)
++      continue
++    }
++    kept.push(record)
++  }
++  return withinBudget(kept)
++}
++
+ /**
+  * Whether a content part is a text part with something to read in it.
+  * @param part - one content part.
+@@ -882,6 +936,7 @@ export async function sessionMessages(
+   beforeSeq?: number,
+   afterSeq?: number,
+   parentSessionId?: string,
++  fullTurn?: number,
+ ): Promise<SessionMessagesResult> {
+   const page = await readLogPage(ctx, sessionId, maxMessages, beforeSeq, parentSessionId)
+   if (page === null) {
+@@ -889,7 +944,13 @@ export async function sessionMessages(
+   }
+ 
+   const records = page.records
+-  const summarized = await summaryRecords(records)
++  // One turn, whole: the narration, every tool call and its result, the attempts
++  // -- what the summary throws away. Asked for by name (and paid for in bytes),
++  // never as part of a refresh: the screen still draws one bubble per turn, and
++  // a phone that fetched this on every poll would spend the session's whole
++  // weight on rows nobody opened.
++  const summarized =
++    fullTurn === undefined ? await summaryRecords(records) : fullTurnRecords(records, fullTurn)
+   // Only what the phone does not already hold. Filtered after the summary and
+   // before the budget, for the same two reasons in opposite directions: the
+   // summary decides which records are worth sending at all, and an old record
+diff --git a/src/bridge/index.ts b/src/bridge/index.ts
+index d678203..39bf380 100644
+--- a/src/bridge/index.ts
++++ b/src/bridge/index.ts
+@@ -540,6 +540,14 @@ export function createMethodTable(
+         holdsNothing || explicit !== undefined
+           ? undefined
+           : delivery?.deliveredThrough(context.deviceId, sessionId)
++      // `full: true` with a `turn` asks for that one turn's whole log -- the
++      // narration and the tool calls the summary drops. It is a separate ask
++      // because it is a separate cost: a page of it is up to the whole page
++      // budget, where a summary page carries every turn in it.
++      const fullTurn =
++        fields?.['full'] === true && typeof fields['turn'] === 'number' && Number.isFinite(fields['turn'])
++          ? fields['turn']
++          : undefined
+       return sessionMessages(
+         ctx,
+         sessionId,
+@@ -547,6 +555,7 @@ export function createMethodTable(
+         typeof before === 'number' ? before : undefined,
+         explicit ?? remembered,
+         parentSessionId,
++        fullTurn,
+       )
+     },
+ 
+diff --git a/test/summaries.test.ts b/test/summaries.test.ts
+index 816ec50..774264b 100644
+--- a/test/summaries.test.ts
++++ b/test/summaries.test.ts
+@@ -617,6 +617,81 @@ describe('the summary page', () => {
+     expect(names(result.records)).not.toContain('system/message')
+   })
+ 
++  it('keeps the answer but drops the token stream beside it', async () => {
++    // The stream is the raw timed model output -- by far the largest field on a
++    // record (measured on a real session: 210 KB of a 210 KB assistant message)
++    // -- and neither client reads it. The page budget is 256 KB, so leaving it in
++    // meant one answer could spend most of a page on bytes nobody draws.
++    const streamed = record('assistant/message', 4, {
++      turn: 1,
++      step: 1,
++      message: { role: 'assistant', content: [{ type: 'text', text: 'done' }] },
++      stream: [
++        { type: 'chunk', chunk: { type: 'delta', text: 'do' } },
++        { type: 'chunk', chunk: { type: 'delta', text: 'ne' } },
++      ],
++    })
++    const records = [
++      prompt(0, 'fix it'),
++      record('turn/start', 1, { turn: 1 }),
++      record('step/start', 2, { turn: 1, step: 1 }),
++      streamed,
++      record('turn/end', 5, { turn: 1, reason: { kind: 'completed' } }),
++    ]
++
++    const { ctx } = fakeGateway({ frames: [{ type: 'snapshot', cursor: 5, records }] })
++    const result = await sessionMessages(ctx, 's1')
++
++    const answer = result.records.find((value) => nameOf(value) === 'assistant/message')
++    expect(answer).toBeDefined()
++    const data = eventOf(answer)['data'] as Record<string, unknown>
++    expect(data).not.toHaveProperty('stream')
++    // Everything the screen reads is still there.
++    expect((data['message'] as { content: { text: string }[] }).content[0].text).toBe('done')
++    expect(data['turn']).toBe(1)
++  })
++
++  it('sends one turn whole when asked for it, and only that turn', async () => {
++    // What the summary throws away, on request: the narration, the tool calls and
++    // their results. `request/header` is the tool table and the system prompt --
++    // hundreds of kilobytes belonging to no turn -- so it goes even here.
++    const records = [
++      prompt(0, 'fix it'),
++      record('turn/start', 1, { turn: 1 }),
++      record('step/start', 2, { turn: 1, step: 1 }),
++      record('request/header', 3, { turn: 1, tools: [{ name: 'bash' }] }),
++      record('assistant/message', 4, {
++        turn: 1,
++        step: 1,
++        message: { role: 'assistant', content: [{ type: 'text', text: 'Looking.' }] },
++        stream: [{ type: 'chunk', chunk: { type: 'delta', text: 'Lo' } }],
++      }),
++      record('tool/call', 5, { turn: 1, step: 1, name: 'bash', arguments: '{"cmd":"ls"}' }),
++      record('tool/result', 6, { turn: 1, step: 1, ok: true, content: 'a.txt' }),
++      record('turn/end', 7, { turn: 1, reason: { kind: 'completed' } }),
++      prompt(8, 'and next'),
++      record('turn/start', 9, { turn: 2 }),
++      record('turn/end', 10, { turn: 2, reason: { kind: 'completed' } }),
++    ]
++
++    const { ctx } = fakeGateway({ frames: [{ type: 'snapshot', cursor: 10, records }] })
++    const result = await sessionMessages(ctx, 's1', undefined, undefined, undefined, undefined, 1)
++
++    expect(names(result.records)).toEqual([
++      'turn/start',
++      'step/start',
++      'assistant/message',
++      'tool/call',
++      'tool/result',
++      'turn/end',
++    ])
++    // The stream is dropped here for the same reason a summary page drops it.
++    const answer = result.records[2]
++    expect((eventOf(answer)['data'] as Record<string, unknown>)).not.toHaveProperty('stream')
++    // The other turn is not in this page: the ask was for one turn's detail.
++    expect(names(result.records)).not.toContain('user/message')
++  })
++
+   it('drops the per-step narration and keeps the turn’s last message', async () => {
+     // The largest thing on the wire, and the app draws one bubble per turn.
+     const first = reply(2, 1, 'Let me look at the workspace first.')
+diff --git a/test/page-budget.test.ts b/test/page-budget.test.ts
+index ac957f1..013ade6 100644
+--- a/test/page-budget.test.ts
++++ b/test/page-budget.test.ts
+@@ -37,11 +37,16 @@ describe('the session page budget', () => {
+   })
+ 
+   it('is applied to the records that go out', () => {
+-    // The budget is spent on the summary, not on the page the host returned:
++    // The budget is spent on the projection, not on the page the host returned:
+     // trimming the full log first lets per-step narration fill the budget and
+     // evict the prompt it was narrating. `summaries.test.ts` pins the behaviour;
+     // this pins the order it depends on.
+-    expect(SOURCE).toContain('const summarized = await summaryRecords(records)')
++    //
++    // There are two projections now -- the summary, and one turn whole when the
++    // client asks for its detail -- and both end in `withinBudget`, so the order
++    // this test guards is the same either way.
++    expect(SOURCE).toContain('await summaryRecords(records)')
++    expect(SOURCE).toContain('fullTurnRecords(records, fullTurn)')
+     expect(SOURCE).toContain('records: withinBudget(fresh)')
+     // And the incremental filter sits between the two: an old record that
+     // survived the summary must not spend bytes the new ones need.

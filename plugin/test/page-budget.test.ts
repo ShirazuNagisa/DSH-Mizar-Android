@@ -37,11 +37,16 @@ describe('the session page budget', () => {
   })
 
   it('is applied to the records that go out', () => {
-    // The budget is spent on the summary, not on the page the host returned:
+    // The budget is spent on the projection, not on the page the host returned:
     // trimming the full log first lets per-step narration fill the budget and
     // evict the prompt it was narrating. `summaries.test.ts` pins the behaviour;
     // this pins the order it depends on.
-    expect(SOURCE).toContain('const summarized = await summaryRecords(records)')
+    //
+    // There are two projections now -- the summary, and one turn whole when the
+    // client asks for its detail -- and both end in `withinBudget`, so the order
+    // this test guards is the same either way.
+    expect(SOURCE).toContain('await summaryRecords(records)')
+    expect(SOURCE).toContain('fullTurnRecords(records, fullTurn)')
     expect(SOURCE).toContain('records: withinBudget(fresh)')
     // And the incremental filter sits between the two: an old record that
     // survived the summary must not spend bytes the new ones need.

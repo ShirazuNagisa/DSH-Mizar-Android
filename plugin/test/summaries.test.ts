@@ -617,6 +617,81 @@ describe('the summary page', () => {
     expect(names(result.records)).not.toContain('system/message')
   })
 
+  it('keeps the answer but drops the token stream beside it', async () => {
+    // The stream is the raw timed model output -- by far the largest field on a
+    // record (measured on a real session: 210 KB of a 210 KB assistant message)
+    // -- and neither client reads it. The page budget is 256 KB, so leaving it in
+    // meant one answer could spend most of a page on bytes nobody draws.
+    const streamed = record('assistant/message', 4, {
+      turn: 1,
+      step: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'done' }] },
+      stream: [
+        { type: 'chunk', chunk: { type: 'delta', text: 'do' } },
+        { type: 'chunk', chunk: { type: 'delta', text: 'ne' } },
+      ],
+    })
+    const records = [
+      prompt(0, 'fix it'),
+      record('turn/start', 1, { turn: 1 }),
+      record('step/start', 2, { turn: 1, step: 1 }),
+      streamed,
+      record('turn/end', 5, { turn: 1, reason: { kind: 'completed' } }),
+    ]
+
+    const { ctx } = fakeGateway({ frames: [{ type: 'snapshot', cursor: 5, records }] })
+    const result = await sessionMessages(ctx, 's1')
+
+    const answer = result.records.find((value) => nameOf(value) === 'assistant/message')
+    expect(answer).toBeDefined()
+    const data = eventOf(answer)['data'] as Record<string, unknown>
+    expect(data).not.toHaveProperty('stream')
+    // Everything the screen reads is still there.
+    expect((data['message'] as { content: { text: string }[] }).content[0].text).toBe('done')
+    expect(data['turn']).toBe(1)
+  })
+
+  it('sends one turn whole when asked for it, and only that turn', async () => {
+    // What the summary throws away, on request: the narration, the tool calls and
+    // their results. `request/header` is the tool table and the system prompt --
+    // hundreds of kilobytes belonging to no turn -- so it goes even here.
+    const records = [
+      prompt(0, 'fix it'),
+      record('turn/start', 1, { turn: 1 }),
+      record('step/start', 2, { turn: 1, step: 1 }),
+      record('request/header', 3, { turn: 1, tools: [{ name: 'bash' }] }),
+      record('assistant/message', 4, {
+        turn: 1,
+        step: 1,
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Looking.' }] },
+        stream: [{ type: 'chunk', chunk: { type: 'delta', text: 'Lo' } }],
+      }),
+      record('tool/call', 5, { turn: 1, step: 1, name: 'bash', arguments: '{"cmd":"ls"}' }),
+      record('tool/result', 6, { turn: 1, step: 1, ok: true, content: 'a.txt' }),
+      record('turn/end', 7, { turn: 1, reason: { kind: 'completed' } }),
+      prompt(8, 'and next'),
+      record('turn/start', 9, { turn: 2 }),
+      record('turn/end', 10, { turn: 2, reason: { kind: 'completed' } }),
+    ]
+
+    const { ctx } = fakeGateway({ frames: [{ type: 'snapshot', cursor: 10, records }] })
+    const result = await sessionMessages(ctx, 's1', undefined, undefined, undefined, undefined, 1)
+
+    expect(names(result.records)).toEqual([
+      'turn/start',
+      'step/start',
+      'assistant/message',
+      'tool/call',
+      'tool/result',
+      'turn/end',
+    ])
+    // The stream is dropped here for the same reason a summary page drops it.
+    const answer = result.records[2]
+    expect((eventOf(answer)['data'] as Record<string, unknown>)).not.toHaveProperty('stream')
+    // The other turn is not in this page: the ask was for one turn's detail.
+    expect(names(result.records)).not.toContain('user/message')
+  })
+
   it('drops the per-step narration and keeps the turn’s last message', async () => {
     // The largest thing on the wire, and the app draws one bubble per turn.
     const first = reply(2, 1, 'Let me look at the workspace first.')

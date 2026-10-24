@@ -397,7 +397,14 @@ export function createMethodTable(ctx, facts, broker, push, delivery, uploads) {
             const remembered = holdsNothing || explicit !== undefined
                 ? undefined
                 : delivery?.deliveredThrough(context.deviceId, sessionId);
-            return sessionMessages(ctx, sessionId, typeof limit === 'number' ? limit : undefined, typeof before === 'number' ? before : undefined, explicit ?? remembered, parentSessionId);
+            // `full: true` with a `turn` asks for that one turn's whole log -- the
+            // narration and the tool calls the summary drops. It is a separate ask
+            // because it is a separate cost: a page of it is up to the whole page
+            // budget, where a summary page carries every turn in it.
+            const fullTurn = fields?.['full'] === true && typeof fields['turn'] === 'number' && Number.isFinite(fields['turn'])
+                ? fields['turn']
+                : undefined;
+            return sessionMessages(ctx, sessionId, typeof limit === 'number' ? limit : undefined, typeof before === 'number' ? before : undefined, explicit ?? remembered, parentSessionId, fullTurn);
         },
         /**
          * The running turn's compact process detail.

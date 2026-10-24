@@ -364,9 +364,11 @@ async function summaryRecords(records) {
                 return false;
         }
     })
-        // Preserved byte for byte except for one case: a prompt that carried only an
+        // Preserved byte for byte except for two cases: a prompt that carried only an
         // image or a file has no text for the conversation to draw, so a placeholder
-        // is appended. See {@link withAttachmentPlaceholders}.
+        // is appended ({@link withAttachmentPlaceholders}); and an answer arrives
+        // without its token `stream`, which no client draws and which is usually the
+        // largest field on the record.
         .map((record) => {
         const event = eventOf(record);
         if (event?.['type'] === 'turn/end') {
@@ -391,8 +393,62 @@ async function summaryRecords(records) {
             return typeof record.event === 'object'
                 ? { ...record, event: enriched } : enriched;
         }
+        // The model's token stream is not what the phone draws: it renders
+        // `message.content`, and only `assistant/attempt` -- which this page no
+        // longer carries -- ever read `stream`. Leaving it in spent most of a
+        // page's byte budget on something nobody displays: one answer's stream is
+        // routinely larger than the answer itself (measured: 210 KB of a 210 KB
+        // record), and the page cap is 256 KB.
+        if (event?.['type'] === 'assistant/message' && event['data'] !== undefined) {
+            const data = event['data'];
+            if (data['stream'] !== undefined) {
+                const { stream: _stream, ...rest } = data;
+                const stripped = { ...event, data: rest };
+                return typeof record.event === 'object'
+                    ? { ...record, event: stripped } : stripped;
+            }
+        }
         return event?.['type'] === 'user/message' ? withAttachmentPlaceholders(record, event) : record;
     });
+}
+/**
+ * Every record of one turn, minus what a phone cannot use.
+ *
+ * The summary exists because the screen draws one bubble per turn; this is the
+ * other half of that decision -- the detail is kept, but only when asked for.
+ *
+ * `request/header` and `request/context` are the system prompt and the tool
+ * table: hundreds of kilobytes that belong to no turn the operator reads, and
+ * `system/message` is that prompt as a message. The token `stream` goes for the
+ * same reason it goes from a summary page: no client draws it.
+ *
+ * @param records - the page's raw records, oldest first.
+ * @param turn - the turn to keep.
+ * @returns the turn's records, trimmed to the page budget from the oldest end.
+ */
+function fullTurnRecords(records, turn) {
+    const kept = [];
+    for (const record of records) {
+        const event = eventOf(record);
+        if (event === null)
+            continue;
+        const type = event['type'];
+        if (type === 'request/header' || type === 'request/context' || type === 'system/message')
+            continue;
+        if (turnOf(event) !== turn)
+            continue;
+        const data = event['data'];
+        if (type === 'assistant/message' && typeof data === 'object' && data !== null
+            && data['stream'] !== undefined) {
+            const { stream: _stream, ...rest } = data;
+            const stripped = { ...event, data: rest };
+            kept.push(typeof record.event === 'object'
+                ? { ...record, event: stripped } : stripped);
+            continue;
+        }
+        kept.push(record);
+    }
+    return withinBudget(kept);
 }
 /**
  * Whether a content part is a text part with something to read in it.
@@ -732,13 +788,18 @@ async function readLogPage(ctx, sessionId, maxMessages, beforeSeq, parentSession
  *   a session. See {@link logAddress}.
  * @returns the page, or no records when the session is unknown.
  */
-export async function sessionMessages(ctx, sessionId, maxMessages, beforeSeq, afterSeq, parentSessionId) {
+export async function sessionMessages(ctx, sessionId, maxMessages, beforeSeq, afterSeq, parentSessionId, fullTurn) {
     const page = await readLogPage(ctx, sessionId, maxMessages, beforeSeq, parentSessionId);
     if (page === null) {
         return { sessionId, asOfSeq: null, records: [], hasMore: false, context: null };
     }
     const records = page.records;
-    const summarized = await summaryRecords(records);
+    // One turn, whole: the narration, every tool call and its result, the attempts
+    // -- what the summary throws away. Asked for by name (and paid for in bytes),
+    // never as part of a refresh: the screen still draws one bubble per turn, and
+    // a phone that fetched this on every poll would spend the session's whole
+    // weight on rows nobody opened.
+    const summarized = fullTurn === undefined ? await summaryRecords(records) : fullTurnRecords(records, fullTurn);
     // Only what the phone does not already hold. Filtered after the summary and
     // before the budget, for the same two reasons in opposite directions: the
     // summary decides which records are worth sending at all, and an old record
