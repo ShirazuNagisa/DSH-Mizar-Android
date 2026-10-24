@@ -77,6 +77,42 @@ class AccountClient(
     )
 
     /**
+     * Ask for a password-reset code.
+     *
+     * The service answers the same way for an unknown address, so this cannot be
+     * used to find out whether an account exists.
+     */
+    suspend fun resetStart(email: String): ResetChallenge {
+        val envelope = decode(
+            send(
+                "POST", "/password/reset/start", token = null,
+                body = WIRE_JSON.encodeToString(EmailBody.serializer(), EmailBody(email)),
+            ),
+            ResetStartEnvelope.serializer(),
+        )
+        return ResetChallenge(email, envelope.expiresAt, envelope.resendAfterSeconds)
+    }
+
+    /**
+     * Finish a password reset.
+     *
+     * The service signs this device in on the way through, so a forgotten password
+     * no longer strands somebody at the login form.
+     */
+    suspend fun resetComplete(
+        email: String,
+        code: String,
+        password: String,
+        device: AccountDevicePayload,
+    ): AccountAuth = decode(
+        send(
+            "POST", "/password/reset/complete", token = null,
+            body = WIRE_JSON.encodeToString(ResetBody.serializer(), ResetBody(email, code, password, device)),
+        ),
+        AccountAuth.serializer(),
+    )
+
+    /**
      * Begin a GitHub sign-in.
      *
      * With a [token] this is a *link* request: the browser flow ends by attaching

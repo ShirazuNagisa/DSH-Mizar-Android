@@ -40,6 +40,14 @@ const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 const users = new Map()
 /** @type {Map<string, { userId: string, deviceId: string, revoked: boolean }>} */
 const sessions = new Map()
+
+/**
+ * Outstanding password-reset codes, by lowercased address.
+ *
+ * Fixed at 123456 on purpose: this mock exists so the flow can be walked end to
+ * end, and a random code would only mean reading the log to type it.
+ */
+const resetCodes = new Map()
 /** @type {Map<string, { deviceId: string, userId: string | null, token: string | null, expiresAt: number }>} */
 const flows = new Map()
 /** @type {Map<string, { token: string, deviceId: string, expiresAt: number }>} */
@@ -425,6 +433,46 @@ const server = createServer(async (request, response) => {
       token: issued.token,
       user: publicUser(user, device.id),
       ...(issued.notice === undefined ? {} : { notice: issued.notice }),
+    })
+    return
+  }
+
+  // ── password reset ────────────────────────────────────────────────────────
+  if (method === 'POST' && route === '/password/reset/start') {
+    const body = await readBody(request)
+    const email = typeof body?.email === 'string' ? body.email.trim() : ''
+    const expiresAt = Date.now() + 10 * 60_000
+    // The real service answers the same way for an address it does not know, and
+    // so does this one: otherwise the screen's copy ("if that address has an
+    // account") would be a lie the UI tells on the mock's behalf.
+    if (email.includes('@')) resetCodes.set(email.toLowerCase(), { code: '123456', expiresAt })
+    send(response, 200, { expiresAt, resendAfterSeconds: 60 })
+    return
+  }
+
+  if (method === 'POST' && route === '/password/reset/complete') {
+    const body = await readBody(request)
+    const email = typeof body?.email === 'string' ? body.email.trim() : ''
+    const code = typeof body?.code === 'string' ? body.code.trim() : ''
+    const password = typeof body?.password === 'string' ? body.password : ''
+    const device = deviceOf(body)
+    const issued = resetCodes.get(email.toLowerCase())
+    const user = findByIdentifier(email)
+    if (issued === undefined || issued.code !== code || issued.expiresAt < Date.now()) {
+      send(response, 401, { error: 'INVALID_CODE', message: 'that code is not right' })
+      return
+    }
+    if (user === null || password.length < 8 || password.length > 128 || device === null) {
+      send(response, 400, { error: 'INVALID_INPUT', message: 'that password is not valid' })
+      return
+    }
+    user.passwordHash = hash(password)
+    resetCodes.delete(email.toLowerCase())
+    const session = issueSession(user, device)
+    send(response, 200, {
+      token: session.token,
+      user: publicUser(user, device.id),
+      ...(session.notice === undefined ? {} : { notice: session.notice }),
     })
     return
   }

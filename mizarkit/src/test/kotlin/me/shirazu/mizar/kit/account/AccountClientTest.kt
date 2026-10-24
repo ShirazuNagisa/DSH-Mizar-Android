@@ -41,6 +41,53 @@ private val USER = """
 
 class AccountClientTest {
 
+    /**
+     * A reset is two calls, and the first one must not say whether the account
+     * exists: the service answers the same way for an unknown address, and the
+     * screen's copy depends on that being true.
+     */
+    @Test
+    fun `reset start posts the address and returns the code's lifetime`() = runBlocking {
+        val transport = ScriptedTransport {
+            ok("""{"expiresAt":1760500000000,"resendAfterSeconds":60}""")
+        }
+        val client = AccountClient("https://relay.test/account/v1", transport, appVersion = "0.10.3")
+
+        val challenge = client.resetStart("a@b.com")
+
+        val request = transport.requests.single()
+        assertEquals("POST", request.method)
+        assertEquals("https://relay.test/account/v1/password/reset/start", request.url)
+        assertNull(request.headers["authorization"])
+        val body = WIRE_JSON.parseToJsonElement(request.body!!).jsonObject
+        assertEquals(setOf("email"), body.keys)
+        assertEquals("a@b.com", body.getValue("email").jsonPrimitive.content)
+
+        assertEquals("a@b.com", challenge.email)
+        assertEquals(1760500000000L, challenge.expiresAt)
+        assertEquals(60, challenge.resendAfterSeconds)
+    }
+
+    @Test
+    fun `reset complete trades the code for a session`() = runBlocking {
+        val transport = ScriptedTransport {
+            ok("""{"token":"mza_token_value_1234567890","user":$USER}""")
+        }
+        val client = AccountClient("https://relay.test/account/v1", transport, appVersion = "0.10.3")
+
+        val auth = client.resetComplete("a@b.com", "123456", "mizar-test-password", DEVICE)
+
+        val request = transport.requests.single()
+        assertEquals("https://relay.test/account/v1/password/reset/complete", request.url)
+        val body = WIRE_JSON.parseToJsonElement(request.body!!).jsonObject
+        assertEquals("a@b.com", body.getValue("email").jsonPrimitive.content)
+        assertEquals("123456", body.getValue("code").jsonPrimitive.content)
+        assertEquals("mizar-test-password", body.getValue("password").jsonPrimitive.content)
+        assertEquals("install-1", body.getValue("device").jsonObject.getValue("id").jsonPrimitive.content)
+        // The reset signs this device in: the session comes back from the same call.
+        assertEquals("mza_token_value_1234567890", auth.token)
+    }
+
     @Test
     fun `login posts identifier password and an android device`() = runBlocking {
         val transport = ScriptedTransport {

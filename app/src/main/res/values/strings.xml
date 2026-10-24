@@ -314,6 +314,16 @@
     <string name="account_email">Email</string>
     <string name="account_username">Username</string>
     <string name="account_identifier">Username or email</string>
+    <string name="account_error_code">Enter the six-digit code.</string>
+    <string name="account_forgot">Forgot your password?</string>
+    <string name="account_reset_title">Reset your password</string>
+    <string name="account_reset_hint">If that address has an account, a code is on its way. It works for a while, then stops.</string>
+    <string name="account_reset_send">Send the code</string>
+    <string name="account_reset_code">Six-digit code</string>
+    <string name="account_reset_new_password">New password</string>
+    <string name="account_reset_submit">Reset and sign in</string>
+    <string name="account_reset_back">Back to sign in</string>
+    <string name="account_reset_sent">Code sent to %1$s</string>
     <string name="account_password">Password</string>
     <string name="account_continue_github">Continue with GitHub</string>
     <string name="account_link_github">Connect GitHub</string>

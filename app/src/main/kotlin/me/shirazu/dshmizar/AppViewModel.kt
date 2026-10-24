@@ -142,6 +142,10 @@ data class AccountUiState(
     val mode: AccountMode = AccountMode.SIGN_IN,
     /** The landing page's "type the code" fallback is showing. */
     val handoffEntry: Boolean = false,
+    /** The password-reset form is showing instead of the sign-in form. */
+    val resetOpen: Boolean = false,
+    /** Set once the reset code has been asked for: which address, and for how long. */
+    val resetChallenge: me.shirazu.mizar.kit.account.ResetChallenge? = null,
 ) {
     val profile get() = session?.profile
     val isPaid: Boolean get() = profile?.isPaid == true
@@ -600,6 +604,63 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(account = it.account.copy(handoffEntry = show, error = null)) }
     }
 
+    // ── password reset ──────────────────────────────────────────────────────
+
+    fun openPasswordReset() {
+        _state.update {
+            it.copy(account = it.account.copy(resetOpen = true, resetChallenge = null, error = null))
+        }
+    }
+
+    fun closePasswordReset() {
+        _state.update {
+            it.copy(account = it.account.copy(resetOpen = false, resetChallenge = null, error = null))
+        }
+    }
+
+    /**
+     * Ask for a reset code.
+     *
+     * The service answers the same way for an address it does not know, so the
+     * screen's copy says "if that address has an account" rather than confirming
+     * one. That is the service's privacy decision, not a wording choice here.
+     */
+    fun startPasswordReset(email: String) {
+        val address = email.trim()
+        if (!address.contains('@') || address.startsWith('@') || address.endsWith('@')) {
+            setAccountError(getApplication<Application>().getString(R.string.account_error_email))
+            return
+        }
+        if (_state.value.account.working) return
+        viewModelScope.launch {
+            _state.update { it.copy(account = it.account.copy(working = true, error = null)) }
+            try {
+                val challenge = accountClient.resetStart(address)
+                _state.update {
+                    it.copy(account = it.account.copy(working = false, resetChallenge = challenge))
+                }
+            } catch (error: Throwable) {
+                _state.update {
+                    it.copy(account = it.account.copy(working = false, error = messageFor(error)))
+                }
+            }
+        }
+    }
+
+    /** Finish the reset; the service signs this device in on the way through. */
+    fun completePasswordReset(code: String, password: String) {
+        val challenge = _state.value.account.resetChallenge ?: return
+        if (password.length !in 8..128) {
+            setAccountError(getApplication<Application>().getString(R.string.account_error_password))
+            return
+        }
+        if (code.trim().isEmpty()) {
+            setAccountError(getApplication<Application>().getString(R.string.account_error_code))
+            return
+        }
+        authenticate { accountClient.resetComplete(challenge.email, code.trim(), password, devicePayload()) }
+    }
+
     fun clearAccountError() {
         _state.update { it.copy(account = it.account.copy(error = null)) }
     }
@@ -652,6 +713,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             error = null,
                             mode = AccountMode.SIGN_IN,
                             handoffEntry = false,
+                            resetOpen = false,
+                            resetChallenge = null,
                         ),
                     )
                 }

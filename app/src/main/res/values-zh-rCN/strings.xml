@@ -299,6 +299,16 @@
     <string name="account_email">邮箱</string>
     <string name="account_username">用户名</string>
     <string name="account_identifier">用户名或邮箱</string>
+    <string name="account_error_code">请输入六位验证码。</string>
+    <string name="account_forgot">忘记密码？</string>
+    <string name="account_reset_title">重置密码</string>
+    <string name="account_reset_hint">如果这个地址有账户，验证码已经在路上。它只在一段时间内有效。</string>
+    <string name="account_reset_send">发送验证码</string>
+    <string name="account_reset_code">六位验证码</string>
+    <string name="account_reset_new_password">新密码</string>
+    <string name="account_reset_submit">重置并登录</string>
+    <string name="account_reset_back">返回登录</string>
+    <string name="account_reset_sent">验证码已发到 %1$s</string>
     <string name="account_password">密码</string>
     <string name="account_continue_github">使用 GitHub 登录</string>
     <string name="account_link_github">绑定 GitHub</string>

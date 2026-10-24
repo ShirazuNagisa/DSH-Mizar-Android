@@ -131,6 +131,37 @@ internal data class RegisterBody(
     val device: AccountDevicePayload,
 )
 
+/**
+ * What a reset has to tell the screen: which address the code went to, when it
+ * stops working, and how long before another may be asked for.
+ *
+ * The service answers the same way for an address it does not know, so a caller
+ * cannot use this to find out whether an account exists -- which is why the screen
+ * says "if that address has an account" rather than confirming one.
+ */
+data class ResetChallenge(
+    val email: String,
+    val expiresAt: Long,
+    val resendAfterSeconds: Int,
+)
+
+@Serializable
+internal data class EmailBody(val email: String)
+
+@Serializable
+internal data class ResetStartEnvelope(
+    val expiresAt: Long = 0,
+    val resendAfterSeconds: Int = 60,
+)
+
+@Serializable
+internal data class ResetBody(
+    val email: String,
+    val code: String,
+    val password: String,
+    val device: AccountDevicePayload,
+)
+
 @Serializable
 internal data class LoginBody(
     val identifier: String,

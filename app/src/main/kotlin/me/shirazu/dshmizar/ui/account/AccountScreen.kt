@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -128,6 +129,14 @@ private fun SignedOut(model: AppViewModel, account: AccountUiState) {
     var password by remember { mutableStateOf("") }
     var handoff by remember { mutableStateOf("") }
 
+    // The reset form replaces the sign-in form rather than sitting beside it: both
+    // ask for an address and a password, and two of each on one screen is a form
+    // nobody can read.
+    if (account.resetOpen) {
+        PasswordReset(model, account)
+        return
+    }
+
     val registering = account.mode == AccountMode.REGISTER
     val busy = account.working
 
@@ -169,6 +178,15 @@ private fun SignedOut(model: AppViewModel, account: AccountUiState) {
         keyboard = KeyboardType.Password,
         secret = true,
     )
+
+    if (!registering) {
+        TextButton(
+            onClick = { model.openPasswordReset() },
+            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
+        ) {
+            Text(stringResource(R.string.account_forgot), style = MaterialTheme.typography.labelLarge)
+        }
+    }
 
     Button(
         onClick = {
@@ -478,6 +496,108 @@ internal fun DeleteDialog(busy: Boolean, onCancel: () -> Unit, onConfirm: () -> 
 }
 
 // ── pieces ──────────────────────────────────────────────────────────────────
+
+/**
+ * Two steps: the address, then the code and the new password.
+ *
+ * The first step's answer deliberately does not say whether the address has an
+ * account -- the service answers the same way either way -- so the copy says "if
+ * that address has an account" and the screen moves on regardless.
+ */
+@Composable
+private fun PasswordReset(model: AppViewModel, account: AccountUiState) {
+    var email by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    val challenge = account.resetChallenge
+    val busy = account.working
+
+    Text(
+        stringResource(R.string.account_reset_title),
+        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+        modifier = Modifier.padding(top = 12.dp),
+    )
+    Text(
+        stringResource(R.string.account_reset_hint),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 6.dp),
+    )
+
+    if (challenge == null) {
+        Field(
+            value = email,
+            onValueChange = { email = it },
+            label = stringResource(R.string.account_email),
+            keyboard = KeyboardType.Email,
+        )
+        Button(
+            onClick = { model.startPasswordReset(email) },
+            enabled = !busy,
+            shape = ButtonShape.Primary,
+            modifier = Modifier.fillMaxWidth().padding(top = 14.dp).height(50.dp),
+        ) {
+            if (busy) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+            } else {
+                Text(
+                    stringResource(R.string.account_reset_send),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                )
+            }
+        }
+    } else {
+        Text(
+            stringResource(R.string.account_reset_sent, challenge.email),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 10.dp),
+        )
+        Field(
+            value = code,
+            onValueChange = { code = it.filter(Char::isDigit).take(6) },
+            label = stringResource(R.string.account_reset_code),
+            keyboard = KeyboardType.NumberPassword,
+        )
+        Field(
+            value = password,
+            onValueChange = { password = it },
+            label = stringResource(R.string.account_reset_new_password),
+            keyboard = KeyboardType.Password,
+            secret = true,
+        )
+        Button(
+            onClick = { model.completePasswordReset(code, password) },
+            enabled = !busy,
+            shape = ButtonShape.Primary,
+            modifier = Modifier.fillMaxWidth().padding(top = 14.dp).height(50.dp),
+        ) {
+            if (busy) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+            } else {
+                Text(
+                    stringResource(R.string.account_reset_submit),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                )
+            }
+        }
+    }
+
+    TextButton(
+        onClick = { model.closePasswordReset() },
+        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+    ) {
+        Text(stringResource(R.string.account_reset_back), style = MaterialTheme.typography.labelLarge)
+    }
+}
 
 @Composable
 private fun Field(
