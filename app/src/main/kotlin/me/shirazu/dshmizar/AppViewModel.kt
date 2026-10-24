@@ -152,6 +152,9 @@ data class AccountUiState(
      */
     val pendingRegistration: PendingRegistration? = null,
     val registerChallenge: me.shirazu.mizar.kit.account.EmailChallenge? = null,
+    /** The redeem-code dialog, and what the last successful redeem bought. */
+    val redeemOpen: Boolean = false,
+    val redeemNotice: String? = null,
 ) {
     val profile get() = session?.profile
     val isPaid: Boolean get() = profile?.isPaid == true
@@ -841,18 +844,53 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Add paid days to the signed-in account. */
+    fun openRedeem() {
+        _state.update {
+            it.copy(account = it.account.copy(redeemOpen = true, redeemNotice = null, error = null))
+        }
+    }
+
+    fun closeRedeem() {
+        _state.update {
+            it.copy(account = it.account.copy(redeemOpen = false, redeemNotice = null, error = null))
+        }
+    }
+
+    /**
+     * Turn a code into paid days.
+     *
+     * The service adds the days to whatever the account already has, so two codes in
+     * a row stack; the answer is the whole profile, which is where the new end date
+     * comes from. Saying that date out loud is the point of this function -- a
+     * redeem that only changed a line further up the screen reads as nothing
+     * happening.
+     */
     fun redeemInvite(code: String) {
         val session = _state.value.account.session ?: return
         val value = code.trim()
         if (value.isEmpty() || _state.value.account.working) return
         viewModelScope.launch {
-            _state.update { it.copy(account = it.account.copy(working = true, error = null)) }
+            _state.update { it.copy(account = it.account.copy(working = true, error = null, redeemNotice = null)) }
             try {
                 val user = accountClient.redeem(session.token, value)
                 val updated = session.copy(profile = user, savedAtMillis = System.currentTimeMillis())
                 accounts.save(updated)
+                val until = user.paidUntil ?: user.grantedPaidUntil
+                val notice = until?.let {
+                    getApplication<Application>().getString(
+                        R.string.redeem_accepted,
+                        java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(it)),
+                    )
+                } ?: getApplication<Application>().getString(R.string.redeem_accepted_plain)
                 _state.update {
-                    it.copy(account = it.account.copy(phase = AccountPhase.READY, session = updated, working = false))
+                    it.copy(
+                        account = it.account.copy(
+                            phase = AccountPhase.READY,
+                            session = updated,
+                            working = false,
+                            redeemNotice = notice,
+                        ),
+                    )
                 }
             } catch (error: Throwable) {
                 _state.update {

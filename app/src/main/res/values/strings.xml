@@ -299,6 +299,14 @@
     <string name="paid_detail_body">Mizar Paid exists to provide what a high-bandwidth server can do: carrying a session\'s execution as it happens, attachments, and so on. Payment only shares the server cost and can barely be profitable. Free users can still use most features and the free server. Thank you for using it.</string>
     <string name="paid_detail_how">Android has no in-app purchase yet. Paid time is granted by an invite code or by the operator of the service; redeem a code from the account screen.</string>
     <string name="paid_detail_ok">Got it</string>
+    <string name="redeem_title">Redeem a code</string>
+    <string name="redeem_hint">Enter the code exactly as you received it — capital letters and dashes matter.</string>
+    <string name="redeem_action">Redeem</string>
+    <string name="redeem_accepted">Code accepted. Paid until %1$s.</string>
+    <string name="redeem_accepted_plain">Code accepted.</string>
+    <string name="redeem_needs_account">A code adds time to an account, so sign in first.</string>
+    <string name="redeem_close">Close</string>
+    <string name="redeem_stacks">Codes add to whatever you already have, so two in a row stack.</string>
     <string name="balance">Balance</string>
     <string name="balance_explanation">The official DeepSeek wallets on the connected computer, not this phone\'s relay credits.</string>
     <string name="balance_loading">Reading…</string>

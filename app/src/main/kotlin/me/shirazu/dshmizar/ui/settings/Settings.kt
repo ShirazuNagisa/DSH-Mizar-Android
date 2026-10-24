@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -81,6 +82,7 @@ fun SettingsDialog(
     onDismiss: () -> Unit,
     onOpenAccount: () -> Unit,
     onOpenBalance: () -> Unit,
+    onOpenRedeem: () -> Unit,
     onForget: (String) -> Unit,
     onAddHost: () -> Unit,
     onTheme: (ThemeMode) -> Unit,
@@ -213,6 +215,30 @@ fun SettingsDialog(
         }
         if (showPaidDetail) {
             me.shirazu.dshmizar.ui.account.PaidDetailDialog(onDismiss = { showPaidDetail = false })
+        }
+
+        // The way paid time is actually bought on this platform today: a code from
+        // wherever it was sold, redeemed against the signed-in account.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp)
+                .shapedClickable(Corner.md, onClick = onOpenRedeem)
+                .padding(horizontal = 10.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Default.ConfirmationNumber,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                stringResource(R.string.redeem_title),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
         }
 
         // The palette is a preference, and the operator should not have to change

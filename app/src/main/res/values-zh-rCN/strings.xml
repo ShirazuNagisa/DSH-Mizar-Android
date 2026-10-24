@@ -284,6 +284,14 @@
     <string name="paid_detail_body">Mizar付费版旨在为使用者提供高带宽服务器能做到的功能，包括会话执行过程传输、附件传输等。付费仅用于分摊服务器成本，基本无法盈利，同时免费用户依旧可以使用绝大部分功能与调用免费版服务器。感谢你的使用。</string>
     <string name="paid_detail_how">安卓端还没有应用内购买。付费时长目前通过邀请码或服务管理者授予——在账户页可以兑换邀请码。</string>
     <string name="paid_detail_ok">知道了</string>
+    <string name="redeem_title">兑换码</string>
+    <string name="redeem_hint">按收到的原样输入，大小写和短横线都要对。</string>
+    <string name="redeem_action">兑换</string>
+    <string name="redeem_accepted">兑换成功，付费至 %1$s。</string>
+    <string name="redeem_accepted_plain">兑换成功。</string>
+    <string name="redeem_needs_account">兑换码是给账户加时长的，请先登录。</string>
+    <string name="redeem_close">关闭</string>
+    <string name="redeem_stacks">兑换码是累加的，连着兑两个会叠加。</string>
     <string name="balance">余额</string>
     <string name="balance_explanation">这里显示所连电脑的 DeepSeek 官方钱包，不是这台手机的中继额度。</string>
     <string name="balance_loading">读取中…</string>

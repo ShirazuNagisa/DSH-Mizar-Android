@@ -285,7 +285,6 @@ private fun SignedOut(model: AppViewModel, account: AccountUiState) {
 @Composable
 private fun SignedIn(model: AppViewModel, account: AccountUiState) {
     val profile = account.profile ?: return
-    var invite by remember { mutableStateOf("") }
     var confirmingDelete by remember { mutableStateOf(false) }
 
     Row(
@@ -380,23 +379,13 @@ private fun SignedIn(model: AppViewModel, account: AccountUiState) {
 
     Divider()
     SectionTitle(stringResource(R.string.account_invite))
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.weight(1f)) {
-            Field(
-                value = invite,
-                onValueChange = { invite = it.uppercase() },
-                label = stringResource(R.string.account_invite_hint),
-                keyboard = KeyboardType.Text,
-            )
-        }
-        Spacer(Modifier.width(10.dp))
-        Button(
-            onClick = { model.redeemInvite(invite) },
-            enabled = !account.working && invite.isNotBlank(),
-            shape = ButtonShape.Primary,
-        ) {
-            Text(stringResource(R.string.account_invite_redeem))
-        }
+    // One implementation, opened from here and from settings: the dialog is where
+    // the end date is said out loud, and a second copy of this form would drift.
+    Button(
+        onClick = { model.openRedeem() },
+        shape = ButtonShape.Primary,
+    ) {
+        Text(stringResource(R.string.account_invite_redeem))
     }
 
     if (!profile.github) {

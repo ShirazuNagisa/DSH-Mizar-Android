@@ -500,6 +500,10 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
                 showingSettings = false
                 model.openBalance()
             },
+            onOpenRedeem = {
+                showingSettings = false
+                model.openRedeem()
+            },
             onForget = { hostId ->
                 showingSettings = false
                 model.forget(hostId)
