@@ -168,7 +168,6 @@ data class AccountUiState(
  * phone's login, and it is refreshed on demand rather than on every profile read.
  */
 data class BalanceUiState(
-    val open: Boolean = false,
     val loading: Boolean = false,
     val result: me.shirazu.mizar.kit.account.BalanceResult? = null,
     val failed: Boolean = false,
@@ -587,22 +586,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // ── balance ─────────────────────────────────────────────────────────────
-
-    /**
-     * Open the balance screen and read it.
-     *
-     * The figure is the connected computer's, so it is read through the host rather
-     * than from this phone's account: `account.balance` is answered by the plugin,
-     * and a host that cannot ask DeepSeek says so instead of failing the screen.
-     */
-    fun openBalance() {
-        _state.update { it.copy(balance = it.balance.copy(open = true)) }
-        refreshBalance()
-    }
-
-    fun closeBalance() {
-        _state.update { it.copy(balance = it.balance.copy(open = false)) }
-    }
 
     fun refreshBalance() {
         _state.update { it.copy(balance = it.balance.copy(loading = true, failed = false)) }

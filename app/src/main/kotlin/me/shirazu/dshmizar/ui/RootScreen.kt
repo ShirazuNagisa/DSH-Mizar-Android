@@ -182,13 +182,6 @@ fun RootScreen(model: AppViewModel, incomingUri: String?, onUriHandled: () -> Un
         if (state.account.redeemOpen) {
             me.shirazu.dshmizar.ui.account.RedeemDialog(model = model, account = state.account)
         }
-        if (state.balance.open) {
-            me.shirazu.dshmizar.ui.account.BalanceScreen(
-                model = model,
-                balance = state.balance,
-                onClose = { model.closeBalance() },
-            )
-        }
     }
     }
 }

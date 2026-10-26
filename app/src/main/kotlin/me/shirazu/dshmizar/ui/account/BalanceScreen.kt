@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -52,68 +53,65 @@ import me.shirazu.mizar.kit.account.BalanceWallet
  * failed. Each of those is a different sentence, because the operator's next move
  * is different in each.
  */
+/** How tall the balance window may grow before it scrolls. */
+private val BALANCE_WINDOW_HEIGHT = 320.dp
+
+/**
+ * The wallets, as a pane.
+ *
+ * A popover's contents rather than a screen: the balance is a thing to glance at
+ * from the sidebar, not a place to go. The full-screen version had a title bar and
+ * a close button, both of which the popover brings itself.
+ *
+ * @param model - the view model, for the refresh button.
+ * @param balance - what to draw.
+ */
 @Composable
-fun BalanceScreen(model: AppViewModel, balance: BalanceUiState, onClose: () -> Unit) {
-    BackHandler(onBack = onClose)
+fun BalancePane(model: AppViewModel, balance: BalanceUiState) {
     val uriHandler = LocalUriHandler.current
-
-    Surface(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding(),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            // The popup measures its content unbounded, and a scrollable column
+            // cannot be measured that way -- without a ceiling here the window
+            // crashes instead of scrolling. `SettingsDialog` carries the same line
+            // for the same reason.
+            .heightIn(max = BALANCE_WINDOW_HEIGHT)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 14.dp, vertical = 4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(R.string.balance),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(
+                onClick = { model.refreshBalance() },
+                enabled = !balance.loading,
+                modifier = Modifier.size(32.dp),
             ) {
-                Text(
-                    stringResource(R.string.balance),
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(
-                    onClick = { model.refreshBalance() },
-                    enabled = !balance.loading,
-                    modifier = Modifier.size(40.dp),
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(19.dp))
-                }
-                IconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(20.dp))
-                }
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(17.dp))
             }
+        }
+        Text(
+            stringResource(R.string.balance_explanation),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .navigationBarsPadding()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 32.dp),
-            ) {
-                Text(
-                    stringResource(R.string.balance_explanation),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(16.dp))
-
-                val result = balance.result
-                when {
-                    balance.loading && result == null -> Loading()
-                    balance.failed && result == null -> Notice(stringResource(R.string.balance_failed))
-                    result == null -> Notice(stringResource(R.string.balance_unavailable))
-                    result.isReady -> Ready(result, onTopUp = { uriHandler.openUri(it) })
-                    result.status == BalanceResult.STATUS_SIGNED_OUT ->
-                        Notice(stringResource(R.string.balance_signed_out))
-                    result.status == BalanceResult.STATUS_UNSUPPORTED ->
-                        Notice(stringResource(R.string.balance_unsupported))
-                    else -> Notice(stringResource(R.string.balance_unavailable))
-                }
-            }
+        val result = balance.result
+        when {
+            balance.loading && result == null -> Loading()
+            balance.failed && result == null -> Notice(stringResource(R.string.balance_failed))
+            result == null -> Notice(stringResource(R.string.balance_unavailable))
+            result.isReady -> Ready(result, onTopUp = { uriHandler.openUri(it) })
+            result.status == BalanceResult.STATUS_SIGNED_OUT ->
+                Notice(stringResource(R.string.balance_signed_out))
+            result.status == BalanceResult.STATUS_UNSUPPORTED ->
+                Notice(stringResource(R.string.balance_unsupported))
+            else -> Notice(stringResource(R.string.balance_unavailable))
         }
     }
 }

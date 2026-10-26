@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
@@ -407,6 +408,7 @@ fun Sidebar(
 private fun ConnectionFooter(model: AppViewModel, state: UiState) {
     var showingConnection by remember { mutableStateOf(false) }
     var showingSettings by remember { mutableStateOf(false) }
+    var showingBalance by remember { mutableStateOf(false) }
     // Both windows are anchored to the footer as a whole, not to their own button:
     // a window anchored to the gear at the right end gets pushed against the screen
     // edge by the popup's own right margin, and the window reads as detached from
@@ -458,10 +460,36 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
             )
         }
         Spacer(Modifier.weight(1f))
+        // The computer's wallets, one tap from the footer. Round and the same size
+        // as the account button beside it, because the footer is a row of two things
+        // a thumb reaches for, not a toolbar.
+        GlassCircleLabel(size = 52.dp, onClick = {
+            showingBalance = true
+            model.refreshBalance()
+        }) {
+            Icon(
+                Icons.Default.AccountBalanceWallet,
+                contentDescription = stringResource(R.string.balance),
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.width(Space.sm))
         AccountOrSettings(
             state = state,
             onSettings = { showingSettings = true },
         )
+    }
+    AnchoredPopover(
+        expanded = showingBalance,
+        onDismiss = { showingBalance = false },
+        // Shorter than the settings window: three wallets at most, and the sentence
+        // that says whose money this is.
+        width = 260.dp,
+        maxHeight = 360.dp,
+        offset = androidx.compose.ui.unit.DpOffset(0.dp, 44.dp),
+    ) {
+        me.shirazu.dshmizar.ui.account.BalancePane(model = model, balance = state.balance)
     }
     AnchoredPopover(
         expanded = showingConnection,
@@ -497,8 +525,11 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
                 model.openAccountScreen()
             },
             onOpenBalance = {
+                // Same anchor, one window over: the row inside settings is a
+                // shortcut to the button that sits behind it.
                 showingSettings = false
-                model.openBalance()
+                showingBalance = true
+                model.refreshBalance()
             },
             onOpenRedeem = {
                 showingSettings = false
