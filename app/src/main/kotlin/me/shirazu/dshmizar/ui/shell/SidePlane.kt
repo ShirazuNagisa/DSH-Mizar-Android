@@ -9,9 +9,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -24,6 +21,7 @@ import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.conversation.FilePreviewPane
 import me.shirazu.dshmizar.ui.conversation.SubagentList
 import me.shirazu.dshmizar.ui.MizarColors
+import me.shirazu.dshmizar.ui.design.SegmentedControl
 
 /**
  * The three pages of the right-hand plane.
@@ -65,30 +63,19 @@ fun SidePlane(
             // half of every segment is a system gesture rather than a button.
             .statusBarsPadding(),
     ) {
-        SingleChoiceSegmentedButtonRow(
+        // The house control, not Material's segmented buttons: this is the same
+        // three-way choice the theme picker and the sign-in/create toggle make, and
+        // it carries the travelling highlight the rest of the app uses for one.
+        SegmentedControl(
+            options = listOf(
+                stringResource(R.string.side_page_turns),
+                stringResource(R.string.side_page_subagents),
+                stringResource(R.string.side_page_preview),
+            ),
+            selected = page.ordinal,
+            onSelect = { onPage(SidePage.entries[it]) },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-        ) {
-            val labels = listOf(
-                R.string.side_page_turns,
-                R.string.side_page_subagents,
-                R.string.side_page_preview,
-            )
-            labels.forEachIndexed { index, label ->
-                SegmentedButton(
-                    selected = page.ordinal == index,
-                    onClick = { onPage(SidePage.entries[index]) },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = labels.size),
-                    label = {
-                        Text(
-                            stringResource(label),
-                            style = MaterialTheme.typography.labelLarge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    },
-                )
-            }
-        }
+        )
 
         when (page) {
             SidePage.TURNS -> TurnIndex(
