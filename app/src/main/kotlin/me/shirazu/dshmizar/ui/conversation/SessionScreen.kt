@@ -97,6 +97,8 @@ fun SessionScreen(
     model: AppViewModel,
     state: UiState,
     onOpenSidebar: () -> Unit = {},
+    /** Open the right-hand plane on one of its pages (subagents, a file preview). */
+    onOpenSide: (me.shirazu.dshmizar.ui.shell.SidePage) -> Unit = {},
     // Tapping the title opens the turn index, as it does on iOS: the two drawers are
     // mirrors, and this is the mirror of the menu button.
     onOpenIndex: () -> Unit = {},
@@ -140,7 +142,6 @@ fun SessionScreen(
     var composerFocused by remember { mutableStateOf(false) }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var showingPermissions by remember { mutableStateOf(false) }
-    var showingSubagents by remember { mutableStateOf(false) }
     // The host sends subagent rows with the ordinary session list; the sidebar hides
     // them, but this conversation's children are exactly what the panel shows.
     val subagents = state.sessions.filter {
@@ -348,9 +349,12 @@ fun SessionScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (subagents.isNotEmpty()) {
+                            // The subagents have their own page on the right-hand plane,
+                            // beside the turns and the preview -- one row of three, the way
+                            // iOS and the wide layout both do it.
                             GlassCircleLabel(size = 38.dp, onClick = {
                                 model.loadSubagentTitles()
-                                showingSubagents = true
+                                onOpenSide(me.shirazu.dshmizar.ui.shell.SidePage.SUBAGENTS)
                             }) {
                                 Icon(
                                     Icons.Default.Person,
@@ -558,19 +562,14 @@ fun SessionScreen(
                         canLoadDetail = state.advancedFeaturesUnlocked,
                         onLoadDetail = { model.loadTurnDetail(it) },
                         canPreviewFiles = state.advancedFeaturesUnlocked,
-                        onOpenFile = { path, name -> model.openFilePreview(path, name) },
+                        onOpenFile = { path, name ->
+                            model.openFilePreview(path, name)
+                            onOpenSide(me.shirazu.dshmizar.ui.shell.SidePage.PREVIEW)
+                        },
                     )
                 }
             }
         }
-    }
-
-    if (showingSubagents) {
-        SubagentPanel(
-            state = state,
-            children = subagents,
-            onDismiss = { showingSubagents = false },
-        )
     }
 
     // The ghost of what was just sent, flying up into the conversation.

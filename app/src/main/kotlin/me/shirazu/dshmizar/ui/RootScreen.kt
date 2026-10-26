@@ -179,12 +179,6 @@ fun RootScreen(model: AppViewModel, incomingUri: String?, onUriHandled: () -> Un
         }
         // Above the shell and independent of the account screen: the figure is the
         // computer's, so it opens whether or not this phone is signed in.
-        if (state.filePreview.open) {
-            me.shirazu.dshmizar.ui.conversation.FilePreviewScreen(
-                preview = state.filePreview,
-                onClose = { model.closeFilePreview() },
-            )
-        }
         if (state.account.redeemOpen) {
             me.shirazu.dshmizar.ui.account.RedeemDialog(model = model, account = state.account)
         }

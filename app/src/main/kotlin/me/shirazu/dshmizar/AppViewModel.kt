@@ -732,10 +732,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun closeFilePreview() {
-        _state.update { it.copy(filePreview = FilePreviewUiState()) }
-    }
-
     /**
      * Render the first pages of a PDF.
      *

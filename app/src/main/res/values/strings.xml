@@ -134,6 +134,7 @@
     <string name="slow_typewriter">Slow typewriter (verification)</string>
     <string name="side_page_turns">Turns</string>
     <string name="side_page_subagents">Subagents</string>
+    <string name="side_page_preview_empty">Tap a file under a turn to read it here.</string>
     <string name="side_page_preview">Preview</string>
     <string name="preview_under_development">Under development — stay tuned.</string>
     <string name="no_sessions">No sessions yet. Start one on your computer, then refresh.</string>

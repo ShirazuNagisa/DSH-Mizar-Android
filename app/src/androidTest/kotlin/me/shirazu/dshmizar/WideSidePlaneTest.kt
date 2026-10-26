@@ -36,6 +36,7 @@ class WideSidePlaneTest {
             MizarTheme {
                 WideSidePlane(
                     state = UiState(selectedSessionId = "parent"),
+                    preview = me.shirazu.dshmizar.FilePreviewUiState(),
                     onScreen = emptySet(),
                     onPick = {},
                     onLoadSubagentTitles = { titlesAsked = true },
@@ -49,8 +50,10 @@ class WideSidePlaneTest {
         rule.onAllNodesWithText(text(R.string.side_page_subagents)).onFirst().assertExists()
         rule.onAllNodesWithText(text(R.string.side_page_preview)).onFirst().assertExists()
 
+        // The preview page is a real pane now, not a placeholder: with no file chosen
+        // it says how to choose one.
         rule.onAllNodesWithText(text(R.string.side_page_preview)).onFirst().performClick()
-        rule.onNodeWithText(text(R.string.preview_under_development)).assertExists()
+        rule.onNodeWithText(text(R.string.side_page_preview_empty)).assertExists()
 
         rule.onAllNodesWithText(text(R.string.side_page_subagents)).onFirst().performClick()
         rule.onNodeWithText(text(R.string.subagents_empty)).assertExists()

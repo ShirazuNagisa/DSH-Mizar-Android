@@ -106,6 +106,7 @@
     <string name="slow_typewriter">慢速打字机（用于验证）</string>
     <string name="side_page_turns">轮次</string>
     <string name="side_page_subagents">子代理</string>
+    <string name="side_page_preview_empty">点开某一轮下面的交付文件，会在这里显示。</string>
     <string name="side_page_preview">预览</string>
     <string name="preview_under_development">还在开发中，敬请期待。</string>
     <string name="no_sessions">还没有会话。在电脑上新建一个，然后刷新。</string>

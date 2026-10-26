@@ -69,6 +69,16 @@ class ShellState(
 
     // Opening and closing
 
+    /** Which page the right-hand plane is showing. Kept here because the plane is. */
+    var sidePage by mutableStateOf(SidePage.TURNS)
+        private set
+
+    /** Open the right-hand plane on a page: the app bar and a file card both do this. */
+    fun openSide(page: SidePage) {
+        sidePage = page
+        openIndex()
+    }
+
     fun open() = settle(1f)
     fun close() = settle(0f)
     fun openIndex() = settle(-1f)

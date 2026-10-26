@@ -228,8 +228,11 @@ fun MizarShell(model: AppViewModel, state: UiState) {
                     .alpha(0.55f + 0.45f * indexReveal)
                     .drawerDrag(shell, sidebarWidthPx, indexWidthPx),
             ) {
-                TurnIndex(
+                SidePlane(
+                    page = shell.sidePage,
+                    onPage = { shell.openSide(it) },
                     state = state,
+                    preview = state.filePreview,
                     now = System.currentTimeMillis(),
                     onScreen = onScreenTurns,
                     onPick = { index ->
@@ -299,6 +302,7 @@ fun MizarShell(model: AppViewModel, state: UiState) {
                 ) {
                     WideSidePlane(
                         state = state,
+                        preview = state.filePreview,
                         onScreen = onScreenTurns,
                         onLoadSubagentTitles = { model.loadSubagentTitles() },
                         onPick = { index ->
@@ -426,6 +430,7 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
                         model = model,
                         state = state,
                         onOpenSidebar = { shell.toggle() },
+                        onOpenSide = { shell.openSide(it) },
                         // The index is already standing beside the conversation on a
                         // wide screen; the title's tap has nothing to open.
                         onOpenIndex = { if (!wide) shell.toggleIndex() },
