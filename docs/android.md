@@ -159,6 +159,21 @@ Android 16 的 Live Updates 是 iOS Live Activity 的对位：`push/LiveTurn.kt`
 
 完整说明、服务端配置与 AVD 测法见 [account.md](account.md)。
 
+## 交付文件预览（0.10.5 起）
+
+模型用 `present` 交付的文件，宿主在 `turn/end` 上以 `mizarDeliverables` 带下来（它从该轮的工具调用里
+读出来，因为摘要页本来不带工具流量）。手机在回答下面画成卡片，点开走 `file.read` 取字节：
+
+- **一次只取一片**（256 KiB，宿主的上限）。文本超出时说「只显示前 256 KB，共 X」；图片超出时直接说
+  「预览不了」——半张图比没有更糟。
+- **能画的**：Markdown/纯文本/代码（等宽）、PNG/JPEG/WebP/GIF/BMP（按原比例铺满宽度）。其余显示
+  「这种文件手机预览不了（大小）」，文件仍在电脑上。
+- **门槛**：与附件、完整记录同一个 `advancedFeaturesUnlocked`。
+
+**一个坑**：`ConversationTurn` 在 `merging()` / `absorbing()` 里是用具名参数**重建**的，新增字段不在
+那里列一遍就会被静默清空——交付卡片第一次就是这样在刷新后消失的。`ConversationTest` 里有一条回归测试
+钉住它。
+
 ## 兑换码（0.10.4 起）
 
 付费时长在安卓上只有一条来源：**兑换码**。设置页账户区里有一条「兑换码」，账户页的

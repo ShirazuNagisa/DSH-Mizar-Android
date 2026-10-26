@@ -308,6 +308,12 @@
     <string name="redeem_needs_account">A code adds time to an account, so sign in first.</string>
     <string name="redeem_close">Close</string>
     <string name="redeem_stacks">Codes add to whatever you already have, so two in a row stack.</string>
+    <string name="file_preview_loading">Reading…</string>
+    <string name="file_preview_failed">The file could not be read.</string>
+    <string name="file_preview_unsupported">This phone cannot preview that kind of file (%1$s). It is on the computer.</string>
+    <string name="file_preview_truncated">Showing the first 256 KB of %1$s.</string>
+    <string name="file_card_preview">Preview</string>
+    <string name="file_card_delivered">Delivered</string>
     <string name="balance">Balance</string>
     <string name="balance_explanation">The official DeepSeek wallets on the connected computer, not this phone\'s relay credits.</string>
     <string name="balance_loading">Reading…</string>

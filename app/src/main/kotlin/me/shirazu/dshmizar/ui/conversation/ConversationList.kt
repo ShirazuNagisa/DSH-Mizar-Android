@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Warning
@@ -43,6 +46,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.shirazu.dshmizar.ui.design.mizarPerform
 import me.shirazu.dshmizar.R
@@ -82,6 +86,8 @@ internal fun ConversationList(
     /** Whether this account may read a turn's whole log (paid, or on the LAN). */
     canLoadDetail: Boolean = false,
     onLoadDetail: (Int) -> Unit = {},
+    canPreviewFiles: Boolean = false,
+    onOpenFile: (String, String) -> Unit = { _, _ -> },
 ) {
     // What the host says about the session, and how fresh the newest record is: the
     // pair decides whether a copy of a turn can still be "in flight". A stale copy is
@@ -148,6 +154,8 @@ internal fun ConversationList(
                         (sessionRunning || recent),
                     canLoadDetail = canLoadDetail,
                     onLoadDetail = onLoadDetail,
+                    canPreviewFiles = canPreviewFiles,
+                    onOpenFile = onOpenFile,
                 )
             }
         }
@@ -204,6 +212,9 @@ private fun TurnSection(
     waiting: Boolean = false,
     canLoadDetail: Boolean = false,
     onLoadDetail: (Int) -> Unit = {},
+    /** Whether this account may read a delivered file (paid, or on the LAN). */
+    canPreviewFiles: Boolean = false,
+    onOpenFile: (String, String) -> Unit = { _, _ -> },
 ) {
     // The glow the turn index leaves behind: a wash that fades on its own, because the
     // point is to find the turn once, not to mark it. It comes up on the smooth spring
@@ -252,6 +263,63 @@ private fun TurnSection(
                 )
             }
         }
+
+        // The files this turn handed over. The host reads them out of the turn's
+        // `present` calls, which a summary page never carries -- without this the
+        // only route to a delivered document was reading its name in prose.
+        if (canPreviewFiles) {
+            turn.deliverables.forEach { file ->
+                RiseOnce {
+                    DeliveredFileCard(file) { onOpenFile(file.path, file.name) }
+                }
+            }
+        }
+    }
+}
+
+/** One delivered file, as a card under the answer that produced it. */
+@Composable
+private fun DeliveredFileCard(file: me.shirazu.mizar.kit.DeliveredFile, onOpen: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, Corner.md)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Corner.md)
+            .shapedClickable(Corner.md, onClick = onOpen)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Default.Description,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                file.name,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            val note = file.description
+            if (!note.isNullOrBlank()) {
+                Text(
+                    note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            stringResource(R.string.file_card_preview),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
     }
 }
 

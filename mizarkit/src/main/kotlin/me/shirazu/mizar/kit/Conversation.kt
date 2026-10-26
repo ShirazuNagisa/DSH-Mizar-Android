@@ -181,6 +181,22 @@ private fun <T : Comparable<T>> compareOptional(left: T?, right: T?): Int = when
 }
 
 /** One turn: a prompt, what came of it, and how it ended. */
+/**
+ * A file a turn handed to the operator.
+ *
+ * The host reads these out of the turn's `present` calls and attaches them to
+ * `turn/end` as `mizarDeliverables`; the path is whatever the model wrote, which
+ * the host resolves and confines only when the file is actually read.
+ */
+data class DeliveredFile(
+    val path: String,
+    /** The one-line note the model wrote for the operator, when it wrote one. */
+    val description: String? = null,
+) {
+    /** The last segment, which is what a card has room for. */
+    val name: String get() = path.trimEnd('/', '\\').substringAfterLast('/').substringAfterLast('\\')
+}
+
 data class ConversationTurn(
     val turn: Int?,
     val prompts: List<ConversationItem>,
@@ -197,6 +213,8 @@ data class ConversationTurn(
      * row. The start record is the position it always had.
      */
     val startSeq: Int? = null,
+    /** The files this turn declared as deliverables, in the order it presented them. */
+    val deliverables: List<DeliveredFile> = emptyList(),
 ) {
     /**
      * The identity used when merging two copies of the same turn.
@@ -293,6 +311,9 @@ data class ConversationTurn(
             endedAtMillis = if (turn == null) null else if (continuation) next.endedAtMillis else endedAtMillis,
             endedReason = if (turn == null) null else unfinished ?: if (continuation) next.endedReason else endedReason,
             startSeq = listOfNotNull(startSeq, next.startSeq).minOrNull(),
+            // Whatever either copy knows: a continuation never repeats the list, and
+            // dropping it here is how the cards disappeared on every refresh.
+            deliverables = if (deliverables.isNotEmpty()) deliverables else next.deliverables,
         )
     }
 
@@ -315,6 +336,10 @@ data class ConversationTurn(
         endedAtMillis = if (turn == null && other.turn == null) null else endedAtMillis ?: other.endedAtMillis,
         endedReason = if (turn == null && other.turn == null) null else endedReason ?: other.endedReason,
         startSeq = listOfNotNull(startSeq, other.startSeq).minOrNull(),
+        // Rebuilt with named arguments, so anything not listed here is reset -- and a
+        // reset list is how a delivered file vanished between the page that had it
+        // and the refresh that did not.
+        deliverables = if (deliverables.isNotEmpty()) deliverables else other.deliverables,
     )
 
     companion object {
@@ -376,6 +401,7 @@ object Conversation {
         val openedAtSeq = HashMap<Int?, Int?>()
         val ended = HashMap<Int?, Long?>()
         val reason = HashMap<Int?, String?>()
+        val delivered = HashMap<Int?, MutableList<DeliveredFile>>()
         var pending = mutableListOf<ConversationItem>()
 
         fun flush(into: Int?) {
@@ -401,6 +427,13 @@ object Conversation {
                 "turn/end" -> {
                     ended[turn] = at
                     reason[turn] = record.payload["data"]["reason"]["kind"].stringValue()
+                    // The host reads the turn's `present` calls for us; a page carries
+                    // summaries, so this is the only place the cards can come from.
+                    record.payload["data"]["mizarDeliverables"].arrayValue()?.forEach { entry ->
+                        val path = entry["path"].stringValue() ?: return@forEach
+                        delivered.getOrPut(turn) { mutableListOf() }
+                            .add(DeliveredFile(path, entry["description"].stringValue()))
+                    }
                 }
 
                 "user/message", "assistant/message", "assistant/attempt", "system/message",
@@ -440,6 +473,7 @@ object Conversation {
                 // A tool's result is folded into its call before anything draws: two
                 // rows for one command is a transcript nobody can read.
                 steps = pairTools(steps[key] ?: emptyList()),
+                deliverables = delivered[key] ?: emptyList(),
                 startedAtMillis = started[key],
                 // Only a `turn/end` ends a turn. Falling back to the last step's time
                 // made every unfinished turn look finished, with a duration that was

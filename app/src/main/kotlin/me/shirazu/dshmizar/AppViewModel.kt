@@ -174,6 +174,29 @@ data class BalanceUiState(
     val failed: Boolean = false,
 )
 
+/**
+ * The file preview screen.
+ *
+ * One file at a time, and the bytes are either text or an image: everything else
+ * is "cannot preview here", which is a state rather than an error -- the file
+ * exists and the computer can open it, this phone just cannot draw it.
+ */
+data class FilePreviewUiState(
+    val open: Boolean = false,
+    val path: String = "",
+    val name: String = "",
+    val loading: Boolean = false,
+    val text: String? = null,
+    val image: ByteArray? = null,
+    /** The whole file's size, so a first page can say how much is missing. */
+    val byteSize: Long = 0,
+    /** More than the first page exists and was not read. */
+    val truncated: Boolean = false,
+    /** The file is real, and not something this screen can draw. */
+    val unsupported: Boolean = false,
+    val failed: Boolean = false,
+)
+
 /** A registration whose code has been asked for and not yet typed. */
 data class PendingRegistration(val username: String, val email: String, val password: String)
 
@@ -279,6 +302,7 @@ data class UiState(
     /** The account service, which is optional and never gates the free features. */
     val account: AccountUiState = AccountUiState(),
     val balance: BalanceUiState = BalanceUiState(),
+    val filePreview: FilePreviewUiState = FilePreviewUiState(),
 ) {
     /**
      * The gate iOS uses for attachments and the running turn's detail: a paying
@@ -624,6 +648,85 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun showHandoffEntry(show: Boolean) {
         _state.update { it.copy(account = it.account.copy(handoffEntry = show, error = null)) }
+    }
+
+    // ── delivered files ─────────────────────────────────────────────────────
+
+    /**
+     * Open one of the files a turn handed over.
+     *
+     * The host reads the bytes; this screen decides how to draw them. One slice is
+     * asked for, because a preview is a look and not a download: text says when it
+     * is only the first 256 KB, and an image that does not fit says so instead of
+     * pretending to be blank.
+     */
+    fun openFilePreview(path: String, name: String) {
+        _state.update {
+            it.copy(filePreview = FilePreviewUiState(open = true, path = path, name = name, loading = true))
+        }
+        val kind = kindOf(name)
+        if (kind == FileKind.OTHER) {
+            _state.update { it.copy(filePreview = it.filePreview.copy(loading = false, unsupported = true)) }
+            return
+        }
+        viewModelScope.launch {
+            val socket = connection
+            val sessionId = _state.value.selectedSessionId
+            val slice = if (socket == null || sessionId == null) {
+                null
+            } else {
+                runCatching {
+                    socket.call<me.shirazu.mizar.kit.FileSlice>(
+                        "file.read",
+                        payload(
+                            "sessionId" to jsonString(sessionId),
+                            "path" to jsonString(path),
+                            "offset" to me.shirazu.mizar.kit.jsonInt(0),
+                            "length" to me.shirazu.mizar.kit.jsonInt(me.shirazu.mizar.kit.FileSlice.MAX_SLICE_BYTES),
+                        ),
+                    )
+                }.onFailure { note("file.read failed: ${it.message}") }.getOrNull()
+            }
+            if (slice == null) {
+                _state.update { it.copy(filePreview = it.filePreview.copy(loading = false, failed = true)) }
+                return@launch
+            }
+            val bytes = slice.bytes()
+            _state.update {
+                it.copy(
+                    filePreview = it.filePreview.copy(
+                        loading = false,
+                        byteSize = slice.byteSize,
+                        truncated = !slice.eof,
+                        text = if (kind == FileKind.TEXT) String(bytes, Charsets.UTF_8) else null,
+                        // An image larger than one slice would render as a corrupt
+                        // half-file; saying so is the honest answer.
+                        image = if (kind == FileKind.IMAGE && slice.eof) bytes else null,
+                        unsupported = kind == FileKind.IMAGE && !slice.eof,
+                    ),
+                )
+            }
+        }
+    }
+
+    fun closeFilePreview() {
+        _state.update { it.copy(filePreview = FilePreviewUiState()) }
+    }
+
+    /** How this screen can draw a file, decided by its extension. */
+    private enum class FileKind { TEXT, IMAGE, OTHER }
+
+    private fun kindOf(name: String): FileKind {
+        val extension = name.substringAfterLast('.', "").lowercase()
+        return when (extension) {
+            "md", "markdown", "txt", "log", "json", "yaml", "yml", "toml", "ini", "csv",
+            "kt", "kts", "java", "py", "ts", "tsx", "js", "jsx", "css", "html", "xml",
+            "sh", "bat", "ps1", "sql", "gradle", "properties",
+            -> FileKind.TEXT
+            "png", "jpg", "jpeg", "webp", "gif", "bmp",
+            -> FileKind.IMAGE
+            else -> FileKind.OTHER
+        }
     }
 
     // ── password reset ──────────────────────────────────────────────────────

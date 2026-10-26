@@ -58,6 +58,70 @@ class ConversationTest {
     )
 
     /**
+     * The files a turn handed over ride on its `turn/end`.
+     *
+     * The host reads the turn's `present` calls itself -- a summary page carries no
+     * tool traffic -- so this is the only place a card can come from, and the path
+     * is whatever the model wrote: resolving it is the host's job at read time.
+     */
+    @Test
+    fun `a turn carries the files it delivered`() {
+        val turns = turnsOf(
+            """
+            {"sessionId":"s","asOfSeq":6,"records":[
+              {"type":"event","event":{"type":"turn/start","seq":1,"time":1000,"data":{"turn":1}}},
+              {"type":"event","event":{"type":"assistant/message","seq":2,"time":1100,
+                "data":{"turn":1,"step":1,"message":{"role":"assistant","content":[{"type":"text","text":"Here."}]}}}},
+              {"type":"event","event":{"type":"turn/end","seq":3,"time":1200,
+                "data":{"turn":1,"reason":{"kind":"completed"},
+                  "mizarDeliverables":[
+                    {"path":"reports/q3.pdf","description":"The quarterly report"},
+                    {"path":"/abs/notes.md"}]}}}
+            ]}
+            """.trimIndent(),
+        )
+
+        val files = turns.single().deliverables
+        assertEquals(2, files.size)
+        assertEquals("reports/q3.pdf", files[0].path)
+        assertEquals("q3.pdf", files[0].name)
+        assertEquals("The quarterly report", files[0].description)
+        // A path with no description is still a deliverable.
+        assertEquals("notes.md", files[1].name)
+        assertNull(files[1].description)
+    }
+
+    /**
+     * A merge must not lose the files a turn delivered.
+     *
+     * Both copies of a turn are rebuilt from named arguments, so any field not
+     * listed there is silently reset -- which is how the cards vanished between the
+     * page that carried them and the refresh that did not.
+     */
+    @Test
+    fun `merging keeps the delivered files whichever copy has them`() {
+        // A turn with no items at all is "silent" and dropped by the merge, so the
+        // prompt that began it has to be here for this to be about the files.
+        val prompt = ConversationItem.Message("p1", ConversationItem.Role.USER, "hi", 900)
+        val withFiles = ConversationTurn(
+            turn = 1,
+            prompts = listOf(prompt),
+            steps = emptyList(),
+            startedAtMillis = 1000,
+            endedAtMillis = 2000,
+            endedReason = "completed",
+            startSeq = 1,
+            deliverables = listOf(DeliveredFile("reports/q3.pdf", "Q3")),
+        )
+        val withoutFiles = withFiles.copy(deliverables = emptyList())
+
+        // The fresher page arrived without the list; the cached one had it.
+        assertEquals(1, mergeTurns(listOf(withFiles), listOf(withoutFiles)).single().deliverables.size)
+        // And the other way round.
+        assertEquals(1, mergeTurns(listOf(withoutFiles), listOf(withFiles)).single().deliverables.size)
+    }
+
+    /**
      * A full-turn page carries the tools the agent ran, paired with what came back.
      *
      * Two rows for one command -- a call and its result -- is a transcript nobody

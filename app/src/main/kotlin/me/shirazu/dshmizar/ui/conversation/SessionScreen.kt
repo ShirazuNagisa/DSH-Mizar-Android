@@ -557,6 +557,8 @@ fun SessionScreen(
                         highlightTurn = highlightTurn,
                         canLoadDetail = state.advancedFeaturesUnlocked,
                         onLoadDetail = { model.loadTurnDetail(it) },
+                        canPreviewFiles = state.advancedFeaturesUnlocked,
+                        onOpenFile = { path, name -> model.openFilePreview(path, name) },
                     )
                 }
             }

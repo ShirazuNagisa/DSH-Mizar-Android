@@ -293,6 +293,12 @@
     <string name="redeem_needs_account">兑换码是给账户加时长的，请先登录。</string>
     <string name="redeem_close">关闭</string>
     <string name="redeem_stacks">兑换码是累加的，连着兑两个会叠加。</string>
+    <string name="file_preview_loading">读取中…</string>
+    <string name="file_preview_failed">读不到这个文件。</string>
+    <string name="file_preview_unsupported">这种文件手机预览不了（%1$s），文件在电脑上。</string>
+    <string name="file_preview_truncated">只显示前 256 KB，共 %1$s。</string>
+    <string name="file_card_preview">预览</string>
+    <string name="file_card_delivered">交付文件</string>
     <string name="balance">余额</string>
     <string name="balance_explanation">这里显示所连电脑的 DeepSeek 官方钱包，不是这台手机的中继额度。</string>
     <string name="balance_loading">读取中…</string>
