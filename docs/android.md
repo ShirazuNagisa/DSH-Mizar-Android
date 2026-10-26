@@ -166,9 +166,15 @@ Android 16 的 Live Updates 是 iOS Live Activity 的对位：`push/LiveTurn.kt`
 
 - **一次只取一片**（256 KiB，宿主的上限）。文本超出时说「只显示前 256 KB，共 X」；图片超出时直接说
   「预览不了」——半张图比没有更糟。
-- **能画的**：Markdown/纯文本/代码（等宽）、PNG/JPEG/WebP/GIF/BMP（按原比例铺满宽度）。其余显示
+- **能画的**：Markdown/纯文本/代码（等宽）、PNG/JPEG/WebP/GIF/BMP（按原比例铺满宽度）、PDF
+  （系统 `PdfRenderer`，不引第三方库；白底渲染，最多前 5 页并说明「共 N 页」）。其余显示
   「这种文件手机预览不了（大小）」，文件仍在电脑上。
+- **PDF 的取舍**：渲染需要文件描述符，所以字节先落到 `cacheDir`，画完立刻删除；超过一片（256 KB）的
+  PDF **不渲染**——半个 PDF 不是它的预览。
 - **门槛**：与附件、完整记录同一个 `advancedFeaturesUnlocked`。
+
+**没做的**：正文里指向本地路径的 Markdown 链接还不能点开预览（iOS 可以）。`Markdown` 解析器只记
+样式、不记链接目标，要做就得改解析器并把回调穿进打字机那条路径——收益不如交付卡片直接，暂时留着。
 
 **一个坑**：`ConversationTurn` 在 `merging()` / `absorbing()` 里是用具名参数**重建**的，新增字段不在
 那里列一遍就会被静默清空——交付卡片第一次就是这样在刷新后消失的。`ConversationTest` 里有一条回归测试

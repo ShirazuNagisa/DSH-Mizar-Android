@@ -188,6 +188,10 @@ data class FilePreviewUiState(
     val loading: Boolean = false,
     val text: String? = null,
     val image: ByteArray? = null,
+    /** The first pages of a PDF, already rendered: the framework's renderer needs a file. */
+    val pages: List<android.graphics.Bitmap> = emptyList(),
+    /** How many pages the document has, so the screen can say what it left out. */
+    val pageCount: Int = 0,
     /** The whole file's size, so a first page can say how much is missing. */
     val byteSize: Long = 0,
     /** More than the first page exists and was not read. */
@@ -692,6 +696,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             val bytes = slice.bytes()
+            if (kind == FileKind.PDF) {
+                // A PDF is rendered, not shown: the framework's renderer reads a file
+                // descriptor, so the slice is written to the cache first. A document
+                // that did not fit in one slice is not rendered at all -- half a PDF
+                // is not a preview of it.
+                val rendered = if (slice.eof) withContext(Dispatchers.IO) { renderPdf(bytes) } else null
+                _state.update {
+                    it.copy(
+                        filePreview = it.filePreview.copy(
+                            loading = false,
+                            byteSize = slice.byteSize,
+                            unsupported = rendered == null,
+                            pages = rendered?.pages ?: emptyList(),
+                            pageCount = rendered?.pageCount ?: 0,
+                        ),
+                    )
+                }
+                return@launch
+            }
             _state.update {
                 it.copy(
                     filePreview = it.filePreview.copy(
@@ -713,8 +736,62 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(filePreview = FilePreviewUiState()) }
     }
 
+    /**
+     * Render the first pages of a PDF.
+     *
+     * `PdfRenderer` wants a file descriptor, so the bytes go through the cache; the
+     * file is deleted as soon as the pages are drawn. Page count is capped because
+     * each page is a full-screen bitmap: a 200-page report would be a memory leak
+     * with a nice name.
+     *
+     * @param bytes - the document.
+     * @returns the pages and how many the document has, or `null` when it cannot be
+     *   opened as a PDF at all.
+     */
+    private fun renderPdf(bytes: ByteArray): RenderedPdf? {
+        val file = java.io.File(getApplication<Application>().cacheDir, "preview.pdf")
+        return try {
+            file.writeBytes(bytes)
+            android.os.ParcelFileDescriptor.open(file, android.os.ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
+                android.graphics.pdf.PdfRenderer(descriptor).use { renderer ->
+                    val total = renderer.pageCount
+                    val pages = ArrayList<android.graphics.Bitmap>(minOf(total, PDF_PAGE_LIMIT))
+                    for (index in 0 until minOf(total, PDF_PAGE_LIMIT)) {
+                        renderer.openPage(index).use { page ->
+                            // A white sheet: a rendered page has transparent pixels
+                            // wherever the PDF does, and those read as holes on a dark
+                            // theme.
+                            val bitmap = android.graphics.Bitmap.createBitmap(
+                                page.width * PDF_SCALE,
+                                page.height * PDF_SCALE,
+                                android.graphics.Bitmap.Config.ARGB_8888,
+                            )
+                            bitmap.eraseColor(android.graphics.Color.WHITE)
+                            page.render(bitmap, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                            pages += bitmap
+                        }
+                    }
+                    RenderedPdf(pages, total)
+                }
+            }
+        } catch (error: Throwable) {
+            note("pdf render failed: ${error.message}")
+            null
+        } finally {
+            file.delete()
+        }
+    }
+
+    private class RenderedPdf(val pages: List<android.graphics.Bitmap>, val pageCount: Int)
+
+    /** How many pages a preview renders. */
+    private val PDF_PAGE_LIMIT = 5
+
+    /** Rendered at 1.5x so text is legible without a zoom control. */
+    private val PDF_SCALE = 2
+
     /** How this screen can draw a file, decided by its extension. */
-    private enum class FileKind { TEXT, IMAGE, OTHER }
+    private enum class FileKind { TEXT, IMAGE, PDF, OTHER }
 
     private fun kindOf(name: String): FileKind {
         val extension = name.substringAfterLast('.', "").lowercase()
@@ -725,6 +802,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             -> FileKind.TEXT
             "png", "jpg", "jpeg", "webp", "gif", "bmp",
             -> FileKind.IMAGE
+            "pdf",
+            -> FileKind.PDF
             else -> FileKind.OTHER
         }
     }

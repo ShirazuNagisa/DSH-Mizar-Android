@@ -97,6 +97,32 @@ internal fun FilePreviewScreen(preview: FilePreviewUiState, onClose: () -> Unit)
 
                     preview.failed -> Notice(stringResource(R.string.file_preview_failed))
 
+                    preview.pages.isNotEmpty() -> {
+                        preview.pages.forEachIndexed { index, page ->
+                            Image(
+                                bitmap = page.asImageBitmap(),
+                                contentDescription = null,
+                                contentScale = ContentScale.FillWidth,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = if (index == 0) 0.dp else 10.dp)
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, Corner.md),
+                            )
+                        }
+                        if (preview.pageCount > preview.pages.size) {
+                            Text(
+                                stringResource(
+                                    R.string.file_preview_pdf_pages,
+                                    preview.pages.size,
+                                    preview.pageCount,
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+                    }
+
                     preview.unsupported -> Notice(
                         stringResource(R.string.file_preview_unsupported, formatBytes(preview.byteSize)),
                     )

@@ -308,6 +308,7 @@
     <string name="redeem_needs_account">A code adds time to an account, so sign in first.</string>
     <string name="redeem_close">Close</string>
     <string name="redeem_stacks">Codes add to whatever you already have, so two in a row stack.</string>
+    <string name="file_preview_pdf_pages">Showing pages 1–%1$d of %2$d.</string>
     <string name="file_preview_loading">Reading…</string>
     <string name="file_preview_failed">The file could not be read.</string>
     <string name="file_preview_unsupported">This phone cannot preview that kind of file (%1$s). It is on the computer.</string>

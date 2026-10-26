@@ -293,6 +293,7 @@
     <string name="redeem_needs_account">兑换码是给账户加时长的，请先登录。</string>
     <string name="redeem_close">关闭</string>
     <string name="redeem_stacks">兑换码是累加的，连着兑两个会叠加。</string>
+    <string name="file_preview_pdf_pages">显示第 1–%1$d 页，共 %2$d 页。</string>
     <string name="file_preview_loading">读取中…</string>
     <string name="file_preview_failed">读不到这个文件。</string>
     <string name="file_preview_unsupported">这种文件手机预览不了（%1$s），文件在电脑上。</string>
