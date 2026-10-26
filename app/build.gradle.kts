@@ -38,8 +38,8 @@ android {
         targetSdk = 36
         // Kept in step with the iOS target's MARKETING_VERSION/CURRENT_PROJECT_VERSION
         // (0.8.0 / 15) so a build can be identified from either platform's report.
-        versionCode = 46
-        versionName = "0.10.4"
+        versionCode = 47
+        versionName = "0.10.5"
 
         // The account service is one host, like iOS: only the main relay serves
         // it. `-PmizarAccountBase=http://10.0.2.2:8787/account/v1` points a build
