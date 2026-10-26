@@ -7,6 +7,7 @@ import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
@@ -424,6 +425,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var quietRefreshJob: Job? = null
 
     /** Why the last dial failed, and where it was dialling: the notice classifies from these. */
+    /** One route's result in the connect race. */
+    private data class DialOutcome(
+        val endpoint: MizarConnection.Endpoint,
+        val outcome: Result<Pair<MizarConnection, ServerFrame.Welcome>>,
+    ) {
+        val connected: Pair<MizarConnection, ServerFrame.Welcome>? get() = outcome.getOrNull()
+        val failure: Throwable? get() = outcome.exceptionOrNull()
+    }
+
     private var lastConnectFailure: Throwable? = null
     private var lastConnectEndpoint: MizarConnection.Endpoint? = null
 
@@ -1058,110 +1068,183 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             is PairingRoute.Direct -> host.endpoints.sortedBy { it !is MizarConnection.Endpoint.Direct }
             null -> host.endpoints
         }
-        for (endpoint in endpoints) {
-            val identityHeaders = AccountIdentity.headers(
-                installId = accounts.installId,
-                token = _state.value.account.session?.token,
-                relayBaseUrl = host.baseUrl,
-                accountBaseUrl = BuildConfig.ACCOUNT_BASE_URL,
-            )
-            val candidate = MizarConnection(host.configurationFor(endpoint, appVersion, deviceModel, identityHeaders), traffic)
-            try {
-                val welcome = candidate.connect()
-                connection = candidate
-                connectionEpoch++
-                _state.update {
-                    it.copy(
-                        // A first pairing stays on the connecting screen while it
-                        // warms the index: READY would swap in the shell and the
-                        // progress would never be seen. A reconnect has nothing to
-                        // warm, so it goes straight through.
-                        phase = if (warm) Phase.CONNECTING else Phase.READY,
-                        welcome = welcome,
-                        problem = null,
-                        needsPairing = false,
-                        pairingStage = if (warm) PairingStage.SYNCING else null,
-                        offlineBrowser = false,
-                        seenAt = activity.seenAt(host.hostId),
-                        isLocalNetwork = endpoint is MizarConnection.Endpoint.Direct,
-                        connectedAtMillis = System.currentTimeMillis(),
-                        latencyHistory = emptyList(),
-                    )
+        // Dial every route at once. The handshake timeout is twenty seconds, and a
+        // route that blackholes spends all of it before the next one is even tried --
+        // the slowest possible order for a phone that only wants to connect. The
+        // first route to answer wins; the rest are cancelled without being waited on.
+        val results = Channel<DialOutcome>(Channel.UNLIMITED)
+        val jobs = endpoints.map { endpoint ->
+            viewModelScope.launch {
+                val outcome = try {
+                    Result.success(dial(host, endpoint))
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (error: Throwable) {
+                    Result.failure(error)
                 }
-                // The notice says who we are talking to and how far away it is; the
-                // distance arrives with the first poll, a second from now.
-                publishLinkNotice(linkConnectedText(host, _state.value.latencyMillis))
-                startWatchers(candidate)
-                watchConnection(candidate, host)
-                note("connected to $endpoint")
-                if (warm) {
-                    // `finally`: a host that goes away mid-warm must still land on the
-                    // shell. Staying on "reading sessions" for ever is the one failure
-                    // mode of a progress screen.
-                    try {
-                        refreshSessionsNow()
-                        warmTitles(candidate)
-                    } finally {
-                        _state.update {
-                            it.copy(
-                                phase = Phase.READY,
-                                pairingStage = null,
-                                syncProgress = null,
-                                syncEtaMillis = null,
-                            )
-                        }
-                    }
-                } else {
-                    refreshSessions()
-                }
-                registerPush(candidate)
-                // A relay socket is the fallback, not the goal: when the operator asked
-                // for LAN-first, look for the computer's own addresses now that a socket
-                // exists to ask `host.info` over.
-                if (endpoint !is MizarConnection.Endpoint.Direct && _state.value.localNetworkFirst) {
-                    maybeSwitchToLan(host, candidate, welcome)
-                }
-                // A paid account's tunnel belongs on the account relay, and the host
-                // has no account identity: the phone is the only side that knows the
-                // plan. Skipped by hosts that predate relay tiers.
-                if (endpoint !is MizarConnection.Endpoint.Direct) {
-                    viewModelScope.launch { syncRelayTier(candidate) }
-                }
-                return
-            } catch (error: Throwable) {
-                note("endpoint $endpoint failed: ${error.message}")
-                candidate.disconnect()
-                val weight = me.shirazu.mizar.kit.Diagnoses.weight(
-                    me.shirazu.mizar.kit.Diagnoses.of(
-                        error,
-                        addressOf(endpoint),
-                        throughRelay = endpoint is MizarConnection.Endpoint.Relay,
-                    ),
-                )
-                if (weight > bestWeight) {
-                    bestWeight = weight
-                    failure = error
-                    bestEndpoint = endpoint
-                }
+                results.send(DialOutcome(endpoint, outcome))
             }
         }
 
-        val address = host.authority ?: host.baseUrl
-        lastConnectFailure = failure
-        lastConnectEndpoint = bestEndpoint ?: host.endpoints.lastOrNull()
+        var winner: DialOutcome? = null
+        var settled = 0
+        while (settled < endpoints.size && winner == null) {
+            val outcome = results.receive()
+            settled += 1
+            if (outcome.connected != null) {
+                winner = outcome
+                // A loser may still be inside its own handshake; cancelling closes
+                // its socket, and awaiting that would only delay the winner.
+                jobs.forEach { it.cancel() }
+                break
+            }
+            val error = outcome.failure ?: continue
+            note("endpoint ${outcome.endpoint} failed: ${error.message}")
+            val weight = me.shirazu.mizar.kit.Diagnoses.weight(
+                me.shirazu.mizar.kit.Diagnoses.of(
+                    error,
+                    addressOf(outcome.endpoint),
+                    throughRelay = outcome.endpoint is MizarConnection.Endpoint.Relay,
+                ),
+            )
+            if (weight > bestWeight) {
+                bestWeight = weight
+                failure = error
+                bestEndpoint = outcome.endpoint
+            }
+        }
+
+        val won = winner
+        if (won == null) {
+            val address = host.authority ?: host.baseUrl
+            lastConnectFailure = failure
+            lastConnectEndpoint = bestEndpoint ?: host.endpoints.lastOrNull()
+            _state.update {
+                it.copy(
+                    phase = Phase.FAILED,
+                    problem = messageOf(
+                        failure ?: IOException("no address answered"),
+                        address,
+                        throughRelay = lastConnectEndpoint is MizarConnection.Endpoint.Relay,
+                    ),
+                    needsPairing = failure?.isRepairNeeded() == true,
+                    pairingStage = null,
+                )
+            }
+            publishLinkFailure()
+            return
+        }
+
+        val connected = won.connected ?: return
+        adoptConnection(host, won.endpoint, connected.first, connected.second, warm)
+    }
+
+    /**
+     * One route's attempt: build the connection, complete the handshake.
+     *
+     * Disconnects its own candidate when the attempt fails or when the race is lost
+     * mid-handshake, so a route that was cancelled after another one won does not
+     * leave a socket open behind the connection the app is actually using.
+     */
+    private suspend fun dial(
+        host: PairedHost,
+        endpoint: MizarConnection.Endpoint,
+    ): Pair<MizarConnection, ServerFrame.Welcome> {
+        val identityHeaders = AccountIdentity.headers(
+            installId = accounts.installId,
+            token = _state.value.account.session?.token,
+            relayBaseUrl = host.baseUrl,
+            accountBaseUrl = BuildConfig.ACCOUNT_BASE_URL,
+        )
+        val candidate = MizarConnection(
+            host.configurationFor(endpoint, appVersion, deviceModel, identityHeaders),
+            traffic,
+        )
+        try {
+            val welcome = candidate.connect()
+            if (!kotlinx.coroutines.currentCoroutineContext().isActive) {
+                candidate.disconnect()
+                throw kotlinx.coroutines.CancellationException("another route answered first")
+            }
+            return candidate to welcome
+        } catch (error: Throwable) {
+            candidate.disconnect()
+            throw error
+        }
+    }
+
+    /**
+     * Take the route that answered: state, watchers, the first page, push.
+     *
+     * Split out of [connect] because the race decides *which* route, and everything
+     * here is the same whichever one it was.
+     */
+    private suspend fun adoptConnection(
+        host: PairedHost,
+        endpoint: MizarConnection.Endpoint,
+        candidate: MizarConnection,
+        welcome: ServerFrame.Welcome,
+        warm: Boolean,
+    ) {
+        connection = candidate
+        connectionEpoch++
         _state.update {
             it.copy(
-                phase = Phase.FAILED,
-                problem = messageOf(
-                    failure ?: IOException("no address answered"),
-                    address,
-                    throughRelay = lastConnectEndpoint is MizarConnection.Endpoint.Relay,
-                ),
-                needsPairing = failure?.isRepairNeeded() == true,
-                pairingStage = null,
+                // A first pairing stays on the connecting screen while it
+                // warms the index: READY would swap in the shell and the
+                // progress would never be seen. A reconnect has nothing to
+                // warm, so it goes straight through.
+                phase = if (warm) Phase.CONNECTING else Phase.READY,
+                welcome = welcome,
+                problem = null,
+                needsPairing = false,
+                pairingStage = if (warm) PairingStage.SYNCING else null,
+                offlineBrowser = false,
+                seenAt = activity.seenAt(host.hostId),
+                isLocalNetwork = endpoint is MizarConnection.Endpoint.Direct,
+                connectedAtMillis = System.currentTimeMillis(),
+                latencyHistory = emptyList(),
             )
         }
-        publishLinkFailure()
+        // The notice says who we are talking to and how far away it is; the
+        // distance arrives with the first poll, a second from now.
+        publishLinkNotice(linkConnectedText(host, _state.value.latencyMillis))
+        startWatchers(candidate)
+        watchConnection(candidate, host)
+        note("connected to $endpoint")
+        if (warm) {
+            // `finally`: a host that goes away mid-warm must still land on the
+            // shell. Staying on "reading sessions" for ever is the one failure
+            // mode of a progress screen.
+            try {
+                refreshSessionsNow()
+                warmTitles(candidate)
+            } finally {
+                _state.update {
+                    it.copy(
+                        phase = Phase.READY,
+                        pairingStage = null,
+                        syncProgress = null,
+                        syncEtaMillis = null,
+                    )
+                }
+            }
+        } else {
+            refreshSessions()
+        }
+        registerPush(candidate)
+        // A relay socket is the fallback, not the goal: when the operator asked
+        // for LAN-first, look for the computer's own addresses now that a socket
+        // exists to ask `host.info` over.
+        if (endpoint !is MizarConnection.Endpoint.Direct && _state.value.localNetworkFirst) {
+            maybeSwitchToLan(host, candidate, welcome)
+        }
+        // A paid account's tunnel belongs on the account relay, and the host
+        // has no account identity: the phone is the only side that knows the
+        // plan. Skipped by hosts that predate relay tiers.
+        if (endpoint !is MizarConnection.Endpoint.Direct) {
+            viewModelScope.launch { syncRelayTier(candidate) }
+        }
     }
 
     /**
