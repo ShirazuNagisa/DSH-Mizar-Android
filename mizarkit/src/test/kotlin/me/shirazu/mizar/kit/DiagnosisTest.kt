@@ -26,6 +26,47 @@ class DiagnosisTest {
      */
     private class Boom : Exception("something specific")
 
+    /**
+     * A relay that answers 404 is up, and the room behind it is empty.
+     *
+     * The two failures need different things done: one is "the computer is not
+     * connected", the other is "the server cannot be reached", and before the status
+     * was carried they produced the same sentence.
+     */
+    @Test
+    fun `a refused upgrade through the relay names the empty room`() {
+        val diagnosis = Diagnoses.of(
+            UpgradeRefused(404),
+            "https://relay.test/r/ABCD",
+            throughRelay = true,
+        )
+
+        assertEquals(Diagnosis.RelayRoomEmpty("https://relay.test/r/ABCD"), diagnosis)
+    }
+
+    @Test
+    fun `a refused upgrade on a direct route is not an empty relay room`() {
+        // There is no server in the middle on a direct route, so the same status
+        // proves nothing about a room.
+        val diagnosis = Diagnoses.of(UpgradeRefused(404), "192.168.1.20:19390", throughRelay = false)
+
+        assertFalse(diagnosis is Diagnosis.RelayRoomEmpty)
+    }
+
+    @Test
+    fun `an answered relay outranks a silent address, which outranks nothing`() {
+        val repair = Diagnoses.weight(Diagnosis.RequiresRepairing("a"))
+        val emptyRoom = Diagnoses.weight(Diagnosis.RelayRoomEmpty("a"))
+        val silent = Diagnoses.weight(Diagnosis.Silent("a"))
+        val other = Diagnoses.weight(Diagnosis.Other("boom"))
+
+        // The sentence shown when every route failed is the one that narrows the
+        // problem most, not whichever arrived last.
+        assertTrue(repair > emptyRoom)
+        assertTrue(emptyRoom > silent)
+        assertTrue(silent > other)
+    }
+
     @Test
     fun `recognises the tailnet IPv4 block`() {
         // 100.64.0.0/10, so the second octet runs 64 through 127.

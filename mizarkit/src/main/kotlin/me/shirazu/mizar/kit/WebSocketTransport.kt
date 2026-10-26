@@ -8,6 +8,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -30,6 +31,17 @@ interface WebSocketTransport {
     /** Close, without waiting to be polite about it. */
     suspend fun close()
 }
+
+/**
+ * The far end answered the upgrade with a status instead of a socket.
+ *
+ * Carried rather than flattened into a message, because the status is what tells
+ * the two failures apart: 404/410 through a relay means the relay is up and the
+ * computer is not connected to it, while no answer at all means the relay itself
+ * could not be reached.
+ */
+class UpgradeRefused(val status: Int) :
+    IOException("the upgrade was refused with HTTP $status")
 
 /**
  * The real transport.
@@ -80,7 +92,13 @@ class OkHttpWebSocketTransport(
             }
 
             override fun onFailure(webSocket: WebSocket, failure: Throwable, response: Response?) {
-                if (!opened.isCompleted) opened.completeExceptionally(failure)
+                // A relay answers a refused upgrade with a status, written before any
+                // handshake: 404 for a room with no live tunnel. OkHttp hands that
+                // response here, and without it the failure is an anonymous
+                // ProtocolException whose only sentence fits both "the computer is
+                // off" and "the server cannot be reached".
+                val refused = response?.takeIf { it.code != 101 }?.let { UpgradeRefused(it.code) }
+                if (!opened.isCompleted) opened.completeExceptionally(refused ?: failure)
                 inbox.close()
             }
         }

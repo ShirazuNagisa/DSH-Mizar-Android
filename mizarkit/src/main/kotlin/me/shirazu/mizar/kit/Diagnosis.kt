@@ -35,6 +35,15 @@ sealed interface Diagnosis {
      */
     data class RequiresRepairing(val authority: String) : Diagnosis
 
+    /**
+     * The relay answered, and said this room has no tunnel.
+     *
+     * A fact about the computer, not about the network: the relay is up and
+     * reachable, and nothing behind it is connected. Telling the operator to check
+     * Wi-Fi here sends them to look at the wrong machine.
+     */
+    data class RelayRoomEmpty(val authority: String) : Diagnosis
+
     /** The name did not resolve. */
     data class UnknownHost(val authority: String) : Diagnosis
 
@@ -76,8 +85,21 @@ object Diagnoses {
      *   by the caller because only the app can ask (`ConnectivityManager` is an
      *   Android API and this module has no Android in it).
      */
-    fun of(error: Throwable, authority: String? = null, offline: Boolean = false): Diagnosis {
+    fun of(
+        error: Throwable,
+        authority: String? = null,
+        offline: Boolean = false,
+        throughRelay: Boolean = false,
+    ): Diagnosis {
         val address = authority?.takeIf { it.isNotBlank() }
+
+        // The far end answered the upgrade with a status. Through a relay that is
+        // the most specific fact available: the server is up, the room behind it is
+        // empty. A direct route has no server in the middle, so a refusal there is
+        // just a refusal.
+        if (throughRelay && error is UpgradeRefused && error.status in setOf(404, 410)) {
+            return Diagnosis.RelayRoomEmpty(address ?: "")
+        }
 
         // Checked before every network branch, and before `offline`: the host answered
         // and said "I do not know you", which is a fact about the credential, not about
@@ -120,6 +142,29 @@ object Diagnoses {
     }
 
     /**
+     * How much a failure proves, when several routes failed at once.
+     *
+     * The last error is an accident of timing — with routes dialled in parallel it
+     * is whichever lost last, and serially it is the last address tried. What the
+     * operator needs is the failure that narrows the problem most: a refused
+     * credential beats an empty relay room, which beats an address that never
+     * answered.
+     *
+     * @param diagnosis - one failed route's classification.
+     * @returns a comparable score; higher proves more.
+     */
+    fun weight(diagnosis: Diagnosis): Int = when (diagnosis) {
+        is Diagnosis.RequiresRepairing -> 100
+        is Diagnosis.RelayRoomEmpty -> 80
+        is Diagnosis.OutsideTailnet -> 40
+        is Diagnosis.TailnetPeerSilent -> 30
+        is Diagnosis.Silent -> 20
+        is Diagnosis.UnknownHost -> 15
+        Diagnosis.Offline -> 10
+        is Diagnosis.Other -> 5
+    }
+
+    /**
      * The English phrasing, used when the caller has no localized string.
      *
      * Every message names an action rather than a symptom: "nothing answered" is a
@@ -133,6 +178,10 @@ object Diagnoses {
         is Diagnosis.TailnetPeerSilent ->
             "${diagnosis.authority} is on your Tailscale network but nothing answered. " +
                 "Make sure DSH is running on the computer and that the Mizar panel shows it listening."
+
+        is Diagnosis.RelayRoomEmpty ->
+            "The relay answered, but the computer is not connected to it. " +
+                "Make sure DSH is running on the computer and that the Mizar panel shows it online."
 
         is Diagnosis.Silent ->
             "Nothing answered at ${diagnosis.authority}. Make sure DSH is running on the computer and " +

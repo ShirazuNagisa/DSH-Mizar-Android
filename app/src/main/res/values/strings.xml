@@ -23,6 +23,7 @@
     <!-- Connection diagnoses: the one message an operator reads when nothing works. -->
     <string name="diagnosis_outside_tailnet">%1$s is a Tailscale address, but this device is not on that tailnet. Join the same Tailscale network on this phone, or pair again over a direct address.</string>
     <string name="diagnosis_tailnet_silent">%1$s is on your Tailscale network but nothing answered. Make sure DSH is running on the computer and that the Mizar panel shows it listening.</string>
+    <string name="diagnosis_relay_room_empty">The relay answered, but this computer is not connected to it. Make sure DSH is running and its Mizar panel shows it online.</string>
     <string name="diagnosis_silent">Nothing answered at %1$s. Make sure DSH is running on the computer and that this phone can reach it.</string>
     <string name="diagnosis_offline">This device has no network connection.</string>
     <string name="diagnosis_repair_no_address">This computer no longer recognises this phone. Pair it again from the DSH-Mizar panel.</string>

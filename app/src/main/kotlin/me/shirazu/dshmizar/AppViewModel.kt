@@ -1048,6 +1048,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         indexStore.load(host.hostId)?.let { applyIndex(it) }
 
         var failure: Throwable? = null
+        // The failure that proves the most, and the route it came from: with several
+        // routes tried, "the last one to fail" is an accident of timing.
+        var bestWeight = -1
+        var bestEndpoint: MizarConnection.Endpoint? = null
         // The route that just answered goes first; the other stays behind it.
         val endpoints = when (preferred) {
             is PairingRoute.Relay -> host.endpoints.sortedBy { it !is MizarConnection.Endpoint.Relay }
@@ -1126,18 +1130,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return
             } catch (error: Throwable) {
                 note("endpoint $endpoint failed: ${error.message}")
-                failure = error
                 candidate.disconnect()
+                val weight = me.shirazu.mizar.kit.Diagnoses.weight(
+                    me.shirazu.mizar.kit.Diagnoses.of(
+                        error,
+                        addressOf(endpoint),
+                        throughRelay = endpoint is MizarConnection.Endpoint.Relay,
+                    ),
+                )
+                if (weight > bestWeight) {
+                    bestWeight = weight
+                    failure = error
+                    bestEndpoint = endpoint
+                }
             }
         }
 
         val address = host.authority ?: host.baseUrl
         lastConnectFailure = failure
-        lastConnectEndpoint = host.endpoints.lastOrNull()
+        lastConnectEndpoint = bestEndpoint ?: host.endpoints.lastOrNull()
         _state.update {
             it.copy(
                 phase = Phase.FAILED,
-                problem = messageOf(failure ?: IOException("no address answered"), address),
+                problem = messageOf(
+                    failure ?: IOException("no address answered"),
+                    address,
+                    throughRelay = lastConnectEndpoint is MizarConnection.Endpoint.Relay,
+                ),
                 needsPairing = failure?.isRepairNeeded() == true,
                 pairingStage = null,
             )
@@ -1173,8 +1192,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun publishLinkFailure() {
         val context = getApplication<Application>()
         val endpoint = lastConnectEndpoint
-        val status = Regex("""was '?(\d{3})""").find(lastConnectFailure?.message.orEmpty())
-            ?.groupValues?.get(1)?.toIntOrNull()
+        val status = (lastConnectFailure as? me.shirazu.mizar.kit.UpgradeRefused)?.status
         val text = when {
             endpoint is MizarConnection.Endpoint.Direct -> context.getString(R.string.link_host_offline)
             status == 404 || status == 410 -> context.getString(R.string.link_host_offline)
@@ -3339,13 +3357,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun addressOf(): String? = _state.value.host?.let { it.authority ?: it.baseUrl }
 
-    private fun messageOf(error: Throwable, address: String?): String {
+    private fun messageOf(error: Throwable, address: String?, throughRelay: Boolean = false): String {
         // A refused credential gets the phrasing that names the action (pair again),
         // not the host's terse "unknown or revoked token", which reads like a bug.
-        if (error.isRepairNeeded()) return diagnosisText(Diagnoses.of(error, address))
+        if (error.isRepairNeeded()) {
+            return diagnosisText(Diagnoses.of(error, address, throughRelay = throughRelay))
+        }
         val mizar = error as? me.shirazu.mizar.kit.MizarError
         if (mizar != null) return mizar.message
-        return diagnosisText(Diagnoses.of(error, address))
+        return diagnosisText(Diagnoses.of(error, address, throughRelay = throughRelay))
+    }
+
+    /** The address an endpoint dials, for a diagnosis that names it. */
+    private fun addressOf(endpoint: MizarConnection.Endpoint): String = when (endpoint) {
+        is MizarConnection.Endpoint.Direct -> endpoint.authority
+        is MizarConnection.Endpoint.Relay -> endpoint.baseUrl
     }
 
     /**
@@ -3365,6 +3391,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
             is Diagnosis.TailnetPeerSilent ->
                 context.getString(R.string.diagnosis_tailnet_silent, diagnosis.authority)
+
+            is Diagnosis.RelayRoomEmpty ->
+                context.getString(R.string.diagnosis_relay_room_empty)
 
             is Diagnosis.Silent ->
                 context.getString(R.string.diagnosis_silent, diagnosis.authority)
