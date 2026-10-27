@@ -23,7 +23,7 @@
 |---|---|---|
 | `src/index.ts` | `turn/end` 时除 `notifier.turnEnded` 外，再向所有客户端广播 `turn.settled { sessionId, reason }` | 没有 FCM 的手机收不到推送；完成通知只能靠这个事件，否则退化成轮询 |
 | `src/push/missed.ts` + `src/index.ts` | 广播时**没有客户端**的完成事件先记下来，下一个连上来的客户端补发（限 20 条 / 12 小时，新的一轮会作废旧的） | 断线期间"开始并结束"的那一轮，事件丢了、轮询也没见过它 running，否则永远补不回来 |
-| `src/attachments/*` + `src/bridge/*` + `src/server/listener.ts` | 在已认证的 WS 内新增 `attachment.capabilities/begin/chunk/finish/abort`，64 KiB 分块、SHA-256、设备/会话归属、TTL/配额 | 手机要有把手上的图片和文件交给电脑的路；复用现有 WS，不开匿名 HTTP 上传口 |
+| `src/bridge/uploads.ts` + `src/bridge/index.ts` + `src/server/listener.ts` | 在已认证的 WS 内新增 `upload.capabilities/begin/chunk/finish/abort`，128 KiB 分块、可选 SHA-256、设备/会话归属、TTL/配额 | 手机要有把手上的图片和文件交给电脑的路；复用现有 WS，不开匿名 HTTP 上传口 |
 | `lib/` | 由 `src/` 编译产生，与源码一同提交 | 宿主直接加载 `lib/`，不跑构建 |
 
 除此之外与上游完全一致。`session.refresh` 不再携带：客户端在宿主不实现时自动退回三次普通读取。

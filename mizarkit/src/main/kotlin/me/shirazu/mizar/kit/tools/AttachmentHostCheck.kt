@@ -93,8 +93,8 @@ private suspend fun attachmentHostCheck() {
         checkSessionSettings(socket, SettingsScope(welcome.hostId, welcome.deviceId, created.sessionId, 0))
         val uploader = AttachmentUploader(socket.attachmentRpc())
         val limits = uploader.capabilities()
-        check(limits.maxAttachments >= 2 && "image/png" in limits.imageMediaTypes)
-        println("PASS attachment capabilities v${limits.version} chunkBytes=${limits.chunkBytes}")
+        check(limits.attachments >= 2 && "image/png" in limits.imageMediaTypes)
+        println("PASS upload capabilities chunkBytes=${limits.chunkBytes} imageBytes=${limits.imageBytes} fileBytes=${limits.fileBytes}")
         val sources = withContext(Dispatchers.IO) {
             listOf(
                 fixture(directory, "contract-image.png", makePng(), "image", "image/png"),
@@ -104,11 +104,11 @@ private suspend fun attachmentHostCheck() {
         val ids = sources.map { source ->
             val checkpoint = AttachmentCheckpoint(scope).also { checkpoints += it }
             val ready = withContext(Dispatchers.IO) { uploader.upload(scope, source, limits, checkpoint) }
-            check(ready.bytes == source.bytes && checkpoint.offset == source.bytes)
+            check(ready.byteSize == source.bytes && checkpoint.offset == source.bytes)
             // This exercises real repeated finish against the TS store, not just a fixture RPC.
             val repeated = withContext(Dispatchers.IO) { uploader.upload(scope, source, limits, checkpoint) }
             check(repeated == ready)
-            println("PASS upload+repeat-finish ${source.kind} bytes=${source.bytes} sha256=${source.sha256}")
+            println("PASS upload+repeat-finish ${source.kind} bytes=${source.bytes} sha256=${source.sha256 ?: "not declared"}")
             ready.attachmentId
         }
         val attempt = AttachmentPromptAttempt(scope, "", ids)
@@ -170,7 +170,7 @@ private suspend fun checkSessionSettings(socket: MizarConnection, scope: Setting
     println("PASS dynamic permission catalog and ${options.size} preset readbacks")
 }
 
-private fun fixture(directory: File, name: String, bytes: ByteArray, kind: String, mediaType: String? = null): AttachmentSource {
+private fun fixture(directory: File, name: String, bytes: ByteArray, kind: String, mediaType: String = "application/octet-stream"): AttachmentSource {
     val file = File(directory, name).apply { writeBytes(bytes) }
     val hash = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it.toInt() and 255) }
     return AttachmentSource(file, name, bytes.size.toLong(), hash, kind, mediaType)

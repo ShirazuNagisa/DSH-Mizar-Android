@@ -2,6 +2,7 @@ package me.shirazu.mizar.kit
 
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
@@ -14,9 +15,39 @@ import java.io.RandomAccessFile
 import java.util.Base64
 import java.util.UUID
 
-const val ATTACHMENT_MAX_BYTES = 20L * 1024 * 1024
-const val ATTACHMENT_MAX_COUNT = 5
-const val ATTACHMENT_CHUNK_BYTES = 65_536
+/**
+ * The limits this client will not exceed, whatever the host advertises.
+ *
+ * They mirror the host's own documented numbers rather than being a second
+ * opinion: a host that advertises more than this is either newer than the client
+ * understands or wrong, and in both cases the smaller number is the safe one.
+ */
+const val ATTACHMENT_MAX_IMAGE_BYTES = 10L * 1024 * 1024
+const val ATTACHMENT_MAX_FILE_BYTES = 32L * 1024 * 1024
+const val ATTACHMENT_MAX_PROMPT_BYTES = 64L * 1024 * 1024
+
+/** Most attachments one prompt may carry, and how many of them may be images. */
+const val ATTACHMENT_MAX_COUNT = 8
+const val ATTACHMENT_MAX_IMAGES = 4
+
+/**
+ * The chunk size the protocol documents.
+ *
+ * A host may name a different one in its `upload.begin` answer and that answer
+ * wins: the host writes each chunk at `index × chunkBytes`, so a client that
+ * slices to its own idea of the size puts the bytes at the wrong offsets. This
+ * constant is only what the app uses before a host has spoken.
+ */
+const val ATTACHMENT_CHUNK_BYTES = 131_072
+
+/**
+ * The largest chunk size this client will honour from a host.
+ *
+ * Not a preference: a chunk is held in memory as bytes and as base64, so a host
+ * that named something enormous would be asking the phone to allocate it. Well
+ * above the documented 128 KiB, so any sane host is unaffected.
+ */
+private const val ATTACHMENT_CHUNK_CEILING = 1024 * 1024
 
 /** Display metadata only: never use this as a local or remote filesystem path. */
 fun attachmentDisplayName(raw: String): String {
@@ -47,26 +78,37 @@ fun attachmentDisplayName(raw: String): String {
 /** Includes the device credential identity: pairing the same host again is a new scope. */
 data class AttachmentScope(val hostId: String, val deviceId: String, val sessionId: String)
 
+/**
+ * What `upload.capabilities` answers.
+ *
+ * Field names are the host's, not this app's: `imageBytes` and `fileBytes` are
+ * the per-attachment ceilings, `promptBytes` bounds one prompt's total, and
+ * `attachments`/`images` are the counts. `sha256` says whether the host will
+ * verify a digest the client declares.
+ */
 @Serializable
 data class AttachmentCapabilities(
-    val version: Int,
-    val maxFileBytes: Long,
-    val maxImageBytes: Long,
-    val maxAttachments: Int,
     val chunkBytes: Int,
+    val imageBytes: Long,
+    val fileBytes: Long,
+    @SerialName("promptBytes") val promptBytes: Long = ATTACHMENT_MAX_PROMPT_BYTES,
+    val attachments: Int,
+    @SerialName("images") val images: Int = ATTACHMENT_MAX_IMAGES,
     val expiresSeconds: Int,
     val imageMediaTypes: List<String>,
+    @SerialName("sha256") val verifiesSha256: Boolean = false,
 ) {
     fun checked(): AttachmentCapabilities {
-        require(version == 1) { "Unsupported attachment protocol version: $version" }
-        require(maxFileBytes > 0 && maxImageBytes > 0 && maxAttachments > 0 && chunkBytes > 0 && expiresSeconds > 0) {
+        require(chunkBytes > 0 && imageBytes > 0 && fileBytes > 0 && attachments > 0 && expiresSeconds > 0) {
             "Invalid attachment limits from host"
         }
         return copy(
-            maxFileBytes = minOf(maxFileBytes, ATTACHMENT_MAX_BYTES),
-            maxImageBytes = minOf(maxImageBytes, ATTACHMENT_MAX_BYTES),
-            maxAttachments = minOf(maxAttachments, ATTACHMENT_MAX_COUNT),
-            chunkBytes = minOf(chunkBytes, ATTACHMENT_CHUNK_BYTES),
+            chunkBytes = minOf(chunkBytes, ATTACHMENT_CHUNK_CEILING),
+            imageBytes = minOf(imageBytes, ATTACHMENT_MAX_IMAGE_BYTES),
+            fileBytes = minOf(fileBytes, ATTACHMENT_MAX_FILE_BYTES),
+            promptBytes = minOf(promptBytes, ATTACHMENT_MAX_PROMPT_BYTES),
+            attachments = minOf(attachments, ATTACHMENT_MAX_COUNT),
+            images = minOf(images, ATTACHMENT_MAX_IMAGES),
             imageMediaTypes = imageMediaTypes.filter { it in IMAGE_MEDIA_TYPES },
         )
     }
@@ -81,31 +123,49 @@ data class AttachmentSource(
     val file: File,
     val name: String,
     val bytes: Long,
-    val sha256: String,
+    /** Lowercase hex, or `null` to let the host trust its own byte count. */
+    val sha256: String? = null,
     val kind: String,
-    val mediaType: String? = null,
+    /**
+     * Required by `upload.begin` even for a plain file: the host stores what it
+     * is told and hands the same string back. `application/octet-stream` is the
+     * honest answer for a document whose type nobody knows.
+     */
+    val mediaType: String = "application/octet-stream",
 )
 
+/** What `upload.finish` returns, and what `session.prompt` takes an id from. */
 @Serializable
 data class AttachmentReady(
     val attachmentId: String,
-    val name: String,
-    val bytes: Long,
     val kind: String,
-    val mediaType: String? = null,
+    val name: String,
+    val mediaType: String,
+    val byteSize: Long,
 )
 
 @Serializable
-private data class UploadBegin(val uploadId: String, val chunkBytes: Int, val offset: Long)
-@Serializable
-private data class UploadChunk(val offset: Long)
+private data class UploadBegin(val uploadId: String, val chunkBytes: Int = 0)
 
-/** Mutated by a single upload job, retained verbatim on an uncertain response. */
+@Serializable
+private data class UploadChunk(val received: Int)
+
+/**
+ * How far one upload got, kept across a retry.
+ *
+ * The host addresses chunks by index, so the index is the resume point: a lost
+ * reply leaves it where it was, and sending that index again is an idempotent
+ * replay of bytes the host already holds. Nothing here is cleared on a timeout --
+ * only on an answer that proves the upload is gone or unusable.
+ */
 class AttachmentCheckpoint(val scope: AttachmentScope) {
     var uploadId: String? = null
         internal set
     var chunkBytes: Int = 0
         internal set
+    var index: Int = 0
+        internal set
+    /** Bytes acknowledged so far; the last chunk is usually short, so this is not `index × chunkBytes`. */
     var offset: Long = 0
         internal set
     var ready: AttachmentReady? = null
@@ -121,13 +181,22 @@ fun MizarConnection.attachmentRpc(): AttachmentRpc = AttachmentRpc { method, pay
     call<JsonObject>(method, payload)
 }
 
+/**
+ * Carries a file to the host over the socket that is already open.
+ *
+ * Four unary calls, as the protocol documents them: `upload.begin`, one
+ * `upload.chunk` per slice, `upload.finish`, and `upload.abort` when the draft is
+ * thrown away. The names are `upload.*` and not `attachment.*` because the host
+ * and the iOS client both spell it this way; a client that invents its own names
+ * gets `NOT_IMPLEMENTED` for every call and looks like a host without the feature.
+ */
 class AttachmentUploader(private val rpc: AttachmentRpc) {
     suspend fun capabilities(): AttachmentCapabilities =
         WIRE_JSON.decodeFromJsonElement<AttachmentCapabilities>(
-            rpc.call("attachment.capabilities", buildJsonObject {}),
+            rpc.call("upload.capabilities", buildJsonObject {}),
         ).checked()
 
-    /** Caller runs on IO. Memory is bounded by one <=64 KiB chunk, not the file size. */
+    /** Caller runs on IO. Memory is bounded by one chunk, not the file size. */
     suspend fun upload(
         scope: AttachmentScope,
         source: AttachmentSource,
@@ -138,11 +207,14 @@ class AttachmentUploader(private val rpc: AttachmentRpc) {
         return try {
             transfer(scope, source, limits, checkpoint, onProgress)
         } catch (error: MizarError) {
-            // Before prompt admission it is safe to restart an expired upload, but never silently
-            // replace IDs in a frozen prompt. The app calls upload only before freezing admission.
-            if (error.code == "UPLOAD_EXPIRED" || error.code == "UPLOAD_NOT_FOUND") {
+            // A refused upload cannot be resumed: the host has either forgotten it
+            // or holds bytes that no longer match. Anything that merely failed to
+            // answer keeps the checkpoint, because the chunk it was sent is
+            // replayable at the same index.
+            if (!error.retryable || error.code == "UPLOAD_UNKNOWN" || error.code == "UPLOAD_BAD_CHUNK") {
                 checkpoint.uploadId = null
                 checkpoint.chunkBytes = 0
+                checkpoint.index = 0
                 checkpoint.offset = 0
                 checkpoint.ready = null
             }
@@ -160,33 +232,42 @@ class AttachmentUploader(private val rpc: AttachmentRpc) {
         require(scope == checkpoint.scope) { "Attachment belongs to another host, device or session" }
         val safe = limits.checked()
         require(source.kind == "file" || source.kind == "image") { "Invalid attachment kind" }
-        val max = if (source.kind == "image") safe.maxImageBytes else safe.maxFileBytes
+        val max = if (source.kind == "image") safe.imageBytes else safe.fileBytes
         require(source.bytes in 1..max) { "Attachment exceeds host limit ($max bytes) or is empty" }
         require(source.file.isFile && source.file.length() == source.bytes) { "Staged attachment is missing or changed" }
-        require(source.sha256.matches(Regex("[0-9a-f]{64}"))) { "Invalid attachment SHA-256" }
+        source.sha256?.let { require(it.matches(Regex("[0-9a-f]{64}"))) { "Invalid attachment SHA-256" } }
         require(source.name == attachmentDisplayName(source.name) && source.name.toByteArray(Charsets.UTF_8).size <= 240) {
             "Invalid attachment display name"
         }
+        require(source.mediaType.isNotBlank() && source.mediaType.length <= 240) { "Invalid attachment media type" }
         require(source.kind != "image" || source.mediaType in safe.imageMediaTypes) { "Host does not support this image format" }
-        // Even a ready object is re-finished before a NEW admission, so expiry while another
-        // file failed cannot freeze a stale attachment ID into the message. Frozen prompt retries
-        // bypass upload entirely and keep their original IDs/requestId.
+        // A ready object is re-finished before a NEW admission, so an attachment that
+        // expired while another file failed cannot be frozen into a message. A frozen
+        // prompt retry never comes through here: it reuses the ids it already has.
         if (checkpoint.uploadId == null) {
-            val begin = WIRE_JSON.decodeFromJsonElement<UploadBegin>(rpc.call("attachment.begin", buildJsonObject {
+            val begin = WIRE_JSON.decodeFromJsonElement<UploadBegin>(rpc.call("upload.begin", buildJsonObject {
                 put("sessionId", scope.sessionId)
-                put("name", source.name)
-                put("bytes", source.bytes)
-                put("sha256", source.sha256)
                 put("kind", source.kind)
-                source.mediaType?.let { put("mediaType", it) }
+                put("name", source.name)
+                put("mediaType", source.mediaType)
+                put("byteSize", source.bytes)
+                source.sha256?.let { put("sha256", it) }
             }))
-            // Retain a known ID even if the host returns a malformed offset, so removal can abort it.
+            // Retained even if the rest of the answer is unusable, so removal can abort it.
             require(begin.uploadId.isNotBlank()) { "Host returned an empty upload ID" }
             checkpoint.uploadId = begin.uploadId
-            require(begin.offset == 0L && begin.chunkBytes in 1..safe.chunkBytes) { "Invalid upload offset or chunk limit" }
-            checkpoint.chunkBytes = begin.chunkBytes
+            // The host's chunk size is the offset convention, so it is taken as given
+            // rather than clamped: slicing to a smaller one would write every chunk
+            // after the first at the wrong place. An absurd value is a refusal, not a
+            // number to negotiate.
+            val chunk = if (begin.chunkBytes > 0) begin.chunkBytes else ATTACHMENT_CHUNK_BYTES
+            require(chunk in 1..ATTACHMENT_CHUNK_CEILING) { "Host asked for an unusable chunk size: $chunk" }
+            checkpoint.chunkBytes = chunk
+            checkpoint.index = 0
+            checkpoint.offset = 0
         }
-        require(checkpoint.chunkBytes in 1..safe.chunkBytes && checkpoint.offset in 0..source.bytes) { "Invalid upload checkpoint" }
+        require(checkpoint.chunkBytes in 1..ATTACHMENT_CHUNK_CEILING) { "Invalid upload checkpoint" }
+        require(checkpoint.index >= 0 && checkpoint.offset <= source.bytes) { "Invalid upload checkpoint" }
         val uploadId = requireNotNull(checkpoint.uploadId)
         onProgress(checkpoint.offset)
         RandomAccessFile(source.file, "r").use { input ->
@@ -196,29 +277,34 @@ class AttachmentUploader(private val rpc: AttachmentRpc) {
                 val start = checkpoint.offset
                 val buffer = ByteArray(minOf(checkpoint.chunkBytes.toLong(), source.bytes - start).toInt())
                 input.readFully(buffer)
-                val next = WIRE_JSON.decodeFromJsonElement<UploadChunk>(rpc.call("attachment.chunk", buildJsonObject {
+                val received = WIRE_JSON.decodeFromJsonElement<UploadChunk>(rpc.call("upload.chunk", buildJsonObject {
                     put("uploadId", uploadId)
-                    put("offset", start)
+                    put("index", checkpoint.index)
                     put("data", Base64.getEncoder().encodeToString(buffer))
-                })).offset
-                require(next == start + buffer.size) { "Host acknowledged an invalid upload offset" }
-                // A lost reply leaves this at start. Retrying replays exactly the same chunk.
-                checkpoint.offset = next
-                onProgress(next)
+                })).received
+                // An acknowledgement that does not name this chunk means the two ends
+                // disagree about the offset convention; continuing would write the rest
+                // of the file at a hole and only fail at finish.
+                require(received == checkpoint.index + 1) { "Host acknowledged chunk $received after chunk ${checkpoint.index}" }
+                // A lost reply leaves the index where it was. Retrying replays exactly
+                // this chunk, which the host compares byte for byte.
+                checkpoint.index = received
+                checkpoint.offset = start + buffer.size
+                onProgress(checkpoint.offset)
             }
         }
         currentCoroutineContext().ensureActive()
-        val ready = WIRE_JSON.decodeFromJsonElement<AttachmentReady>(rpc.call("attachment.finish", buildJsonObject {
+        val ready = WIRE_JSON.decodeFromJsonElement<AttachmentReady>(rpc.call("upload.finish", buildJsonObject {
             put("uploadId", uploadId)
         }))
-        require(ready.attachmentId.isNotBlank() && ready.bytes == source.bytes && ready.kind == source.kind &&
+        require(ready.attachmentId.isNotBlank() && ready.byteSize == source.bytes && ready.kind == source.kind &&
             (source.kind != "image" || ready.mediaType == source.mediaType)) { "Invalid attachment finish response" }
         checkpoint.ready = ready
         return ready
     }
 
     suspend fun abort(checkpoint: AttachmentCheckpoint) {
-        checkpoint.uploadId?.let { id -> rpc.call("attachment.abort", buildJsonObject { put("uploadId", id) }) }
+        checkpoint.uploadId?.let { id -> rpc.call("upload.abort", buildJsonObject { put("uploadId", id) }) }
     }
 }
 
@@ -243,7 +329,9 @@ data class AttachmentPromptAttempt(
             put("sessionId", scope.sessionId)
             put("text", text)
             put("requestId", requestId)
-            if (attachmentIds.isNotEmpty()) putJsonArray("attachments") { attachmentIds.forEach { add(it) } }
+            // `attachmentIds` is the host's spelling; a key it does not read is a
+            // message that arrives with no files and no error.
+            if (attachmentIds.isNotEmpty()) putJsonArray("attachmentIds") { attachmentIds.forEach { add(it) } }
         }
     }
 }

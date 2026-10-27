@@ -284,6 +284,37 @@ Android 16 的 Live Updates 是 iOS Live Activity 的对位：`push/LiveTurn.kt`
 - **日志导出**：设置页一键打包（见 [诊断包](#诊断包)）。
 - **宽屏三页侧栏**：轮次 / 子代理 / 预览三页，平板与折叠屏上是常驻列而不是抽屉。
 
+## 附件：线上契约
+
+手机把图片/文件交给电脑，走的是**已认证那条 WebSocket** 上的四个方法，名字和字段都以宿主为准：
+
+| 方法 | payload | 返回 |
+|---|---|---|
+| `upload.capabilities` | `{}` | `{chunkBytes, imageBytes, fileBytes, promptBytes, attachments, images, expiresSeconds, imageMediaTypes, sha256}` |
+| `upload.begin` | `sessionId, kind, name, mediaType, byteSize, sha256?` | `{uploadId, chunkBytes}` |
+| `upload.chunk` | `uploadId, index, data`（规范 base64） | `{received: index + 1}` |
+| `upload.finish` | `uploadId` | `{attachmentId, kind, name, mediaType, byteSize}` |
+| `upload.abort` | `uploadId` | `{aborted: true}` |
+
+prompt 里带的是 **`attachmentIds`**，不是 `attachments`。
+
+三条容易踩的：
+
+- **块大小是宿主的偏移约定。** 每块正好 `chunkBytes`（默认 128 KiB，除最后一块），宿主按
+  `index × chunkBytes` 落盘。客户端按自己的想象切块，第一块之后全写到错位置。
+- **`mediaType` 是必填**，普通文件也一样（用 `application/octet-stream`）。
+- **名字写错就是静默丢文件。** 宿主对未知方法回 `NOT_IMPLEMENTED`，对读不懂的 prompt 字段当没传；
+  这正是 0.10.5 的状态——UI 早就接好了，链路却因为方法名对不上从来没通过。
+
+照片在手机上**先转成 JPEG**（`AttachmentStaging`，最长边受限、质量 86）再上传，所以 20 MB 的
+HEIC 原图不会原样塞进 prompt。哈希按 64 KiB 流式计算，不把整份文件读进内存。
+
+验证：`scripts/ki2-host.mjs` 里按插件规则实现了这四个方法（含重放比对与"除最后一块必须整块"），
+`./gradlew :mizarkit:attachmentHostCheck -Pbase=http://127.0.0.1:19491 -Pcode=XXXX` 用真实
+`AttachmentUploader` 跑通配对 → 上传（355 字节图片 + 150001 字节文件）→ 重复 finish → 纯附件 prompt →
+同 requestId 重放。AVD 上再走一遍 UI：选图 → `upload.begin/finish` → `prompt recorded (…, 1 attachment(s))`
+→ 历史里显示附件 chip。
+
 ## 诊断包
 
 设置页的导出按钮生成一个 zip，全部是纯文本，且**不含**设备令牌、配对码、提问与回答：

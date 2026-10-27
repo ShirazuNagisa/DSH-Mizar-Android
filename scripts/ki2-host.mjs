@@ -158,6 +158,53 @@ const sessions = [
 
 let nextSeq = 7
 
+/** The host's own chunk size, which the client must slice to exactly. */
+const UPLOAD_CHUNK_BYTES = 131_072
+
+/** Live uploads, keyed by the id `upload.begin` handed out. */
+const uploads = new Map()
+
+/** One counter for both ids, so a log line names one thing. */
+let nextUploadId = 0
+
+/** What `session.model.set` was last told, per session. */
+const chosenModels = new Map()
+
+/** What `session.permission.set` was last told, per session. */
+const chosenPermissions = new Map()
+
+/** The one provider the harness offers, with one reasoning model and one plain. */
+const CATALOG = {
+  default: { provider: 'deepseek', model: 'deepseek-v4', reasoningEffort: 'high' },
+  providers: [
+    {
+      id: 'deepseek',
+      name: 'DeepSeek',
+      models: [
+        {
+          id: 'deepseek-v4',
+          name: 'DeepSeek V4',
+          efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }],
+          defaultEffort: 'high',
+        },
+        { id: 'deepseek-lite', name: 'DeepSeek Lite' },
+      ],
+    },
+  ],
+  failures: [],
+}
+
+const PERMISSIONS = {
+  options: [
+    { value: 'read-only', name: 'Read only' },
+    { value: 'default', name: 'Default' },
+    { value: 'danger-full-access', name: 'Full access' },
+    { value: 'custom', name: 'Custom' },
+  ],
+  defaults: [],
+  defaultPreset: 'default',
+}
+
 /** The last `session.messages` request, so a test can assert what travelled. */
 let lastPageRequest = null
 
@@ -234,6 +281,12 @@ const listener = await MizarListener.start({
     log(`client count -> ${count}`)
     broker.setClientCount(count)
   },
+  // ── attachments ─────────────────────────────────────────────────────────
+  //
+  // The four `upload.*` methods, implemented to the same rules the plugin's own
+  // store enforces, because the point of this harness is to catch a client that
+  // has the protocol slightly wrong: index-based offsets, canonical base64, and
+  // every chunk but the last exactly `chunkBytes`.
   methods: {
     'session.list': async () => ({ items: sessions }),
 
@@ -341,7 +394,10 @@ const listener = await MizarListener.start({
               : id === 'session-ki2-child'
                 ? undefined
                 : 'KI-2 验证会话',
-          permissionPreset: 'default',
+          // Read back what was set, the way the real host does: the client is
+          // supposed to trust this projection over its own optimistic copy.
+          permissionPreset: chosenPermissions.get(id) ?? 'default',
+          ...(chosenModels.has(id) ? { model: { lastUsed: chosenModels.get(id), next: chosenModels.get(id) } } : {}),
         },
       }
     },
@@ -374,9 +430,149 @@ const listener = await MizarListener.start({
       log(`presence foreground=${payload?.['foreground']}`)
       return { accepted: true }
     },
+    'session.create': async (payload) => ({
+      sessionId: typeof payload?.['sessionId'] === 'string' && payload['sessionId'] !== ''
+        ? payload['sessionId']
+        : 'session-ki2-alpha',
+      agentPreset: 'default',
+    }),
+    'model.catalog': async () => CATALOG,
+    'session.model.set': async (payload) => {
+      const sessionId = payload?.['sessionId']
+      const provider = payload?.['provider']
+      const model = payload?.['model']
+      if (typeof sessionId !== 'string' || typeof provider !== 'string' || typeof model !== 'string') {
+        throw new MethodError('MALFORMED_FRAME', 'session.model.set needs sessionId, provider and model')
+      }
+      const option = CATALOG.providers.find((group) => group.id === provider)?.models.find((item) => item.id === model)
+      if (option === undefined) throw new MethodError('MODEL_UNAVAILABLE', `no model ${provider}/${model}`)
+      const efforts = option.efforts ?? []
+      const effort = payload?.['reasoningEffort']
+      const selected = {
+        provider,
+        model,
+        ...(efforts.length === 0 ? {} : { reasoningEffort: effort ?? option.defaultEffort ?? efforts[0].id }),
+      }
+      chosenModels.set(sessionId, selected)
+      log(`session.model.set ${provider}/${model} effort=${selected.reasoningEffort ?? '-'}`)
+      return { sessionId, selected }
+    },
+    'permissions.catalog': async () => PERMISSIONS,
+    'session.permission.set': async (payload) => {
+      const sessionId = payload?.['sessionId']
+      const preset = payload?.['preset']
+      if (typeof sessionId !== 'string' || typeof preset !== 'string') {
+        throw new MethodError('MALFORMED_FRAME', 'session.permission.set needs sessionId and preset')
+      }
+      if (!PERMISSIONS.options.some((option) => option.value === preset)) {
+        throw new MethodError('REMOTE_ERROR', `unknown preset "${preset}"`)
+      }
+      chosenPermissions.set(sessionId, preset)
+      // The client reads `kind == 'success'`; a bare boolean is a missing field.
+      return { commandResult: { kind: 'success', text: `permission set to ${preset}` } }
+    },
+
+    'upload.capabilities': async () => ({
+      chunkBytes: UPLOAD_CHUNK_BYTES,
+      imageBytes: 10 * 1024 * 1024,
+      fileBytes: 32 * 1024 * 1024,
+      promptBytes: 64 * 1024 * 1024,
+      attachments: 8,
+      images: 4,
+      expiresSeconds: 1800,
+      imageMediaTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
+      sha256: true,
+    }),
+    'upload.begin': async (payload, context) => {
+      const sessionId = payload?.['sessionId']
+      const kind = payload?.['kind']
+      const name = payload?.['name']
+      const mediaType = payload?.['mediaType']
+      const byteSize = payload?.['byteSize']
+      if (typeof sessionId !== 'string' || sessionId === '') throw new MethodError('MALFORMED_FRAME', 'upload.begin needs sessionId')
+      if (kind !== 'image' && kind !== 'file') throw new MethodError('MALFORMED_FRAME', 'upload.begin needs kind image|file')
+      if (typeof name !== 'string' || name === '') throw new MethodError('MALFORMED_FRAME', 'upload.begin needs name')
+      if (typeof mediaType !== 'string' || mediaType === '') throw new MethodError('MALFORMED_FRAME', 'upload.begin needs mediaType')
+      if (!Number.isInteger(byteSize) || byteSize <= 0) throw new MethodError('MALFORMED_FRAME', 'upload.begin needs a positive byteSize')
+      const limit = kind === 'image' ? 10 * 1024 * 1024 : 32 * 1024 * 1024
+      if (byteSize > limit) throw new MethodError('UPLOAD_TOO_LARGE', `upload.begin: ${byteSize} exceeds ${limit}`)
+      const uploadId = `up-${(nextUploadId += 1)}`
+      uploads.set(uploadId, {
+        uploadId, deviceId: context?.deviceId ?? 'unknown', sessionId, kind, name, mediaType, byteSize,
+        received: 0, chunks: 0, data: Buffer.alloc(0),
+      })
+      log(`upload.begin ${uploadId} ${kind} ${name} ${byteSize} bytes`)
+      return { uploadId, chunkBytes: UPLOAD_CHUNK_BYTES }
+    },
+    'upload.chunk': async (payload) => {
+      const upload = uploads.get(payload?.['uploadId'])
+      if (upload === undefined) throw new MethodError('UPLOAD_UNKNOWN', 'upload.chunk: no such upload')
+      const index = payload?.['index']
+      const data = payload?.['data']
+      if (!Number.isInteger(index) || index < 0) throw new MethodError('MALFORMED_FRAME', 'upload.chunk needs a non-negative index')
+      if (typeof data !== 'string' || data === '') throw new MethodError('MALFORMED_FRAME', 'upload.chunk needs data')
+      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(data)) throw new MethodError('UPLOAD_BAD_CHUNK', 'upload.chunk: not base64')
+      const bytes = Buffer.from(data, 'base64')
+      // The round trip is the canonical check: Node decodes "AAA" happily.
+      if (bytes.toString('base64') !== data) throw new MethodError('UPLOAD_BAD_CHUNK', 'upload.chunk: not canonical base64')
+      if (bytes.length > UPLOAD_CHUNK_BYTES) throw new MethodError('UPLOAD_TOO_LARGE', 'upload.chunk: chunk too large')
+      if (index > upload.chunks) throw new MethodError('UPLOAD_BAD_CHUNK', `upload.chunk: ${index} arrived before ${upload.chunks}`)
+      if (index < upload.chunks) {
+        // A replay: the bytes must match what is already held for that index.
+        const start = index * UPLOAD_CHUNK_BYTES
+        const held = upload.data.subarray(start, start + bytes.length)
+        if (!held.equals(bytes)) throw new MethodError('UPLOAD_BAD_CHUNK', 'upload.chunk: replay differs')
+        return { received: index + 1 }
+      }
+      if (bytes.length !== UPLOAD_CHUNK_BYTES && upload.received + bytes.length !== upload.byteSize) {
+        throw new MethodError('UPLOAD_BAD_CHUNK', `upload.chunk: all but the last must be ${UPLOAD_CHUNK_BYTES} bytes`)
+      }
+      upload.data = Buffer.concat([upload.data, bytes])
+      upload.received += bytes.length
+      upload.chunks += 1
+      return { received: upload.chunks }
+    },
+    'upload.finish': async (payload) => {
+      const upload = uploads.get(payload?.['uploadId'])
+      if (upload === undefined) throw new MethodError('UPLOAD_UNKNOWN', 'upload.finish: no such upload')
+      if (upload.received !== upload.byteSize) {
+        throw new MethodError('UPLOAD_INCOMPLETE', `upload.finish: ${upload.received} of ${upload.byteSize} bytes`)
+      }
+      if (upload.attachmentId === undefined) upload.attachmentId = `att-${(nextUploadId += 1)}`
+      log(`upload.finish ${upload.attachmentId} ${upload.name} ${upload.received} bytes`)
+      return {
+        attachmentId: upload.attachmentId,
+        kind: upload.kind,
+        name: upload.name,
+        mediaType: upload.mediaType,
+        byteSize: upload.received,
+      }
+    },
+    'upload.abort': async (payload) => {
+      uploads.delete(payload?.['uploadId'])
+      return { aborted: true }
+    },
+
     'session.prompt': async (payload) => {
       const text = typeof payload?.['text'] === 'string' ? payload['text'] : ''
       const id = payload?.['requestId'] ?? ''
+      const ids = Array.isArray(payload?.['attachmentIds']) ? payload['attachmentIds'] : []
+      // What the host stores for an attachment: a reference, never the bytes. The
+      // app reads the same shape back out of history.
+      const parts = ids.map((attachmentId) => {
+        const upload = [...uploads.values()].find((u) => u.attachmentId === attachmentId)
+        if (upload === undefined) throw new MethodError('ATTACHMENT_UNKNOWN', `session.prompt: no attachment "${attachmentId}"`)
+        return {
+          type: upload.kind,
+          attachment: {
+            attachmentId,
+            name: upload.name,
+            bytes: upload.received,
+            mediaType: upload.mediaType,
+          },
+        }
+      })
+      if (text === '' && parts.length === 0) throw new MethodError('MALFORMED_FRAME', 'session.prompt needs text or attachments')
       records.push({
         type: 'event',
         event: {
@@ -385,7 +581,7 @@ const listener = await MizarListener.start({
           time: Date.now(),
           sessionId: payload?.['sessionId'] ?? 'session-ki2-alpha',
           data: {
-            content: [{ type: 'text', text }],
+            content: [...(text === '' ? [] : [{ type: 'text', text }]), ...parts],
             source: { kind: 'user', rpcId: id },
             role: 'user',
             id: `ki2-${id}`,
@@ -393,7 +589,7 @@ const listener = await MizarListener.start({
           surfaceOp: 'append',
         },
       })
-      log(`prompt recorded (${text.length} chars)`)
+      log(`prompt recorded (${text.length} chars, ${parts.length} attachment(s))`)
       return { accepted: true, requestId: id }
     },
     'session.cancel': async () => ({ accepted: true }),

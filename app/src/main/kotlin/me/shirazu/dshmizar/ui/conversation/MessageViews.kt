@@ -7,6 +7,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.runtime.mutableStateOf
 import me.shirazu.dshmizar.ui.design.Glass
@@ -14,6 +16,7 @@ import me.shirazu.dshmizar.ui.design.shapedClickable
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -85,7 +88,12 @@ internal fun ConversationItemView(
 ) {
     when (item) {
         is ConversationItem.Message -> when (item.role) {
-            ConversationItem.Role.USER -> UserBubble(item.text, tail = isLastPrompt, onCopy = onCopy)
+            ConversationItem.Role.USER -> UserBubble(
+                item.text,
+                tail = isLastPrompt,
+                onCopy = onCopy,
+                attachments = item.attachments,
+            )
             ConversationItem.Role.ASSISTANT -> AgentText(item.text, typing = typing, onCopy = onCopy)
             ConversationItem.Role.SYSTEM -> SystemNote(item.text, onCopy = onCopy)
         }
@@ -194,11 +202,62 @@ private fun MessageText(
 
 /** The operator's words: a gradient bubble on the right, with the quiet tail. */
 @Composable
-private fun UserBubble(text: String, tail: Boolean, onCopy: (String) -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth()) {
-        Spacer(Modifier.weight(1f).widthIn(min = 56.dp))
-        SelectionContainer {
-            SentBubbleBody(text = text, tail = tail, onCopy = onCopy)
+private fun UserBubble(
+    text: String,
+    tail: Boolean,
+    onCopy: (String) -> Unit,
+    attachments: List<me.shirazu.mizar.kit.ConversationAttachment> = emptyList(),
+) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Column(horizontalAlignment = Alignment.End) {
+            // What was sent with it. The bytes went to the host and are gone from
+            // this phone; the name and the size are all that is left to say so.
+            if (attachments.isNotEmpty()) {
+                attachments.forEach { attachment ->
+                    AttachmentChip(attachment)
+                    Spacer(Modifier.height(4.dp))
+                }
+                Spacer(Modifier.height(2.dp))
+            }
+            SelectionContainer {
+                SentBubbleBody(text = text, tail = tail, onCopy = onCopy)
+            }
+        }
+    }
+}
+
+/** One file a sent message carried, as the host stored it. */
+@Composable
+private fun AttachmentChip(attachment: me.shirazu.mizar.kit.ConversationAttachment) {
+    Row(
+        modifier = Modifier
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, Corner.sm)
+            .padding(horizontal = 9.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (attachment.kind == "image") Icons.Default.Image else Icons.Default.Description,
+            contentDescription = null,
+            modifier = Modifier.size(13.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            attachment.name,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        attachment.bytes?.takeIf { it > 0 }?.let { bytes ->
+            Text(
+                "  " + when {
+                    bytes < 1024 -> "$bytes B"
+                    bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+                    else -> String.format("%.1f MB", bytes / 1024.0 / 1024.0)
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

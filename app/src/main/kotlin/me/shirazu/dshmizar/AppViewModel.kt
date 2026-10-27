@@ -2494,7 +2494,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         // malformed frame, not "no text".
                         put("text", text)
                         if (ready.isNotEmpty()) {
-                            putJsonArray("attachments") {
+                            putJsonArray("attachmentIds") {
                                 ready.forEach { add(requireNotNull(it.readyId)) }
                             }
                         }
@@ -2563,18 +2563,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     ?: AttachmentUploader(socket.attachmentRpc()).capabilities().also { limits ->
                         _state.update { it.copy(attachmentCapabilities = limits) }
                     }
-                if (_state.value.attachments.size > caps.maxAttachments) error(context.getString(R.string.attachment_too_many))
-                val max = if (kind == "image") caps.maxImageBytes else caps.maxFileBytes
+                if (_state.value.attachments.size > caps.attachments) error(context.getString(R.string.attachment_too_many))
+                val max = if (kind == "image") caps.imageBytes else caps.fileBytes
                 if (size > max) error(context.getString(R.string.attachment_too_large))
-                val sha = MessageDigest.getInstance("SHA-256").digest(file.readBytes())
-                    .joinToString("") { byte -> "%02x".format(byte) }
+                // Streamed, not `readBytes()`: a 32 MiB document is the host's limit,
+                // and holding a copy of it just to hash it is the difference between
+                // a phone that keeps the session alive and one the system reclaims.
+                val sha = digestOf(file)
                 val source = AttachmentSource(
                     file = file,
                     name = displayName,
                     bytes = size,
                     sha256 = sha,
                     kind = kind,
-                    mediaType = effectiveMediaType,
+                    mediaType = effectiveMediaType ?: "application/octet-stream",
                 )
                 val scope = AttachmentScope(host.hostId, host.deviceId, sessionId)
                 val ready = AttachmentUploader(socket.attachmentRpc()).upload(
@@ -2609,6 +2611,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    /** Lowercase hex SHA-256 of a staged file, read in bounded chunks. */
+    private fun digestOf(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                digest.update(buffer, 0, count)
+            }
+        }
+        return digest.digest().joinToString("") { byte -> "%02x".format(byte) }
     }
 
     /** Drop one staged attachment, and its local copy. */
