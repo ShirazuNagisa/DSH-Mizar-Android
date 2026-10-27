@@ -96,6 +96,10 @@ import me.shirazu.mizar.kit.SessionRecord
 import me.shirazu.mizar.kit.SessionRow
 import me.shirazu.mizar.kit.SessionStatsFrame
 import me.shirazu.mizar.kit.SessionStatsResult
+import me.shirazu.mizar.kit.SetPermissionResult
+import me.shirazu.mizar.kit.SelectModelResult
+import me.shirazu.mizar.kit.SettingsScope
+import me.shirazu.mizar.kit.SessionSettings
 import me.shirazu.mizar.kit.ServerFrame
 import me.shirazu.mizar.kit.WorkspaceGroup
 import me.shirazu.mizar.kit.WorkspaceListResult
@@ -387,6 +391,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * on its own. Reads capture this number and only publish when it still matches.
      */
     private var connectionEpoch = 0
+    /** Bumped per settings request, so a late answer cannot overwrite a newer one. */
+    private var settingsRevision = 0L
     /** Last presence we reported, re-asserted after a reconnect. */
     // False until an activity says otherwise: a process restarted in the background by
     // the foreground service is *not* being watched, and defaulting to true made the app
@@ -1373,6 +1379,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         startWatchers(candidate)
         watchConnection(candidate, host)
         note("connected to $endpoint")
+        // The host can be reconfigured while the phone is away, and a fresh socket
+        // is the one moment it is worth asking again: a cached catalog would offer
+        // a model the computer no longer has.
+        loadCatalogs(force = true)
         if (warm) {
             // `finally`: a host that goes away mid-warm must still land on the
             // shell. Staying on "reading sessions" for ever is the one failure
@@ -2101,9 +2111,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 conversationCache.load(activeHost, sessionId)?.let { cached ->
                     if (_state.value.selectedSessionId == sessionId) {
                         applyPage(cached.messages)
-                        cached.stats?.let { stats ->
-                            _state.update { it.copy(stats = stats.stats, statsError = null) }
-                        }
+                        cached.stats?.let { stats -> applyStats(stats.stats) }
                     }
                 }
             }
@@ -2341,7 +2349,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         applyPage(bundle.messages)
         bundle.stats?.let { stats ->
-            _state.update { it.copy(stats = stats.stats, statsError = null) }
+            applyStats(stats.stats)
             val hostId = _state.value.host?.hostId
             if (hostId != null) {
                 viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -2400,7 +2408,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(loadingConversation = false) }
                 return
             }
-            _state.update { it.copy(stats = stats.stats, statsError = null) }
+            applyStats(stats.stats)
             val hostId = _state.value.host?.hostId
             if (hostId != null) {
                 viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -2994,43 +3002,105 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── catalogs, model, permissions ────────────────────────────────────────
 
-    fun loadCatalogs() {
+    /**
+     * Read the catalogs, once unless asked again.
+     *
+     * The host's list of models changes when it is reconfigured, and a phone that
+     * cached the old one for the life of the process would offer a model that no
+     * longer exists. `force` is what the reconnect path passes.
+     */
+    fun loadCatalogs(force: Boolean = false) {
         viewModelScope.launch {
             val socket = connection ?: return@launch
-            if (_state.value.modelCatalog == null) {
+            if (force || _state.value.modelCatalog == null) {
                 runCatching { socket.call<ModelCatalog>("model.catalog") }
                     .onSuccess { catalog -> _state.update { it.copy(modelCatalog = catalog) } }
             }
-            if (_state.value.permissionCatalog == null) {
+            if (force || _state.value.permissionCatalog == null) {
                 runCatching { socket.call<PermissionCatalog>("permissions.catalog") }
                     .onSuccess { catalog -> _state.update { it.copy(permissionCatalog = catalog) } }
             }
         }
     }
 
+    /**
+     * The scope a settings call belongs to, or `null` when there is nothing to ask.
+     *
+     * The connection's epoch is part of it: a reply that arrives after the socket
+     * was replaced came from a host that is no longer the one on screen, and
+     * applying it would show one computer's model for another's session.
+     */
+    private fun settingsScope(): SettingsScope? {
+        val current = _state.value
+        val host = current.host ?: return null
+        val sessionId = current.selectedSessionId ?: return null
+        return SettingsScope(host.hostId, host.deviceId, sessionId, connectionEpoch.toLong())
+    }
+
+    /** Whether a settings reply is still the one this screen is waiting for. */
+    private fun stillCurrent(scope: SettingsScope, revision: Long): Boolean =
+        SessionSettings.mayApply(scope, settingsScope(), revision, settingsRevision)
+
+    /**
+     * Fold a stats frame into what is on screen.
+     *
+     * Keys arrive independently -- a frame carrying only the context pressure must
+     * not blank the model, the title or the permission it did not mention -- so
+     * this merges rather than replaces.
+     */
+    private fun applyStats(fresh: SessionStatsFrame?) {
+        if (fresh == null) return
+        _state.update { it.copy(stats = SessionSettings.mergeStats(it.stats, fresh), statsError = null) }
+    }
+
+    /**
+     * Choose the model for the session on screen.
+     *
+     * The phone shows the choice while the host is being asked, and then takes the
+     * host's answer as the truth: `session.model.set` returns what was actually
+     * selected, so a refusal clears the choice instead of leaving a model on screen
+     * that is not running. The stats readback that follows is what lets the host's
+     * own value be the one the pill names.
+     */
     fun setModel(selection: ModelSelection) {
-        val sessionId = _state.value.selectedSessionId ?: return
-        // Remembered before the call: there is no read-back, so a failure must still
-        // leave the picker showing what was asked for rather than snapping back.
-        _state.update { it.copy(modelChoice = it.modelChoice + (sessionId to selection)) }
+        val scope = settingsScope() ?: return
+        val revision = ++settingsRevision
+        // Transient by construction: the entry is removed on either answer below.
+        _state.update { it.copy(modelChoice = it.modelChoice + (scope.sessionId to selection)) }
         viewModelScope.launch {
             val socket = connection ?: return@launch
             runCatching {
-                socket.call<JsonObject>(
-                    "session.model.set",
-                    buildJsonObject {
-                        put("sessionId", sessionId)
-                        put("provider", selection.provider)
-                        put("model", selection.model)
-                        selection.reasoningEffort?.let { put("reasoningEffort", it) }
-                    },
-                )
-            }.onSuccess {
-                note("model set: ${selection.provider}/${selection.model} effort=${selection.reasoningEffort}")
+                socket.call<SelectModelResult>("session.model.set", SessionSettings.modelPayload(scope, selection))
+            }.onSuccess { result ->
+                if (!stillCurrent(scope, revision)) return@onSuccess
+                val confirmed = SessionSettings.confirmedModel(scope, result, _state.value.stats)
+                _state.update {
+                    it.copy(
+                        stats = confirmed,
+                        statsError = null,
+                        modelChoice = it.modelChoice - scope.sessionId,
+                    )
+                }
+                note("model set: ${result.selected.provider}/${result.selected.model} effort=${result.selected.reasoningEffort}")
+                refreshStats(scope, revision)
             }.onFailure { error ->
+                if (!stillCurrent(scope, revision)) return@onFailure
                 note("model set failed: ${error.message}")
-                _state.update { it.copy(problem = messageOf(error, addressOf())) }
+                _state.update {
+                    it.copy(modelChoice = it.modelChoice - scope.sessionId, problem = messageOf(error, addressOf()))
+                }
             }
+        }
+    }
+
+    /** Read the session's stats back, keeping whatever a partial frame omits. */
+    private suspend fun refreshStats(scope: SettingsScope, revision: Long) {
+        val socket = connection ?: return
+        runCatching {
+            socket.call<SessionStatsResult>("session.stats", payload("sessionId" to jsonString(scope.sessionId)))
+        }.onSuccess { result ->
+            if (!stillCurrent(scope, revision)) return@onSuccess
+            applyStats(result.stats)
         }
     }
 
@@ -3064,17 +3134,44 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Change the session's permission preset.
+     *
+     * The command's own answer says the request was accepted, not that the preset
+     * changed, so the screen waits for `session.stats` to report it and says so
+     * when the host disagrees. Reloading the whole conversation for this would have
+     * cost a page of records for one line of stats.
+     */
     fun setPermission(preset: String) {
-        val sessionId = _state.value.selectedSessionId ?: return
+        val scope = settingsScope() ?: return
+        val revision = ++settingsRevision
         viewModelScope.launch {
             val socket = connection ?: return@launch
             runCatching {
-                socket.call<JsonObject>(
+                socket.call<SetPermissionResult>(
                     "session.permission.set",
-                    payload("sessionId" to jsonString(sessionId), "preset" to jsonString(preset)),
+                    payload("sessionId" to jsonString(scope.sessionId), "preset" to jsonString(preset)),
                 )
-            }.onFailure { error -> _state.update { it.copy(problem = messageOf(error, addressOf())) } }
-            loadOnce()
+            }.onSuccess {
+                if (!stillCurrent(scope, revision)) return@onSuccess
+                runCatching {
+                    socket.call<SessionStatsResult>(
+                        "session.stats",
+                        payload("sessionId" to jsonString(scope.sessionId)),
+                    )
+                }.onSuccess { result ->
+                    if (!stillCurrent(scope, revision)) return@onSuccess
+                    applyStats(result.stats)
+                    if (!SessionSettings.permissionConfirmed(scope, preset, result)) {
+                        _state.update {
+                            it.copy(problem = it.problem ?: "the host did not confirm the new permission")
+                        }
+                    }
+                }
+            }.onFailure { error ->
+                if (!stillCurrent(scope, revision)) return@onFailure
+                _state.update { it.copy(problem = messageOf(error, addressOf())) }
+            }
         }
     }
 

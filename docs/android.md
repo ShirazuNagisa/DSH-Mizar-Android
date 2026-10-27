@@ -284,6 +284,25 @@ Android 16 的 Live Updates 是 iOS Live Activity 的对位：`push/LiveTurn.kt`
 - **日志导出**：设置页一键打包（见 [诊断包](#诊断包)）。
 - **宽屏三页侧栏**：轮次 / 子代理 / 预览三页，平板与折叠屏上是常驻列而不是抽屉。
 
+## 会话设置：宿主说了算
+
+模型、思考强度、权限，三样都只认宿主报回来的值：
+
+- **模型**：点一下先显示选择（`modelChoice`），`session.model.set` 一答就把这条缓存删掉，改用宿主返回的
+  `selected` + 一次 `session.stats` 回读。所以桌面端改了模型，手机下次读 stats 就跟上；手机被拒绝时，
+  药丸回到真实值而不是停在"我以为"。
+- **权限**：`session.permission.set` 的应答只代表"请求收到了"，不代表"改了"。所以改完立刻读
+  `session.stats`，`permissionPreset` 对得上才算生效，对不上就报一句。
+- **`custom`** 宿主会报，但手机不能设，所以不出现在选择列表里；当前生效的那一项打勾。
+- **迟到的应答**：每个设置请求带 `SettingsScope(host, device, session, connectionEpoch)` 和自增
+  `revision`，`mayApply` 不成立就整条丢弃——换会话、换主机、重连之后旧回复不会覆盖新状态。
+- **stats 是增量**：一个只带上下文压力的帧不能把模型、标题、权限清空，所以统一走
+  `SessionSettings.mergeStats`。
+
+验证（AVD + `scripts/ki2-host.mjs`）：选 DeepSeek Lite → 宿主日志 `session.model.set` → 药丸变；
+用 `POST /ctl/model` 在"桌面端"改回 V4/Low → 手机下拉刷新后跟着变；权限选 Read only → 宿主日志
+`session.permission.set` → 重开面板勾选已移动。
+
 ## 附件：线上契约
 
 手机把图片/文件交给电脑，走的是**已认证那条 WebSocket** 上的四个方法，名字和字段都以宿主为准：

@@ -33,6 +33,7 @@
  *   POST /ctl/release                    # close it
  *   POST /ctl/answer   {kind, id, choice}  # answer as if the desktop GUI did
  *   POST /ctl/turn     {outcome?}          # append a finished turn: completed | aborted | error
+ *   POST /ctl/model    {provider, model, effort?}  # change the model as the desktop would
  */
 import { mkdirSync } from 'node:fs'
 import { createServer } from 'node:http'
@@ -468,6 +469,7 @@ const listener = await MizarListener.start({
         throw new MethodError('REMOTE_ERROR', `unknown preset "${preset}"`)
       }
       chosenPermissions.set(sessionId, preset)
+      log(`session.permission.set ${sessionId} -> ${preset}`)
       // The client reads `kind == 'success'`; a bare boolean is a missing field.
       return { commandResult: { kind: 'success', text: `permission set to ${preset}` } }
     },
@@ -804,6 +806,25 @@ const ctl = createServer(async (request, response) => {
         return reply(200, await openHold())
       case '/ctl/release':
         return reply(200, releaseHold())
+      case '/ctl/model': {
+        // The desktop changed the model behind the phone's back. Nothing tells the
+        // phone: it has to notice on its own next read of `session.stats`, which is
+        // exactly the behaviour worth checking.
+        const sessionId = body['sessionId'] ?? 'session-ki2-alpha'
+        const provider = body['provider']
+        const model = body['model']
+        if (typeof provider !== 'string' || typeof model !== 'string') {
+          return reply(400, { error: 'model needs provider and model' })
+        }
+        const selected = {
+          provider,
+          model,
+          ...(typeof body['effort'] === 'string' ? { reasoningEffort: body['effort'] } : {}),
+        }
+        chosenModels.set(sessionId, selected)
+        log(`desktop model change: ${sessionId} -> ${provider}/${model}`)
+        return reply(200, { selected })
+      }
       case '/ctl/answer': {
         const entry = handles.get(body.id)
         if (entry === undefined) return reply(404, { error: `no handle ${body.id}` })

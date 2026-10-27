@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.mizar.kit.ModelRouting
+import me.shirazu.mizar.kit.SessionSettings
 import me.shirazu.dshmizar.ui.Format
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.ButtonShape
@@ -76,7 +77,7 @@ internal fun ModelPickerContent(
     // to tell which model is in force.
     // The same resolver the composer's pill uses -- see ModelRouting.
     val inForce = ModelRouting.agreed(
-        chosen = homeChoice ?: state.selectedSessionId?.let { state.modelChoice[it] },
+        pending = homeChoice ?: state.selectedSessionId?.let { state.modelChoice[it] },
         reported = state.stats?.model,
         fallback = catalog.defaultSelection,
     )
@@ -196,24 +197,42 @@ internal fun PermissionContent(state: UiState, onChoose: (String) -> Unit) {
         }
         return
     }
-    for (option in catalog.options) {
+    // `custom` is reported by the host but is not a preset a phone can set, so it
+    // is not offered; and the preset in force is the one the host says, not the one
+    // last tapped -- the two disagree exactly when the host refused.
+    val inForce = state.stats?.permissionPreset
+    for (option in SessionSettings.permissions(catalog)) {
+        val current = option.value == inForce
         PopoverRow(
             title = option.name,
             subtitle = option.description,
             onClick = {
                 if (option.isDangerous) confirming = option.value else onChoose(option.value)
             },
-            trailing = if (option.isDangerous) {
-                {
-                    Icon(
-                        Icons.Default.Lock,
-                        contentDescription = null,
-                        tint = MizarColors.Failure,
-                        modifier = Modifier.size(14.dp),
-                    )
+            trailing = when {
+                current -> {
+                    {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                 }
-            } else {
-                null
+
+                option.isDangerous -> {
+                    {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = MizarColors.Failure,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
+                }
+
+                else -> null
             },
         )
     }

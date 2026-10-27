@@ -37,12 +37,14 @@ object SessionLineage {
 /**
  * The route a session will actually use, as the app and the host agree on it.
  *
- * Four sources, most specific first. The switch this phone made and the host
- * accepted is the newest: the host has no "what is this session using" read on
- * this side of the protocol, and its stats frame only catches up on the next read
- * — on an idle session nothing asks it to. The host's own pending change (`next`)
- * is what the following turn will use, its `lastUsed` is the route the previous
- * turn took, and the catalogue default names a session that has never run.
+ * Four sources, most specific first, and the order is the whole point: **the host
+ * is the authority**. `session.model.set` answers with what it selected and the
+ * client then re-reads `session.stats`, so a switch is visible as soon as it is
+ * real -- and a switch the host refused never becomes visible at all.
+ *
+ * `pending` is the one exception, and only while it lasts: the value the operator
+ * just tapped, held from the moment it is sent until the host answers. Without it
+ * the pill would flick back to the old route for one round trip on every tap.
  *
  * One function rather than the same precedence in the composer's pill and in the
  * picker: the two copies drift, and when they do the pill goes on naming the model
@@ -51,14 +53,14 @@ object SessionLineage {
 object ModelRouting {
 
     /**
-     * @param chosen the route this phone last had the host accept, when there is one.
+     * @param pending a switch that has been sent and not yet answered, if any.
      * @param reported the host's model pair from the session's stats frame.
      * @param fallback the route a new session would take.
      * @returns the selection to name, or `null` when nothing can name it.
      */
     fun agreed(
-        chosen: ModelSelection?,
+        pending: ModelSelection?,
         reported: ModelSelectionPair?,
         fallback: ModelSelection? = null,
-    ): ModelSelection? = chosen ?: reported?.next ?: reported?.lastUsed ?: fallback
+    ): ModelSelection? = pending ?: reported?.next ?: reported?.lastUsed ?: fallback
 }

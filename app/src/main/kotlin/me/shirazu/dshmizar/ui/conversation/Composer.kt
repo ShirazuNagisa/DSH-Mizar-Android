@@ -346,7 +346,7 @@ private fun ModelPill(
         // own copy of this precedence, a switch made the pill name the old route
         // while the sheet named the new one.
         val chosen = ModelRouting.agreed(
-            chosen = state.selectedSessionId?.let { state.modelChoice[it] },
+            pending = state.selectedSessionId?.let { state.modelChoice[it] },
             reported = state.stats?.model,
             fallback = state.modelCatalog?.defaultSelection,
         )
