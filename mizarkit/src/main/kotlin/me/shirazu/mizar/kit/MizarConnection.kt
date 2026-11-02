@@ -248,6 +248,14 @@ class MizarConnection(
             // refuses is still recorded as unsent, one line below.
             traffic?.sent(type, frame.toByteArray(Charsets.UTF_8).size)
             socket.send(frame)
+        } catch (cancelled: CancellationException) {
+            // A caller that was cancelled is not a socket that broke. Telling it
+            // `SOCKET_CLOSED` turned "the operator left the screen" into a network
+            // fault, and every `runCatching { ... }` above treated it as one.
+            pending.remove(id)
+            inFlight.remove(id)
+            traffic?.failed(type, "cancelled")
+            throw cancelled
         } catch (_: Throwable) {
             pending.remove(id)
             inFlight.remove(id)
@@ -302,8 +310,12 @@ class MizarConnection(
                             val seen = decoded.seen
                             val message = "host speaks protocol version $seen, this build speaks $MIZAR_PROTOCOL_VERSION"
                             val error = MizarError(MizarErrorCode.PROTOCOL_VERSION_MISMATCH.wire, message)
-                            closeSocket(message)
+                            // The specific error goes to the waiters *before* the socket
+                            // is closed: closing fails everything with the generic
+                            // CONNECTION_CLOSED, which buries the one message that says
+                            // what to do about it.
                             failAll(error)
+                            closeSocket(message)
                             return@launch
                         }
 
