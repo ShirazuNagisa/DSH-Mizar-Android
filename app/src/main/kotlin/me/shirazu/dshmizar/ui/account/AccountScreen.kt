@@ -63,6 +63,7 @@ import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.ui.design.ButtonShape
 import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.SegmentedControl
+import me.shirazu.dshmizar.ui.hexColor
 import me.shirazu.mizar.kit.account.AccountDevice
 import me.shirazu.mizar.kit.account.AccountUser
 import java.text.DateFormat
@@ -671,7 +672,7 @@ private fun Field(
 
 @Composable
 private fun Avatar(profile: AccountUser, size: Int) {
-    val colors = profile.avatar.colors.mapNotNull { parseColor(it) }.takeIf { it.isNotEmpty() }
+    val colors = profile.avatar.colors.mapNotNull(::hexColor).takeIf { it.isNotEmpty() }
         ?: listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary)
     Box(
         modifier = Modifier
@@ -718,13 +719,3 @@ private fun Divider() {
 
 private fun dateText(millis: Long): String =
     DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(millis))
-
-private fun parseColor(value: String): Color? = runCatching {
-    val hex = value.removePrefix("#")
-    val argb = when (hex.length) {
-        6 -> 0xFF000000L or hex.toLong(16)
-        8 -> hex.toLong(16)
-        else -> return null
-    }
-    Color(argb.toInt())
-}.getOrNull()

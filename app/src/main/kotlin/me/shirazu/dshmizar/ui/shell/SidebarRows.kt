@@ -30,6 +30,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -351,7 +352,7 @@ private fun SessionRowButton(
     val unread = !session.running && session.updatedMillis > (state.seenAt[session.sessionId] ?: 0L)
     val title = SessionGrouping.sessionTitle(session, state.titles)
     var menuOpen by remember { mutableStateOf(false) }
-    var rowWidthPx by remember { mutableStateOf(0) }
+    var rowWidthPx by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val clipboard = LocalClipboardManager.current
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current

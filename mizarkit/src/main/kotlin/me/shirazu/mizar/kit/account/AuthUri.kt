@@ -48,7 +48,12 @@ object AuthUri {
         return code
     }
 
-    private fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8)
+    /**
+     * The charset is passed as a name, not as [Charsets.UTF_8]: the `Charset`
+     * overloads are Java 10 additions that Android only gained in API 33, and this
+     * module compiles against the full JDK where no Android lint can see them.
+     */
+    private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
 
     private fun decodeQuery(query: String): Map<String, String> {
         val result = LinkedHashMap<String, String>()
@@ -57,9 +62,9 @@ object AuthUri {
             val index = pair.indexOf('=')
             val name = if (index < 0) pair else pair.substring(0, index)
             val value = if (index < 0) "" else pair.substring(index + 1)
-            val key = runCatching { URLDecoder.decode(name, Charsets.UTF_8) }.getOrDefault(name)
+            val key = runCatching { URLDecoder.decode(name, "UTF-8") }.getOrDefault(name)
             if (result.containsKey(key)) continue
-            result[key] = runCatching { URLDecoder.decode(value, Charsets.UTF_8) }.getOrDefault(value)
+            result[key] = runCatching { URLDecoder.decode(value, "UTF-8") }.getOrDefault(value)
         }
         return result
     }

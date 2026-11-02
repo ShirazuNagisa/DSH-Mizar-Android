@@ -41,7 +41,7 @@ fun TwinStar(
 ) {
     val reduceMotion = LocalReduceMotion.current || parked
     val angle by if (reduceMotion) {
-        androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(-35f) }
+        androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(-35f) }
     } else {
         rememberInfiniteTransition(label = "twinStar").animateFloat(
             initialValue = 0f,

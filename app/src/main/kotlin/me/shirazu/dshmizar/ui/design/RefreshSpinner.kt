@@ -43,7 +43,7 @@ fun RefreshSpinner(
             label = "pullSpinTurn",
         )
     } else {
-        androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0f) }
+        androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
     }
     val tint = MaterialTheme.colorScheme.primary
 

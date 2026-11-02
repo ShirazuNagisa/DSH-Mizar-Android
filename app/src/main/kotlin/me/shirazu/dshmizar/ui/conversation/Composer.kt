@@ -45,6 +45,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -75,8 +76,10 @@ import androidx.compose.ui.unit.dp
 import me.shirazu.dshmizar.ui.design.mizarPerform
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
+import me.shirazu.mizar.kit.ContextPressure
 import me.shirazu.mizar.kit.ModelRouting
 import me.shirazu.dshmizar.ui.MizarColors
+import me.shirazu.dshmizar.ui.modelLabel
 import me.shirazu.dshmizar.ui.design.LocalReduceMotion
 import me.shirazu.dshmizar.ui.design.Motion
 import me.shirazu.dshmizar.ui.design.AnchoredPopover
@@ -298,7 +301,7 @@ private fun ComposerBarRow(
             }
         }
         Box {
-            ContextPill(state = state, onClick = onContext)
+            ContextPill(context = state.stats?.context, onClick = onContext)
             AnchoredPopover(
                 expanded = showingContext,
                 onDismiss = onDismissContext,
@@ -306,7 +309,7 @@ private fun ComposerBarRow(
                 width = PopoverSize.COMPACT_WIDTH,
                 maxHeight = PopoverSize.COMPACT_HEIGHT,
             ) {
-                ContextContent(state = state)
+                ContextContent(context = state.stats?.context)
             }
         }
     }
@@ -341,28 +344,16 @@ private fun ModelPill(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val label = run {
-        // One resolver for the pill and the picker: when they each carried their
-        // own copy of this precedence, a switch made the pill name the old route
-        // while the sheet named the new one.
-        val chosen = ModelRouting.agreed(
-            pending = state.selectedSessionId?.let { state.modelChoice[it] },
-            reported = state.stats?.model,
-            fallback = state.modelCatalog?.defaultSelection,
-        )
-        // The button naming nothing but "Model" is the one thing it must never do.
-        if (chosen == null) return@run stringResource(R.string.model)
-        // The level's name as the catalogue spells it, not the raw id: the wire value
-        // need not read like a word ("max", "high"), and the picker draws its names.
-        val effortName = chosen.reasoningEffort?.let { effort ->
-            state.modelCatalog?.providers
-                ?.firstOrNull { it.id == chosen.provider }
-                ?.models?.firstOrNull { it.id == chosen.model }
-                ?.efforts?.firstOrNull { it.id == effort }?.name
-                ?: effort.replaceFirstChar { it.uppercase() }
-        }
-        listOfNotNull(chosen.model, effortName).joinToString(" · ")
-    }
+    // One resolver for the pill and the picker: when they each carried their
+    // own copy of this precedence, a switch made the pill name the old route
+    // while the sheet named the new one.
+    val chosen = ModelRouting.agreed(
+        pending = state.selectedSessionId?.let { state.modelChoice[it] },
+        reported = state.stats?.model,
+        fallback = state.modelCatalog?.defaultSelection,
+    )
+    // The button naming nothing but "Model" is the one thing it must never do.
+    val label = modelLabel(chosen, state.modelCatalog) ?: stringResource(R.string.model)
 
     // While the field has the keyboard the pill folds to its icon, a 32 dp circle.
     // The icon never moves; only the label fades, and the pill's width changes once
@@ -408,8 +399,7 @@ private fun ModelPill(
 
 /** The context dial: how full the window is, warming as it fills. */
 @Composable
-private fun ContextPill(state: UiState, onClick: () -> Unit) {
-    val context = state.stats?.context
+private fun ContextPill(context: ContextPressure?, onClick: () -> Unit) {
     val percent = context?.percent
     // The pill itself says only the figure -- the dial beside it already says what
     // the figure is about, and the word made the row wide enough to crowd the model
@@ -481,7 +471,7 @@ internal fun ContextRing(
             label = "ringBreathScale",
         )
     } else {
-        remember { mutableStateOf(1f) }
+        remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
     }
 
     val track = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.22f)
@@ -528,7 +518,7 @@ private fun PrimaryButton(
         Motion.pick(Motion.bouncy()),
         label = "primaryScale",
     )
-    val companion = alcor(stopping = mode == Mode.STOP, orbit = orbit)
+    val companion = Modifier.alcor(stopping = mode == Mode.STOP, orbit = orbit)
     Box(
         modifier = Modifier
             .size(34.dp)
@@ -584,7 +574,7 @@ private val AlcorDot = 1.5.dp
  * is drawn, and the button recomposes for none of it.
  */
 @Composable
-private fun alcor(stopping: Boolean, orbit: Boolean): Modifier {
+private fun Modifier.alcor(stopping: Boolean, orbit: Boolean): Modifier {
     val reduceMotion = LocalReduceMotion.current
     val color = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
     val reach = animateFloatAsState(
@@ -614,7 +604,7 @@ private fun alcor(stopping: Boolean, orbit: Boolean): Modifier {
             }
         }
     }
-    return Modifier.drawBehind {
+    return this.drawBehind {
         val r = reach.value.coerceIn(0f, 1f)
         if (r <= 0.001f) return@drawBehind
         val rad = Math.toRadians(angle.value.toDouble())

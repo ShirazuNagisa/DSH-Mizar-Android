@@ -94,7 +94,7 @@ internal fun ConversationList(
     // how a finished turn kept its running row until the next message refreshed it.
     val sessionRunning = state.sessions.firstOrNull { it.sessionId == state.selectedSessionId }?.running == true
     val newestAt = state.conversation.lastOrNull()?.atMillis
-    val recent = newestAt != null && System.currentTimeMillis() - newestAt < IN_FLIGHT_FRESH_MILLIS
+    val recent = isRecent(newestAt, System.currentTimeMillis())
 
     // The last answer that arrived while this screen was watching gets typed on.
     // Only a transition from in-flight to finished counts: history opened from the
@@ -478,13 +478,5 @@ private fun RiseOnce(content: @Composable () -> Unit) {
 
 private val RiseDistance = 14.dp
 
-/**
- * How long a copy of the transcript is trusted to say "a turn is in flight".
- *
- * Same window as the session screen's: the gap between a prompt and its `turn/start`
- * is milliseconds, so two minutes is generous for it and short enough that a stale
- * copy cannot keep the row saying "深度求索中~".
- */
+/** How long the typewriter's grace lasts after a turn lands. */
 private const val TYPEWRITER_GRACE_MILLIS = 2_500L
-
-private const val IN_FLIGHT_FRESH_MILLIS = 120_000L

@@ -49,7 +49,7 @@ class AccountClient(
     private val baseUrl: String = DEFAULT_BASE_URL,
     private val transport: HttpTransport = OkHttpHttpTransport(),
     private val appVersion: String? = null,
-) {
+) : AccountApi {
 
     /**
      * Create an account.
@@ -59,12 +59,12 @@ class AccountClient(
      * without mail ignores the field. The caller decides which by trying this
      * once, so the same build works against both deployments.
      */
-    suspend fun register(
+    override suspend fun register(
         username: String,
         email: String,
         password: String,
         device: AccountDevicePayload,
-        code: String? = null,
+        code: String?,
     ): AccountAuth = decode(
         send(
             "POST", "/register", token = null,
@@ -82,7 +82,7 @@ class AccountClient(
      * A server with no mail configured answers `MAIL_UNAVAILABLE` (503): there is
      * no code to send, so the caller falls back to registering without one.
      */
-    suspend fun registerStart(
+    override suspend fun registerStart(
         username: String,
         email: String,
         password: String,
@@ -105,7 +105,7 @@ class AccountClient(
         )
     }
 
-    suspend fun login(
+    override suspend fun login(
         identifier: String,
         password: String,
         device: AccountDevicePayload,
@@ -123,7 +123,7 @@ class AccountClient(
      * The service answers the same way for an unknown address, so this cannot be
      * used to find out whether an account exists.
      */
-    suspend fun resetStart(email: String): EmailChallenge {
+    override suspend fun resetStart(email: String): EmailChallenge {
         val envelope = decode(
             send(
                 "POST", "/password/reset/start", token = null,
@@ -140,7 +140,7 @@ class AccountClient(
      * The service signs this device in on the way through, so a forgotten password
      * no longer strands somebody at the login form.
      */
-    suspend fun resetComplete(
+    override suspend fun resetComplete(
         email: String,
         code: String,
         password: String,
@@ -160,7 +160,7 @@ class AccountClient(
      * GitHub to that account instead of signing in. The token never leaves the
      * service's own store, and the APK carries neither a client id nor a secret.
      */
-    suspend fun githubStart(device: AccountDevicePayload, token: String? = null): GithubStart = decode(
+    override suspend fun githubStart(device: AccountDevicePayload, token: String?): GithubStart = decode(
         send(
             "POST", "/github/start", token = token,
             body = WIRE_JSON.encodeToString(GithubStartBody.serializer(), GithubStartBody(device)),
@@ -169,7 +169,7 @@ class AccountClient(
     )
 
     /** Trade the one-time handoff from the landing page for a real session. */
-    suspend fun githubExchange(handoff: String, device: AccountDevicePayload): AccountAuth = decode(
+    override suspend fun githubExchange(handoff: String, device: AccountDevicePayload): AccountAuth = decode(
         send(
             "POST", "/github/exchange", token = null,
             body = WIRE_JSON.encodeToString(
@@ -181,23 +181,23 @@ class AccountClient(
     )
 
     /** The current profile; also the probe that tells a stale token from an outage. */
-    suspend fun me(token: String, deviceId: String): AccountUser = decode(
+    override suspend fun me(token: String, deviceId: String): AccountUser = decode(
         send("GET", "/me", token = token, extraHeaders = mapOf(CLIENT_ID_HEADER to deviceId)),
         UserEnvelope.serializer(),
     ).user
 
-    suspend fun logout(token: String) {
+    override suspend fun logout(token: String) {
         send("POST", "/logout", token = token, body = null)
     }
 
-    suspend fun delete(token: String) {
+    override suspend fun delete(token: String) {
         send(
             "POST", "/delete", token = token,
             body = WIRE_JSON.encodeToString(DeleteBody.serializer(), DeleteBody("DELETE")),
         )
     }
 
-    suspend fun redeem(token: String, code: String): AccountUser = decode(
+    override suspend fun redeem(token: String, code: String): AccountUser = decode(
         send(
             "POST", "/invite/redeem", token = token,
             body = WIRE_JSON.encodeToString(RedeemBody.serializer(), RedeemBody(code)),

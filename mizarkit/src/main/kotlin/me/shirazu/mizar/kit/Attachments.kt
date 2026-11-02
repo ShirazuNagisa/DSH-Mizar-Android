@@ -182,6 +182,26 @@ fun MizarConnection.attachmentRpc(): AttachmentRpc = AttachmentRpc { method, pay
 }
 
 /**
+ * The two things a caller asks of an upload: what the host allows, and carry this
+ * file across.
+ *
+ * [AttachmentUploader] is concrete and knows the four-call protocol; this is its
+ * shape, so the attachment domain's own tests can run without a socket. The kit's
+ * uploader keeps its own contract tests either way.
+ */
+interface AttachmentTransport {
+    suspend fun capabilities(): AttachmentCapabilities
+
+    suspend fun upload(
+        scope: AttachmentScope,
+        source: AttachmentSource,
+        limits: AttachmentCapabilities,
+        checkpoint: AttachmentCheckpoint,
+        onProgress: (Long) -> Unit = {},
+    ): AttachmentReady
+}
+
+/**
  * Carries a file to the host over the socket that is already open.
  *
  * Four unary calls, as the protocol documents them: `upload.begin`, one
@@ -190,19 +210,20 @@ fun MizarConnection.attachmentRpc(): AttachmentRpc = AttachmentRpc { method, pay
  * and the iOS client both spell it this way; a client that invents its own names
  * gets `NOT_IMPLEMENTED` for every call and looks like a host without the feature.
  */
-class AttachmentUploader(private val rpc: AttachmentRpc) {
-    suspend fun capabilities(): AttachmentCapabilities =
+class AttachmentUploader(private val rpc: AttachmentRpc) : AttachmentTransport {
+
+    override suspend fun capabilities(): AttachmentCapabilities =
         WIRE_JSON.decodeFromJsonElement<AttachmentCapabilities>(
             rpc.call("upload.capabilities", buildJsonObject {}),
         ).checked()
 
     /** Caller runs on IO. Memory is bounded by one chunk, not the file size. */
-    suspend fun upload(
+    override suspend fun upload(
         scope: AttachmentScope,
         source: AttachmentSource,
         limits: AttachmentCapabilities,
         checkpoint: AttachmentCheckpoint,
-        onProgress: (Long) -> Unit = {},
+        onProgress: (Long) -> Unit,
     ): AttachmentReady {
         return try {
             transfer(scope, source, limits, checkpoint, onProgress)

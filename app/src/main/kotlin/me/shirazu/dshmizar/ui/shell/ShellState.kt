@@ -5,6 +5,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
@@ -50,7 +51,7 @@ class ShellState(
         private set
 
     /** Where the last settle left it: -1 (index), 0 (conversation), 1 (sidebar). */
-    var settledAt by mutableStateOf(0f)
+    var settledAt by androidx.compose.runtime.mutableFloatStateOf(0f)
         private set
 
     /** Whether the sidebar is the drawer that is out. */

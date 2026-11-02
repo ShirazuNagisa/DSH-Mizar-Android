@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import me.shirazu.dshmizar.FilePreviewUiState
 import me.shirazu.dshmizar.R
+import me.shirazu.dshmizar.ui.Format
 import me.shirazu.dshmizar.ui.design.Corner
 
 /**
@@ -116,7 +117,7 @@ internal fun FilePreviewPane(preview: FilePreviewUiState, modifier: Modifier = M
             }
 
             preview.unsupported -> Notice(
-                stringResource(R.string.file_preview_unsupported, formatBytes(preview.byteSize)),
+                stringResource(R.string.file_preview_unsupported, Format.bytes(preview.byteSize)),
             )
 
             preview.image != null -> {
@@ -150,7 +151,7 @@ internal fun FilePreviewPane(preview: FilePreviewUiState, modifier: Modifier = M
                 )
                 if (preview.truncated) {
                     Text(
-                        stringResource(R.string.file_preview_truncated, formatBytes(preview.byteSize)),
+                        stringResource(R.string.file_preview_truncated, Format.bytes(preview.byteSize)),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp),
@@ -173,11 +174,4 @@ private fun Notice(text: String) {
             .background(MaterialTheme.colorScheme.surfaceContainerHigh, Corner.md)
             .padding(14.dp),
     )
-}
-
-/** Bytes in the units a person reads: KB and MB, one decimal above a thousand. */
-private fun formatBytes(bytes: Long): String = when {
-    bytes < 1024 -> "$bytes B"
-    bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-    else -> String.format("%.1f MB", bytes / 1024.0 / 1024.0)
 }

@@ -7,7 +7,6 @@ import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
@@ -23,8 +22,35 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
+import me.shirazu.dshmizar.domain.ActivityCoordinator
+import me.shirazu.dshmizar.domain.AttachmentCoordinator
+import me.shirazu.dshmizar.domain.AccountCoordinator
+import me.shirazu.dshmizar.domain.AdoptionPlan
+import me.shirazu.dshmizar.domain.CONVERSATION_FULL_PAGE
+import me.shirazu.dshmizar.domain.CONVERSATION_REFRESH_PAGE
+import me.shirazu.dshmizar.domain.ConnectionMonitor
+import me.shirazu.dshmizar.domain.ConversationCoordinator
+import me.shirazu.dshmizar.domain.SendCoordinator
+import me.shirazu.dshmizar.domain.ReconnectCoordinator
+import me.shirazu.dshmizar.domain.RouteOutcome
+import me.shirazu.dshmizar.domain.RouteRace
+import me.shirazu.dshmizar.domain.SessionIndexCoordinator
+import me.shirazu.dshmizar.domain.SocketTitlesLink
+import me.shirazu.dshmizar.domain.SocketConversationLink
+import me.shirazu.dshmizar.domain.SocketMonitor
+import me.shirazu.dshmizar.domain.SocketSendLink
+import me.shirazu.dshmizar.domain.Text
+import me.shirazu.dshmizar.domain.NotificationCoordinator
+import me.shirazu.dshmizar.domain.InteractionsCoordinator
+import me.shirazu.dshmizar.domain.SocketInteractionsLink
+import me.shirazu.dshmizar.domain.LiveTurnCoordinator
+import me.shirazu.dshmizar.domain.FlowStateStore
+import me.shirazu.dshmizar.domain.SettingsCoordinator
+import me.shirazu.dshmizar.domain.SocketActivityLink
+import me.shirazu.dshmizar.domain.SocketSettingsLink
+import me.shirazu.dshmizar.domain.PreferencesCoordinator
+import me.shirazu.dshmizar.domain.storedPreferences
 import me.shirazu.dshmizar.push.PushTokens
 import me.shirazu.dshmizar.push.ConnectionService
 import me.shirazu.dshmizar.push.LiveTurn
@@ -33,15 +59,11 @@ import me.shirazu.dshmizar.push.Notifications
 import me.shirazu.dshmizar.store.ActivityStore
 import me.shirazu.dshmizar.store.ConversationCache
 import me.shirazu.dshmizar.store.EncryptedAccountStore
-import me.shirazu.mizar.kit.account.AccountAuth
 import me.shirazu.mizar.kit.account.AccountClient
-import me.shirazu.mizar.kit.account.AccountDevicePayload
-import me.shirazu.mizar.kit.account.AccountError
 import me.shirazu.mizar.kit.account.AccountIdentity
 import me.shirazu.mizar.kit.account.AccountNotice
 import me.shirazu.mizar.kit.account.AccountSession
 import me.shirazu.mizar.kit.account.AccountStoring
-import me.shirazu.mizar.kit.account.AuthUri
 import me.shirazu.dshmizar.ui.ThemeMode
 import me.shirazu.dshmizar.store.EncryptedCredentialStore
 import me.shirazu.dshmizar.store.FileSessionIndexStore
@@ -49,13 +71,8 @@ import me.shirazu.mizar.kit.AcceptanceResult
 import me.shirazu.mizar.kit.ApprovalOutcome
 import me.shirazu.mizar.kit.ArchiveSessionResult
 import me.shirazu.mizar.kit.AttachmentCapabilities
-import me.shirazu.mizar.kit.AttachmentCheckpoint
-import me.shirazu.mizar.kit.AttachmentScope
-import me.shirazu.mizar.kit.AttachmentSource
 import me.shirazu.mizar.kit.AttachmentUploader
-import me.shirazu.mizar.kit.attachmentDisplayName
 import me.shirazu.mizar.kit.attachmentRpc
-import me.shirazu.mizar.kit.Backoff
 import me.shirazu.mizar.kit.Conversation
 import me.shirazu.mizar.kit.ConversationItem
 import me.shirazu.mizar.kit.ConversationTurn
@@ -79,27 +96,18 @@ import me.shirazu.mizar.kit.RelaySetResult
 import me.shirazu.mizar.kit.RelayTier
 import me.shirazu.mizar.kit.label
 import me.shirazu.mizar.kit.ProtocolLog
-import me.shirazu.mizar.kit.SyncEta
 import me.shirazu.mizar.kit.SyncProgress
 import me.shirazu.mizar.kit.PendingInteractions
 import me.shirazu.mizar.kit.PermissionCatalog
-import me.shirazu.mizar.kit.PromptResult
 import me.shirazu.mizar.kit.QuestionAnswer
 import me.shirazu.mizar.kit.SessionActivityResult
-import me.shirazu.mizar.kit.SessionIndex
 import me.shirazu.mizar.kit.SessionIndexStore
-import me.shirazu.mizar.kit.SessionGrouping
 import me.shirazu.mizar.kit.SessionListResult
 import kotlinx.serialization.json.contentOrNull
 import me.shirazu.mizar.kit.SessionMessagesResult
-import me.shirazu.mizar.kit.SessionRecord
 import me.shirazu.mizar.kit.SessionRow
 import me.shirazu.mizar.kit.SessionStatsFrame
 import me.shirazu.mizar.kit.SessionStatsResult
-import me.shirazu.mizar.kit.SetPermissionResult
-import me.shirazu.mizar.kit.SelectModelResult
-import me.shirazu.mizar.kit.SettingsScope
-import me.shirazu.mizar.kit.SessionSettings
 import me.shirazu.mizar.kit.ServerFrame
 import me.shirazu.mizar.kit.WorkspaceGroup
 import me.shirazu.mizar.kit.WorkspaceListResult
@@ -108,15 +116,11 @@ import me.shirazu.mizar.kit.get
 import me.shirazu.mizar.kit.intValue
 import me.shirazu.mizar.kit.jsonBool
 import me.shirazu.mizar.kit.jsonString
-import me.shirazu.mizar.kit.mergeConversations
-import me.shirazu.mizar.kit.mergeTurns
 import java.io.IOException
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.security.MessageDigest
-import java.util.UUID
 
 /** Which screen the app is on, which is a property of the connection rather than of navigation. */
 enum class Phase { LAUNCHING, UNPAIRED, CONNECTING, READY, FAILED }
@@ -346,20 +350,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         appVersion = BuildConfig.VERSION_NAME,
     )
 
-    private val _state = MutableStateFlow(
-        UiState(
-            themeMode = activity.themeMode().toThemeMode(),
-            quietHours = activity.quietHours(),
-            localNetworkFirst = activity.localNetworkFirst(),
-            notifyCompleted = activity.notifyCompleted(),
-            notifyInterrupted = activity.notifyInterrupted(),
-            notifyQuestions = activity.notifyQuestions(),
-            notifyApprovals = activity.notifyApprovals(),
-            hapticsEnabled = activity.hapticsEnabled(),
-            slowTypewriter = activity.slowTypewriter(),
-        ),
-    )
+    private val _state = MutableStateFlow(storedPreferences(activity))
     val state: StateFlow<UiState> = _state.asStateFlow()
+
+    /** What the domain coordinators read and write app state through. */
+    private val store = FlowStateStore(_state)
+
+    /** The settings switches; see [PreferencesCoordinator]. */
+    private val preferences = PreferencesCoordinator(store, activity)
 
     init {
         // The live update's stop button is a broadcast: it reaches this model through
@@ -378,10 +376,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private var connection: MizarConnection? = null
-    /** Watches the live connection's state, so a dropped socket is noticed. */
-    private var connectionObserver: Job? = null
-    /** The single automatic retry loop; never two at once. */
-    private var reconnectJob: Job? = null
     /**
      * Bumped whenever a new socket becomes the live one.
      *
@@ -402,26 +396,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** When the screen last read the host, so returning to it can decide whether to refresh. */
     private var lastRefreshAt = 0L
 
-    /**
-     * Which sessions were running the last time the list was read.
-     *
-     * A turn that ends is the other thing worth a notification: the operator asked for
-     * something, put the phone down, and the answer is ready. The host does not push a
-     * "turn finished" signal to this client, so the transition is observed where the list
-     * is refreshed rather than waited for.
-     */
-    private val wasRunning = mutableMapOf<String, Boolean>()
 
-    /**
-     * What keeps the two announcing paths from buzzing twice for one turn.
-     *
-     * See [me.shirazu.mizar.kit.CompletionAnnouncer]: it remembers *when* a notice went
-     * out, because a flag outlived the turn it described and swallowed the next one.
-     */
-    private val announcer = me.shirazu.mizar.kit.CompletionAnnouncer(ANNOUNCE_DEDUPE_MILLIS)
-
-    /** Whether the last-opened conversation has already been restored this process. */
-    private var restoredOnce = false
 
     /** The app's own events, newest last, for the diagnostics export. */
     private val recentNotes = ArrayDeque<String>()
@@ -434,13 +409,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * session cannot grow it.
      */
     private val traffic = ProtocolLog()
-
-    /** Signature of the pending set already announced, so a batch buzzes once. */
-    private var lastNotified: String? = null
-    private var watchers: Job? = null
-
-    /** The one poll that reads the running turn's activity while its detail is open. */
-    private var activityJob: Job? = null
 
     /** One LAN discovery at a time; a second trigger reuses the first. */
     private var lanSwitchJob: Job? = null
@@ -458,48 +426,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var quietRefreshJob: Job? = null
 
     /** Why the last dial failed, and where it was dialling: the notice classifies from these. */
-    /** One route's result in the connect race. */
-    private data class DialOutcome(
-        val endpoint: MizarConnection.Endpoint,
-        val outcome: Result<Pair<MizarConnection, ServerFrame.Welcome>>,
-    ) {
-        val connected: Pair<MizarConnection, ServerFrame.Welcome>? get() = outcome.getOrNull()
-        val failure: Throwable? get() = outcome.exceptionOrNull()
-    }
-
     private var lastConnectFailure: Throwable? = null
     private var lastConnectEndpoint: MizarConnection.Endpoint? = null
 
     /** The sentence the permanent notice currently shows, so it is only rewritten on change. */
     private var lastLinkNotice: String? = null
-
-    /**
-     * When each running session's turn was first seen running.
-     *
-     * The host reports that a turn is running, not when it started, so the live
-     * update's chronometer is based on the earliest moment this phone could observe.
-     * The open conversation's own `startedAtMillis` is used instead whenever it is
-     * available -- that is the host's number rather than an observation.
-     */
-    private val runningSince = mutableMapOf<String, Long>()
-
-    /** The session the live update is currently about, so a settle knows to take it down. */
-    private var liveSessionId: String? = null
-
-    /**
-     * What the live update last said, so the ten-second poll does not repost it.
-     *
-     * A live update is a status surface: re-notifying it every poll resets the
-     * system's own promotion bookkeeping for no visible gain.
-     */
-    private var liveSignature: String? = null
-
-    /** The transcript's shape as last logged, so the diagnostic line only moves when it does. */
-    private var lastTurnShape: String? = null
-
-    /** Guards the load, and remembers a request that arrived during one. */
-    private var loading = false
-    private var reloadWanted = false
 
     private val appVersion: String get() = BuildConfig.VERSION_NAME
     private val deviceModel: String
@@ -525,71 +456,45 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // ── account ──────────────────────────────────────────────────────────────
+    //
+    // The account domain lives in AccountCoordinator; these keep the names the
+    // screens already call. What stays here is the wiring: where a string comes
+    // from, how a browser is opened, and what a changed identity means for the
+    // socket. The explanations sit with the code that does the work.
+
+    private val strings = object : Text {
+        override fun get(id: Int): String = this@AppViewModel.getApplication<Application>().getString(id)
+
+        override fun get(id: Int, vararg args: Any): String =
+            this@AppViewModel.getApplication<Application>().getString(id, *args)
+    }
+
+    private val account = AccountCoordinator(
+        store = store,
+        accounts = accounts,
+        api = accountClient,
+        scope = viewModelScope,
+        text = strings,
+        deviceName = deviceModel,
+        deviceModel = Build.MODEL,
+        appVersion = appVersion,
+        openBrowser = ::openBrowser,
+        onIdentityChanged = ::reconnectForIdentity,
+        // The plan decides which relay the host's tunnel uses; a change asks the
+        // host to move. Nothing else in the account domain touches the socket.
+        onPlanChanged = { connection?.let { socket -> viewModelScope.launch { syncRelayTier(socket) } } },
+    )
 
     /** Read the stored session and quietly refresh it. Never blocks a launch. */
-    private suspend fun loadAccount() {
-        // Warm the install id off the main thread: the first read touches disk.
-        withContext(Dispatchers.IO) { accounts.installId }
-        val stored = runCatching { accounts.load() }.getOrNull()
-        if (stored == null) {
-            _state.update { it.copy(account = it.account.copy(phase = AccountPhase.READY)) }
-            return
-        }
-        _state.update { it.copy(account = it.account.copy(phase = AccountPhase.READY, session = stored)) }
-        // The refresh is deliberately not awaited: connecting to the computer must
-        // not wait on an account service that may be slow or unreachable.
-        viewModelScope.launch { refreshAccountNow(silent = true) }
-    }
+    private suspend fun loadAccount() = account.load()
 
     /** Pull the profile again; the account screen's retry and the foreground hook. */
-    fun refreshAccount() {
-        viewModelScope.launch { refreshAccountNow() }
-    }
+    fun refreshAccount() = account.refresh()
 
     /** A phone that comes back to the foreground asks once, quietly. */
-    fun refreshAccountOnForeground() {
-        val account = _state.value.account
-        if (account.session == null || account.phase == AccountPhase.LOADING || account.working) return
-        viewModelScope.launch { refreshAccountNow(silent = true) }
-    }
+    fun refreshAccountOnForeground() = account.refreshOnForeground()
 
-    private suspend fun refreshAccountNow(silent: Boolean = false) {
-        val session = _state.value.account.session ?: return
-        if (!silent) _state.update { it.copy(account = it.account.copy(phase = AccountPhase.LOADING, error = null)) }
-        try {
-            val user = accountClient.me(session.token, accounts.installId)
-            // A sign-out may have landed while this was in flight; do not resurrect it.
-            if (_state.value.account.session?.token != session.token) return
-            val updated = session.copy(profile = user, savedAtMillis = System.currentTimeMillis())
-            val wasPaid = _state.value.account.isPaid
-            runCatching { accounts.save(updated) }
-            _state.update {
-                it.copy(account = it.account.copy(phase = AccountPhase.READY, session = updated, error = null))
-            }
-            // The plan decides which relay the host's tunnel should use. A change in
-            // either direction asks the host to move; nothing else here touches it.
-            if (wasPaid != updated.profile?.isPaid) {
-                connection?.let { socket -> viewModelScope.launch { syncRelayTier(socket) } }
-            }
-        } catch (error: AccountError) {
-            if (_state.value.account.session?.token != session.token) return
-            if (error.requiresReauthentication) {
-                runCatching { accounts.clear() }
-                _state.update {
-                    it.copy(account = it.account.copy(phase = AccountPhase.READY, session = null, notice = null))
-                }
-            } else {
-                // Unreachable is not signed out: the cached profile stays on screen.
-                _state.update {
-                    it.copy(account = it.account.copy(phase = AccountPhase.UNREACHABLE, error = error.message))
-                }
-            }
-        }
-    }
-
-    fun openAccountScreen() {
-        _state.update { it.copy(account = it.account.copy(screenOpen = true, error = null)) }
-    }
+    fun openAccountScreen() = account.openScreen()
 
     // ── balance ─────────────────────────────────────────────────────────────
 
@@ -631,17 +536,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun closeAccountScreen() {
-        _state.update { it.copy(account = it.account.copy(screenOpen = false, error = null, handoffEntry = false)) }
-    }
+    fun closeAccountScreen() = account.closeScreen()
 
-    fun setAccountMode(mode: AccountMode) {
-        _state.update { it.copy(account = it.account.copy(mode = mode, error = null)) }
-    }
+    fun setAccountMode(mode: AccountMode) = account.setMode(mode)
 
-    fun showHandoffEntry(show: Boolean) {
-        _state.update { it.copy(account = it.account.copy(handoffEntry = show, error = null)) }
-    }
+    fun showHandoffEntry(show: Boolean) = account.showHandoffEntry(show)
 
     // ── delivered files ─────────────────────────────────────────────────────
 
@@ -793,341 +692,42 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ── password reset ──────────────────────────────────────────────────────
+    // ── password reset, sign-in, invite ──────────────────────────────────────
 
-    fun openPasswordReset() {
-        _state.update {
-            it.copy(account = it.account.copy(resetOpen = true, resetChallenge = null, error = null))
-        }
-    }
+    fun openPasswordReset() = account.openReset()
 
-    fun closePasswordReset() {
-        _state.update {
-            it.copy(account = it.account.copy(resetOpen = false, resetChallenge = null, error = null))
-        }
-    }
+    fun closePasswordReset() = account.closeReset()
 
-    /**
-     * Ask for a reset code.
-     *
-     * The service answers the same way for an address it does not know, so the
-     * screen's copy says "if that address has an account" rather than confirming
-     * one. That is the service's privacy decision, not a wording choice here.
-     */
-    fun startPasswordReset(email: String) {
-        val address = email.trim()
-        if (!address.contains('@') || address.startsWith('@') || address.endsWith('@')) {
-            setAccountError(getApplication<Application>().getString(R.string.account_error_email))
-            return
-        }
-        if (_state.value.account.working) return
-        viewModelScope.launch {
-            _state.update { it.copy(account = it.account.copy(working = true, error = null)) }
-            try {
-                val challenge = accountClient.resetStart(address)
-                _state.update {
-                    it.copy(account = it.account.copy(working = false, resetChallenge = challenge))
-                }
-            } catch (error: Throwable) {
-                _state.update {
-                    it.copy(account = it.account.copy(working = false, error = messageFor(error)))
-                }
-            }
-        }
-    }
+    fun startPasswordReset(email: String) = account.startReset(email)
 
-    /** Finish the reset; the service signs this device in on the way through. */
-    fun completePasswordReset(code: String, password: String) {
-        val challenge = _state.value.account.resetChallenge ?: return
-        if (password.length !in 8..128) {
-            setAccountError(getApplication<Application>().getString(R.string.account_error_password))
-            return
-        }
-        if (code.trim().isEmpty()) {
-            setAccountError(getApplication<Application>().getString(R.string.account_error_code))
-            return
-        }
-        authenticate { accountClient.resetComplete(challenge.email, code.trim(), password, devicePayload()) }
-    }
+    fun completePasswordReset(code: String, password: String) = account.completeReset(code, password)
 
-    fun clearAccountError() {
-        _state.update { it.copy(account = it.account.copy(error = null)) }
-    }
+    fun clearAccountError() = account.clearError()
 
-    /** Sign in with a username or an email. */
-    fun loginAccount(identifier: String, password: String) {
-        val name = identifier.trim()
-        if (name.isEmpty() || password.isEmpty()) {
-            setAccountError(getApplication<Application>().getString(R.string.account_error_missing))
-            return
-        }
-        authenticate { accountClient.login(name, password, devicePayload()) }
-    }
+    fun loginAccount(identifier: String, password: String) = account.login(identifier, password)
 
-    fun registerAccount(username: String, email: String, password: String) {
-        val name = username.trim()
-        val address = email.trim()
-        val problem = when {
-            name.length !in 2..32 -> R.string.account_error_username
-            name.any { it.isWhitespace() || it == '@' } -> R.string.account_error_username
-            !address.contains('@') || address.startsWith('@') || address.endsWith('@') -> R.string.account_error_email
-            password.length !in 8..128 -> R.string.account_error_password
-            else -> null
-        }
-        if (problem != null) {
-            setAccountError(getApplication<Application>().getString(problem))
-            return
-        }
-        // Two deployments, one build. A server with mail configured refuses this
-        // without a code (428) and wants `/register/start` first; one without mail
-        // accepts it here. Trying once is how the client tells them apart without a
-        // capability endpoint neither service has.
-        if (_state.value.account.working) return
-        viewModelScope.launch {
-            _state.update { it.copy(account = it.account.copy(working = true, error = null)) }
-            try {
-                adopt(accountClient.register(name, address, password, devicePayload()))
-            } catch (error: AccountError) {
-                if (error.code != "EMAIL_VERIFICATION_REQUIRED") {
-                    _state.update {
-                        it.copy(account = it.account.copy(working = false, error = messageFor(error)))
-                    }
-                    return@launch
-                }
-                try {
-                    val challenge = accountClient.registerStart(name, address, password, devicePayload())
-                    _state.update {
-                        it.copy(
-                            account = it.account.copy(
-                                working = false,
-                                error = null,
-                                pendingRegistration = PendingRegistration(name, address, password),
-                                registerChallenge = challenge,
-                            ),
-                        )
-                    }
-                } catch (startError: Throwable) {
-                    _state.update {
-                        it.copy(account = it.account.copy(working = false, error = messageFor(startError)))
-                    }
-                }
-            } catch (error: Throwable) {
-                _state.update {
-                    it.copy(account = it.account.copy(working = false, error = messageFor(error)))
-                }
-            }
-        }
-    }
+    fun registerAccount(username: String, email: String, password: String) =
+        account.register(username, email, password)
 
-    /** Finish a registration whose code has arrived. */
-    fun completeRegistration(code: String) {
-        val pending = _state.value.account.pendingRegistration ?: return
-        if (code.trim().isEmpty()) {
-            setAccountError(getApplication<Application>().getString(R.string.account_error_code))
-            return
-        }
-        authenticate {
-            accountClient.register(
-                pending.username,
-                pending.email,
-                pending.password,
-                devicePayload(),
-                code.trim(),
-            )
-        }
-    }
+    fun completeRegistration(code: String) = account.completeRegistration(code)
 
-    /** Back out of the code step: nothing was created, so nothing is left behind. */
-    fun cancelRegistration() {
-        _state.update {
-            it.copy(account = it.account.copy(pendingRegistration = null, registerChallenge = null, error = null))
-        }
-    }
+    fun cancelRegistration() = account.cancelRegistration()
 
-    /** One path for login, registration and the GitHub exchange. */
-    private fun authenticate(block: suspend () -> AccountAuth) {
-        if (_state.value.account.working) return
-        viewModelScope.launch {
-            _state.update { it.copy(account = it.account.copy(working = true, error = null)) }
-            try {
-                adopt(block())
-            } catch (error: Throwable) {
-                _state.update {
-                    it.copy(account = it.account.copy(working = false, error = messageFor(error)))
-                }
-            }
-        }
-    }
+    fun beginGitHubSignIn(link: Boolean = false) = account.beginGitHubSignIn(link)
 
-    /**
-     * Take a session: save the token, show the profile, reconnect with identity.
-     *
-     * Shared by every path that ends signed in -- login, registration, the GitHub
-     * exchange, a password reset -- because a path that forgot one of these would
-     * look signed in until the next launch.
-     */
-    private suspend fun adopt(auth: AccountAuth) {
-        val session = AccountSession(auth.token, auth.user, System.currentTimeMillis())
-        accounts.save(session)
-        _state.update {
-            it.copy(
-                account = it.account.copy(
-                    phase = AccountPhase.READY,
-                    session = session,
-                    notice = auth.notice,
-                    working = false,
-                    error = null,
-                    mode = AccountMode.SIGN_IN,
-                    handoffEntry = false,
-                    resetOpen = false,
-                    resetChallenge = null,
-                    pendingRegistration = null,
-                    registerChallenge = null,
-                ),
-            )
-        }
-        reconnectForIdentity()
-    }
+    fun handleAuthUri(uri: String) = account.handleAuthUri(uri)
 
-    /** Open GitHub in the browser. With a session, this links instead of signing in. */
-    fun beginGitHubSignIn(link: Boolean = false) {
-        val session = _state.value.account.session
-        if (link && session == null) return
-        if (_state.value.account.working) return
-        viewModelScope.launch {
-            _state.update { it.copy(account = it.account.copy(working = true, error = null)) }
-            try {
-                val start = accountClient.githubStart(devicePayload(), if (link) session?.token else null)
-                _state.update { it.copy(account = it.account.copy(working = false)) }
-                openBrowser(start.authorizeUrl)
-            } catch (error: Throwable) {
-                _state.update {
-                    it.copy(account = it.account.copy(working = false, error = messageFor(error)))
-                }
-            }
-        }
-    }
+    fun redeemGitHubHandoff(handoff: String) = account.redeemHandoff(handoff)
 
-    /** The landing page handed the app a code; trade it for a session. */
-    fun handleAuthUri(uri: String) {
-        val handoff = AuthUri.parse(uri) ?: return
-        redeemGitHubHandoff(handoff)
-    }
+    fun openRedeem() = account.openRedeem()
 
-    fun redeemGitHubHandoff(handoff: String) {
-        val code = handoff.trim()
-        if (code.isEmpty()) return
-        authenticate { accountClient.githubExchange(code, devicePayload()) }
-    }
+    fun closeRedeem() = account.closeRedeem()
 
-    /** Add paid days to the signed-in account. */
-    fun openRedeem() {
-        _state.update {
-            it.copy(account = it.account.copy(redeemOpen = true, redeemNotice = null, error = null))
-        }
-    }
+    fun redeemInvite(code: String) = account.redeemInvite(code)
 
-    fun closeRedeem() {
-        _state.update {
-            it.copy(account = it.account.copy(redeemOpen = false, redeemNotice = null, error = null))
-        }
-    }
+    fun logoutAccount() = account.logout()
 
-    /**
-     * Turn a code into paid days.
-     *
-     * The service adds the days to whatever the account already has, so two codes in
-     * a row stack; the answer is the whole profile, which is where the new end date
-     * comes from. Saying that date out loud is the point of this function -- a
-     * redeem that only changed a line further up the screen reads as nothing
-     * happening.
-     */
-    fun redeemInvite(code: String) {
-        val session = _state.value.account.session ?: return
-        val value = code.trim()
-        if (value.isEmpty() || _state.value.account.working) return
-        viewModelScope.launch {
-            _state.update { it.copy(account = it.account.copy(working = true, error = null, redeemNotice = null)) }
-            try {
-                val user = accountClient.redeem(session.token, value)
-                val updated = session.copy(profile = user, savedAtMillis = System.currentTimeMillis())
-                accounts.save(updated)
-                val until = user.paidUntil ?: user.grantedPaidUntil
-                val notice = until?.let {
-                    getApplication<Application>().getString(
-                        R.string.redeem_accepted,
-                        java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(it)),
-                    )
-                } ?: getApplication<Application>().getString(R.string.redeem_accepted_plain)
-                _state.update {
-                    it.copy(
-                        account = it.account.copy(
-                            phase = AccountPhase.READY,
-                            session = updated,
-                            working = false,
-                            redeemNotice = notice,
-                        ),
-                    )
-                }
-            } catch (error: Throwable) {
-                _state.update {
-                    it.copy(account = it.account.copy(working = false, error = messageFor(error)))
-                }
-            }
-        }
-    }
-
-    /** Sign out locally first; the service call is best effort. */
-    fun logoutAccount() {
-        val session = _state.value.account.session ?: return
-        viewModelScope.launch {
-            runCatching { accounts.clear() }
-            _state.update {
-                it.copy(
-                    account = it.account.copy(
-                        phase = AccountPhase.READY,
-                        session = null,
-                        notice = null,
-                        error = null,
-                        handoffEntry = false,
-                    ),
-                )
-            }
-            runCatching { accountClient.logout(session.token) }
-            reconnectForIdentity()
-        }
-    }
-
-    /** Delete the account; only clear the phone once the service has confirmed. */
-    fun deleteAccount() {
-        val session = _state.value.account.session ?: return
-        if (_state.value.account.working) return
-        viewModelScope.launch {
-            _state.update { it.copy(account = it.account.copy(working = true, error = null)) }
-            try {
-                accountClient.delete(session.token)
-            } catch (error: Throwable) {
-                _state.update {
-                    it.copy(account = it.account.copy(working = false, error = messageFor(error)))
-                }
-                return@launch
-            }
-            runCatching { accounts.clear() }
-            _state.update {
-                it.copy(
-                    account = it.account.copy(
-                        phase = AccountPhase.READY,
-                        session = null,
-                        notice = null,
-                        working = false,
-                        error = null,
-                        handoffEntry = false,
-                    ),
-                )
-            }
-            reconnectForIdentity()
-        }
-    }
+    fun deleteAccount() = account.delete()
 
     /**
      * Redial with the new identity headers.
@@ -1140,27 +740,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { connect(host) }
     }
 
-    private fun devicePayload() = AccountDevicePayload(
-        id = accounts.installId,
-        name = deviceModel,
-        model = Build.MODEL,
-        platform = "android",
-        appVersion = BuildConfig.VERSION_NAME,
-    )
-
-    private fun setAccountError(message: String) {
-        _state.update { it.copy(account = it.account.copy(error = message)) }
-    }
-
-    private fun messageFor(error: Throwable): String = when (error) {
-        is AccountError -> error.message
-        else -> error.message ?: getApplication<Application>().getString(R.string.account_error_generic)
-    }
-
-    private fun openBrowser(url: String) {
+    /** Open a URL, and say so when there is nothing to open it with. */
+    private fun openBrowser(url: String): Boolean {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching { getApplication<Application>().startActivity(intent) }
-            .onFailure { setAccountError(getApplication<Application>().getString(R.string.account_error_no_browser)) }
+        return runCatching { getApplication<Application>().startActivity(intent) }.isSuccess
     }
 
     /** Redeem a scanned or typed pairing code. */
@@ -1216,94 +799,60 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private val routes = RouteRace(
+        scope = viewModelScope,
+        note = ::note,
+        weight = { error, endpoint ->
+            me.shirazu.mizar.kit.Diagnoses.weight(
+                me.shirazu.mizar.kit.Diagnoses.of(
+                    error,
+                    addressOf(endpoint),
+                    throughRelay = endpoint is MizarConnection.Endpoint.Relay,
+                ),
+            )
+        },
+    )
+
     private suspend fun connect(host: PairedHost, preferred: PairingRoute? = null, warm: Boolean = false) {
         stopWatchers()
         connection?.disconnect()
         connection = null
 
         // The stored list first: a phone with no network still shows what it knows.
-        indexStore.load(host.hostId)?.let { applyIndex(it) }
+        index.restore(host.hostId)
 
-        var failure: Throwable? = null
-        // The failure that proves the most, and the route it came from: with several
-        // routes tried, "the last one to fail" is an accident of timing.
-        var bestWeight = -1
-        var bestEndpoint: MizarConnection.Endpoint? = null
         // The route that just answered goes first; the other stays behind it.
         val endpoints = when (preferred) {
             is PairingRoute.Relay -> host.endpoints.sortedBy { it !is MizarConnection.Endpoint.Relay }
             is PairingRoute.Direct -> host.endpoints.sortedBy { it !is MizarConnection.Endpoint.Direct }
             null -> host.endpoints
         }
-        // Dial every route at once. The handshake timeout is twenty seconds, and a
-        // route that blackholes spends all of it before the next one is even tried --
-        // the slowest possible order for a phone that only wants to connect. The
-        // first route to answer wins; the rest are cancelled without being waited on.
-        val results = Channel<DialOutcome>(Channel.UNLIMITED)
-        val jobs = endpoints.map { endpoint ->
-            viewModelScope.launch {
-                val outcome = try {
-                    Result.success(dial(host, endpoint))
-                } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                    throw cancelled
-                } catch (error: Throwable) {
-                    Result.failure(error)
+        // Every route is dialled at once, the first to answer wins and the rest are
+        // cancelled; which failure to report when none answers is decided by weight,
+        // not by who failed last. All of that lives in RouteRace.
+        when (val outcome = routes.race(endpoints) { endpoint -> dial(host, endpoint) }) {
+            is RouteOutcome.Won ->
+                adoptConnection(host, outcome.endpoint, outcome.value.first, outcome.value.second, warm)
+
+            is RouteOutcome.Lost -> {
+                val address = host.authority ?: host.baseUrl
+                lastConnectFailure = outcome.failure
+                lastConnectEndpoint = outcome.endpoint ?: host.endpoints.lastOrNull()
+                _state.update {
+                    it.copy(
+                        phase = Phase.FAILED,
+                        problem = messageOf(
+                            outcome.failure ?: IOException("no address answered"),
+                            address,
+                            throughRelay = lastConnectEndpoint is MizarConnection.Endpoint.Relay,
+                        ),
+                        needsPairing = outcome.failure?.isRepairNeeded() == true,
+                        pairingStage = null,
+                    )
                 }
-                results.send(DialOutcome(endpoint, outcome))
+                publishLinkFailure()
             }
         }
-
-        var winner: DialOutcome? = null
-        var settled = 0
-        while (settled < endpoints.size && winner == null) {
-            val outcome = results.receive()
-            settled += 1
-            if (outcome.connected != null) {
-                winner = outcome
-                // A loser may still be inside its own handshake; cancelling closes
-                // its socket, and awaiting that would only delay the winner.
-                jobs.forEach { it.cancel() }
-                break
-            }
-            val error = outcome.failure ?: continue
-            note("endpoint ${outcome.endpoint} failed: ${error.message}")
-            val weight = me.shirazu.mizar.kit.Diagnoses.weight(
-                me.shirazu.mizar.kit.Diagnoses.of(
-                    error,
-                    addressOf(outcome.endpoint),
-                    throughRelay = outcome.endpoint is MizarConnection.Endpoint.Relay,
-                ),
-            )
-            if (weight > bestWeight) {
-                bestWeight = weight
-                failure = error
-                bestEndpoint = outcome.endpoint
-            }
-        }
-
-        val won = winner
-        if (won == null) {
-            val address = host.authority ?: host.baseUrl
-            lastConnectFailure = failure
-            lastConnectEndpoint = bestEndpoint ?: host.endpoints.lastOrNull()
-            _state.update {
-                it.copy(
-                    phase = Phase.FAILED,
-                    problem = messageOf(
-                        failure ?: IOException("no address answered"),
-                        address,
-                        throughRelay = lastConnectEndpoint is MizarConnection.Endpoint.Relay,
-                    ),
-                    needsPairing = failure?.isRepairNeeded() == true,
-                    pairingStage = null,
-                )
-            }
-            publishLinkFailure()
-            return
-        }
-
-        val connected = won.connected ?: return
-        adoptConnection(host, won.endpoint, connected.first, connected.second, warm)
     }
 
     /**
@@ -1353,19 +902,54 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         welcome: ServerFrame.Welcome,
         warm: Boolean,
     ) {
+        val plan = AdoptionPlan.of(
+            warm = warm,
+            relayed = endpoint !is MizarConnection.Endpoint.Direct,
+            localNetworkFirst = _state.value.localNetworkFirst,
+        )
+        // The order is the point: the socket is live before anything reads it, the screen
+        // is told before the index is read, and push is last because it is the only step
+        // that waits on the account.
+        becomeLive(host, endpoint, candidate, welcome, plan)
+        // The notice says who we are talking to and how far away it is; the distance
+        // arrives with the first poll, a second from now.
+        publishLinkNotice(linkConnectedText(host, _state.value.latencyMillis))
+        startWatchers(candidate)
+        watchConnection(candidate, host)
+        note("connected to $endpoint")
+        // The host can be reconfigured while the phone is away, and a fresh socket is the
+        // one moment it is worth asking again: a cached catalog would offer a model the
+        // computer no longer has.
+        loadCatalogs(force = true)
+        if (plan.warmsTheIndex) warmTheIndex() else refreshSessions()
+        registerPush(candidate)
+        // A relay socket is the fallback, not the goal: when the operator asked for
+        // LAN-first, look for the computer's own addresses now that a socket exists to
+        // ask `host.info` over.
+        if (plan.looksForLan) maybeSwitchToLan(host, candidate, welcome)
+        // A paid account's tunnel belongs on the account relay, and the host has no
+        // account identity: the phone is the only side that knows the plan. Skipped by
+        // hosts that predate relay tiers.
+        if (plan.syncsRelayTier) viewModelScope.launch { syncRelayTier(candidate) }
+    }
+
+    /** Make the new socket the live one, and put the screen where the plan says. */
+    private fun becomeLive(
+        host: PairedHost,
+        endpoint: MizarConnection.Endpoint,
+        candidate: MizarConnection,
+        welcome: ServerFrame.Welcome,
+        plan: AdoptionPlan,
+    ) {
         connection = candidate
         connectionEpoch++
         _state.update {
             it.copy(
-                // A first pairing stays on the connecting screen while it
-                // warms the index: READY would swap in the shell and the
-                // progress would never be seen. A reconnect has nothing to
-                // warm, so it goes straight through.
-                phase = if (warm) Phase.CONNECTING else Phase.READY,
+                phase = plan.phase,
                 welcome = welcome,
                 problem = null,
                 needsPairing = false,
-                pairingStage = if (warm) PairingStage.SYNCING else null,
+                pairingStage = plan.pairingStage,
                 offlineBrowser = false,
                 seenAt = activity.seenAt(host.hostId),
                 isLocalNetwork = endpoint is MizarConnection.Endpoint.Direct,
@@ -1373,48 +957,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 latencyHistory = emptyList(),
             )
         }
-        // The notice says who we are talking to and how far away it is; the
-        // distance arrives with the first poll, a second from now.
-        publishLinkNotice(linkConnectedText(host, _state.value.latencyMillis))
-        startWatchers(candidate)
-        watchConnection(candidate, host)
-        note("connected to $endpoint")
-        // The host can be reconfigured while the phone is away, and a fresh socket
-        // is the one moment it is worth asking again: a cached catalog would offer
-        // a model the computer no longer has.
-        loadCatalogs(force = true)
-        if (warm) {
-            // `finally`: a host that goes away mid-warm must still land on the
-            // shell. Staying on "reading sessions" for ever is the one failure
-            // mode of a progress screen.
-            try {
-                refreshSessionsNow()
-                warmTitles(candidate)
-            } finally {
-                _state.update {
-                    it.copy(
-                        phase = Phase.READY,
-                        pairingStage = null,
-                        syncProgress = null,
-                        syncEtaMillis = null,
-                    )
-                }
+    }
+
+    /**
+     * The first page of a first pairing: the index, with progress on screen.
+     *
+     * `finally`: a host that goes away mid-warm must still land on the shell. Staying on
+     * "reading sessions" for ever is the one failure mode of a progress screen.
+     */
+    private suspend fun warmTheIndex() {
+        try {
+            refreshSessionsNow()
+            index.warmTitles()
+        } finally {
+            _state.update {
+                it.copy(
+                    phase = Phase.READY,
+                    pairingStage = null,
+                    syncProgress = null,
+                    syncEtaMillis = null,
+                )
             }
-        } else {
-            refreshSessions()
-        }
-        registerPush(candidate)
-        // A relay socket is the fallback, not the goal: when the operator asked
-        // for LAN-first, look for the computer's own addresses now that a socket
-        // exists to ask `host.info` over.
-        if (endpoint !is MizarConnection.Endpoint.Direct && _state.value.localNetworkFirst) {
-            maybeSwitchToLan(host, candidate, welcome)
-        }
-        // A paid account's tunnel belongs on the account relay, and the host
-        // has no account identity: the phone is the only side that knows the
-        // plan. Skipped by hosts that predate relay tiers.
-        if (endpoint !is MizarConnection.Endpoint.Direct) {
-            viewModelScope.launch { syncRelayTier(candidate) }
         }
     }
 
@@ -1494,227 +1057,88 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * silently, no error anywhere, and no way back except relaunching the app. That is
      * exactly what a host restart used to do to the phone.
      */
+    /** Notice a close the connection layer already reports, and act on the live one only. */
     private fun watchConnection(socket: MizarConnection, host: PairedHost) {
-        connectionObserver?.cancel()
-        connectionObserver = viewModelScope.launch {
-            socket.state.collect { state ->
-                // Only the connection on screen may start a reconnect: a replaced one
-                // failing later is old news, and two loops would fight.
-                if (state is MizarConnection.State.Failed && connection === socket) {
-                    beginReconnect(host, state.message)
-                }
-            }
-        }
+        monitor.watchConnection(
+            socket = SocketMonitor(socket),
+            // A replaced socket failing later is old news, and two loops would fight.
+            isLive = { connection === socket },
+            onFailed = { message -> beginReconnect(host, message) },
+        )
     }
 
-    /**
-     * Retry a dropped connection on the documented backoff, without disturbing the screen.
-     *
-     * `phase` deliberately stays READY. The operator may be reading a conversation, and
-     * throwing them back to the list for a two-second blip is worse than a banner that
-     * says what is happening.
-     *
-     * **It never gives up.** This used to be six attempts -- about half a minute -- and
-     * then a permanent failure screen. That was the single defect behind a completion
-     * nobody ever heard about: the socket dropped while the phone sat in a pocket, the
-     * host (or the tunnel) took longer than thirty seconds to come back, and the app
-     * stopped dialling forever. With no socket there is no `turn.settled` event *and*
-     * no list refresh, so both announcements -- the pushed one and the polling
-     * fallback -- die together. A monitor has to outlast the outage, so the retry
-     * continues at [Backoff.persistent]'s capped cadence until it succeeds, until the
-     * credential is refused (which only pairing can fix), or until something else
-     * takes the socket.
-     *
-     * @param host - the host to dial again.
-     * @param reason - what the connection said when it ended, shown beside the banner.
-     */
-    private fun beginReconnect(host: PairedHost, reason: String) {
-        if (reconnectJob?.isActive == true) return
-        reconnectJob = viewModelScope.launch {
-            stopWatchers()
-            // The reason is recorded at once, but the banner waits. A one-second blip --
-            // a phone switching networks, a tunnel re-establishing -- used to flash
-            // "connecting" in front of the operator several times a minute, which reads
-            // as a broken app when the connection was never actually missed.
-            _state.update { it.copy(disconnectReason = reason) }
-            // The reason is known but not its owner; until an attempt comes back with
-            // something to classify, the notice says only that it is trying.
-            publishLinkNotice(getApplication<Application>().getString(R.string.link_reconnecting))
-            launch {
-                delay(BANNER_DELAY_MILLIS)
-                if (_state.value.phase != Phase.READY || connection == null) {
-                    _state.update { it.copy(reconnecting = true) }
-                }
-            }
-            val backoff = Backoff.persistent
-            var attempt = 0
-            while (isActive) {
-                delay((backoff.nextDelay() * 1000).toLong())
-                attempt += 1
-                note("reconnect attempt $attempt to ${host.displayName}")
-                _state.update { it.copy(problem = null) }
-                // `connect` reports every failure by setting the phase rather than
-                // throwing, so a thrown error here is only ever an unexpected one.
-                runCatching { connect(host) }
-                val current = _state.value
-                if (current.phase == Phase.READY) {
-                    backoff.reset()
-                    _state.update { it.copy(reconnecting = false, disconnectReason = null) }
-                    note("reconnected after $attempt attempt(s)")
-                    // Whatever happened while the socket was down never arrived as an
-                    // event, so the screen has to be re-read once -- and a turn that
-                    // ended during the outage is announced from the list it reads.
-                    refreshAfterReconnect()
-                    // The host forgot we were on screen while we were away.
-                    setPresence(foreground)
-                    return@launch
-                }
-                // A refused credential ends the whole affair: the host answered and said
-                // it does not know this phone, so every further attempt is the same
-                // rejection. Stop, and send the operator to pairing.
-                if (current.needsPairing) {
-                    _state.update { it.copy(phase = Phase.FAILED, reconnecting = false) }
-                    return@launch
-                }
-                // `connect` marks the phase FAILED on every failure; during a retry that
-                // would swap the screen for the failure page between attempts, which is
-                // worse than the banner. Put the phase back and keep going.
-                _state.update { if (it.reconnecting) it.copy(phase = Phase.READY) else it }
-            }
-        }
-    }
+    // ── reconnecting ────────────────────────────────────────────────────────
+    //
+    // The loop lives in ReconnectCoordinator: it never gives up, it waits before
+    // showing the banner, and it stops when the credential is refused. What stays here
+    // is the dialling it asks for and the two things that follow a success.
 
-    /** Stop any automatic retry; a caller that dials something else owns the socket now. */
-    /**
-     * Open the conversation that was open last time, once per process.
-     *
-     * Deliberately not on every list refresh: the operator returning to the list means
-     * they want the list, and yanking them back into the conversation would be the app
-     * arguing with them.
-     */
-    private fun maybeRestoreLastSession() {
-        if (restoredOnce) return
-        restoredOnce = true
-        val current = _state.value
-        if (current.selectedSessionId != null) return
-        val hostId = current.host?.hostId ?: return
-        val last = activity.lastSession(hostId) ?: return
-        if (current.sessions.none { it.sessionId == last }) return
-        selectSession(last)
-    }
+    private val reconnect = ReconnectCoordinator(
+        store = store,
+        scope = viewModelScope,
+        strings = strings,
+        note = ::note,
+        stopWatchers = ::stopWatchers,
+        redial = { host -> connect(host) },
+        afterReconnected = ::refreshAfterReconnect,
+        announcePresence = { setPresence(foreground) },
+        publishNotice = ::publishLinkNotice,
+        connected = { connection != null },
+    )
 
-    /**
-     * Notify the sessions whose turn just ended, while the operator is elsewhere.
-     *
-     * Only a transition counts: a list read that finds a session idle says nothing about
-     * whether it *just* became idle. And only in the background -- a notification for a
-     * screen you are looking at is noise.
-     */
-    private suspend fun announceFinishedTurns(rows: List<SessionRow>) {
-        val context = getApplication<Application>()
-        for (row in rows) {
-            val runningNow = row.running
-            val hostId = _state.value.host?.hostId
-            // In memory first, then the store: a process that was frozen mid-turn came
-            // back with an empty map and lost the completion that happened while away.
-            val was = wasRunning[row.sessionId]
-                ?: hostId?.let { activity.runningSession(it, row.sessionId) }
-            if (hostId != null) activity.setRunningSession(hostId, row.sessionId, runningNow)
-            wasRunning[row.sessionId] = runningNow
-            if (was != true || runningNow) {
-                if (was != true) { /* first sighting: nothing to announce */ }
-                continue
-            }
-            note("list: ${row.sessionId} settled (was running)")
-            // A turn ended. Announced once per turn: a second read of the same idle row
-            // must not buzz again, and neither must the event that reported the same
-            // ending. Nothing is recorded unless a notice is actually posted -- recording
-            // a suppression (on screen, quiet hours) is what lost the following turn.
-            if (announcer.announcedRecently(row.sessionId, System.currentTimeMillis())) { note("list: ${row.sessionId} already announced"); continue }
-            if (foreground) { note("list: ${row.sessionId} on screen, nothing to announce"); continue }
-            // A finished turn can wait; a blocked one cannot. Quiet hours silence only the
-            // former.
-            if (activity.quietHours() && isQuietNow()) { note("list: ${row.sessionId} quiet hours"); continue }
+    /** Retry a dropped connection; the loop and its rules live in the domain. */
+    private fun beginReconnect(host: PairedHost, reason: String) = reconnect.begin(host, reason)
 
-            val detail = describeFinished(row.sessionId)
-            if ((detail.failed && !_state.value.notifyInterrupted) || (!detail.failed && !_state.value.notifyCompleted)) {
-                note("list: ${row.sessionId} notice category off")
-                continue
+    // ── notifications ───────────────────────────────────────────────────────
+    //
+    // The rules live in NotificationCoordinator: a transition is what counts, only in
+    // the background, and quiet hours never silence a blocked agent. What stays here
+    // is the wiring: the transcript tail a notice describes itself from, and the one
+    // call that actually posts.
+
+    private val notifier = NotificationCoordinator(
+        store = store,
+        baseline = activity,
+        text = strings,
+        note = ::note,
+        quietHours = { activity.quietHours() },
+        hourOfDay = { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) },
+        isForeground = { foreground },
+        tail = { sessionId ->
+            connection?.let { socket ->
+                runCatching {
+                    socket.call<SessionMessagesResult>(
+                        "session.messages",
+                        payload(*pageAddress(sessionId), "maxMessages" to me.shirazu.mizar.kit.jsonInt(12)),
+                    )
+                }.getOrNull()
             }
-            val title = context.getString(
-                if (detail.failed) R.string.turn_failed_notice_title else R.string.turn_completed_title,
-            )
-            val name = _state.value.titles[row.sessionId] ?: row.sessionId.takeLast(8)
-            val body = detail.summary
-                ?.let { context.getString(R.string.turn_completed_body, name, it) }
-                ?: context.getString(R.string.turn_completed_body_plain, name)
-            val posted = runCatching {
-                Notifications.show(
-                    context,
-                    title,
-                    body,
-                    row.sessionId,
-                    // Its own range: a completion must not replace a waiting card.
-                    baseId = me.shirazu.dshmizar.push.Notifications.FINISHED_NOTIFICATION_BASE,
-                )
+        },
+        postNotice = { title, body, sessionId, finished ->
+            val app = getApplication<Application>()
+            runCatching {
+                // Its own range: a completion must not replace a waiting card.
+                if (finished) {
+                    Notifications.show(
+                        app,
+                        title,
+                        body,
+                        sessionId,
+                        baseId = me.shirazu.dshmizar.push.Notifications.FINISHED_NOTIFICATION_BASE,
+                    )
+                } else {
+                    Notifications.show(app, title, body, sessionId)
+                }
             }.getOrDefault(false)
-            if (posted) announcer.record(row.sessionId, System.currentTimeMillis())
-            note("list: ${row.sessionId} posted=$posted body=$body")
-        }
-        // Forget the memory once a session is seen running again, so the next completion
-        // is announced too.
-        for (row in rows) if (row.running) announcer.forget(row.sessionId)
-    }
+        },
+    )
 
-    /** What a finished turn was: failed or not, how long it took, and its first line. */
-    private data class FinishedDetail(val failed: Boolean, val summary: String?)
-
-    /**
-     * Read the tail of a session that just finished.
-     *
-     * The session list knows only that a turn stopped running. Whether it failed, how long
-     * it took and what it produced are in the transcript, and one small page is cheaper
-     * than a notification that says nothing an operator can act on.
-     */
-    private suspend fun describeFinished(sessionId: String): FinishedDetail {
-        val socket = connection ?: return FinishedDetail(false, null)
-        val page = runCatching {
-            socket.call<SessionMessagesResult>(
-                "session.messages",
-                payload(*pageAddress(sessionId), "maxMessages" to me.shirazu.mizar.kit.jsonInt(12)),
-            )
-        }.getOrNull() ?: return FinishedDetail(false, null)
-
-        val last = Conversation.turns(page).lastOrNull() ?: return FinishedDetail(false, null)
-        val answer = last.steps.lastOrNull {
-            it is ConversationItem.Message && it.role == ConversationItem.Role.ASSISTANT
-        } as? ConversationItem.Message
-        val elapsed = last.elapsedMillis(System.currentTimeMillis()) ?: 0L
-        val duration = if (elapsed > 0) Format.duration(elapsed) else null
-        val firstLine = answer?.text
-            ?.lineSequence()
-            ?.map { it.trim() }
-            ?.firstOrNull { line -> line.isNotEmpty() && !line.startsWith("```") }
-            ?.take(80)
-        // The completion notice is the whole story in one line: how long, and what it said.
-        val summary = listOfNotNull(duration, firstLine).joinToString(" · ").ifBlank { null }
-        return FinishedDetail(last.failed, summary)
-    }
-
-    /** Whether the clock is inside the quiet window (23:00 to 08:00). */
-    private fun isQuietNow(): Boolean {
-        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-        return hour >= 23 || hour < 8
-    }
-
-    private fun cancelReconnect() {
-        reconnectJob?.cancel()
-        reconnectJob = null
-    }
+    /** Notify the sessions whose turn just ended, while the operator is elsewhere. */
+    private suspend fun announceFinishedTurns(rows: List<SessionRow>) = notifier.announceFinished(rows)
 
     /** Try the stored host again, patiently. */
     fun retry() {
-        cancelReconnect()
+        reconnect.cancel()
         val host = _state.value.host
         if (host == null) {
             start()
@@ -1807,7 +1231,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * one machine's conversations under another machine's name.
      */
     fun openHost(hostId: String) {
-        cancelReconnect()
+        reconnect.cancel()
         viewModelScope.launch {
             val host = credentials.loadAll().firstOrNull { it.hostId == hostId } ?: return@launch
             _state.update {
@@ -1861,7 +1285,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * that is not yet a client of anything.
      */
     fun startPairing() {
-        cancelReconnect()
+        reconnect.cancel()
         viewModelScope.launch {
             stopWatchers()
             connection?.disconnect()
@@ -1877,7 +1301,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val wasOpen = _state.value.host?.hostId == hostId
             if (wasOpen) {
-                cancelReconnect()
+                reconnect.cancel()
                 runCatching { connection?.call<AcceptanceResult>("push.unregister") }
                 stopWatchers()
                 connection?.disconnect()
@@ -1943,8 +1367,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 problem = null,
             )
         }
-        regroup()
-        persistIndex()
+        index.regroup()
+        index.persist()
         // The host's list is the authority on whether the selected turn is still
         // running. If the open conversation still thinks it is, that copy is stale --
         // a host that does not broadcast `turn.settled` (an older plugin) would
@@ -1956,112 +1380,45 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (!rowRunning && lastInFlight) refreshConversationQuietly()
         }
         announceFinishedTurns(list.items)
-        syncLiveTurn(list.items)
+        liveTurn.sync(list.items)
         // The screen opens on what was last read, once: after that the operator is in
         // control of where they are.
-        maybeRestoreLastSession()
+        index.restoreLastSession()
     }
 
-    /**
-     * Keep the live update in step with the session list.
-     *
-     * One card, for the session that changed most recently: the lock screen has room
-     * for one running turn, and the operator's attention is on the one they just
-     * started. When nothing is running the card comes down here, which is the path
-     * that covers a host too old to broadcast `turn.settled`.
-     */
-    private fun syncLiveTurn(rows: List<SessionRow>) {
-        val running = rows.filter { it.running }
-        runningSince.keys.retainAll(running.map { it.sessionId }.toSet())
-        val shown = running.maxByOrNull { it.updatedMillis }
-        if (shown == null) {
-            liveSessionId = null
-            liveSignature = null
-            LiveTurn.hide(getApplication())
-            return
-        }
-        // The host's own start time when this is the open conversation; otherwise the
-        // first moment this phone could see the row running.
-        val hostedStart = if (shown.sessionId == _state.value.selectedSessionId) {
-            _state.value.turns.lastOrNull()?.startedAtMillis
-        } else {
-            null
-        }
-        val since = runningSince.getOrPut(shown.sessionId) { hostedStart ?: System.currentTimeMillis() }
-        liveSessionId = shown.sessionId
-        val title = _state.value.titles[shown.sessionId] ?: shown.sessionId.takeLast(8)
-        val signature = "${shown.sessionId}|$title|$since"
-        if (signature == liveSignature) return
-        liveSignature = signature
-        LiveTurn.show(getApplication(), shown.sessionId, title, since)
-    }
+    // ── the lock screen's card ──────────────────────────────────────────────
+    //
+    // The rules live in LiveTurnCoordinator: one card, rewritten only when it would
+    // read differently, with a clock that starts at the first moment this phone could
+    // see the turn running. What stays here is the one call that touches the system.
 
-    /** Load titles for rows about to be drawn, one request per session, once each. */    fun loadTitles(sessionIds: List<String>) {
-        viewModelScope.launch {
-            val socket = connection ?: return@launch
-            var learned = false
-            for (id in sessionIds) {
-                if (_state.value.titles.containsKey(id)) continue
-                if (learnTitle(socket, id)) learned = true
-            }
-            if (learned) persistIndex()
-        }
-    }
+    private val liveTurn = LiveTurnCoordinator(
+        store = store,
+        now = { System.currentTimeMillis() },
+        showCard = { sessionId, title, since ->
+            LiveTurn.show(getApplication(), sessionId, title, since)
+        },
+        hideCard = { LiveTurn.hide(getApplication()) },
+    )
 
-    /** One session's title, remembered when the host has one. */
-    private suspend fun learnTitle(socket: MizarConnection, sessionId: String): Boolean {
-        val title = runCatching {
-            socket.call<SessionStatsResult>("session.stats", payload("sessionId" to jsonString(sessionId))).stats?.title
-        }.getOrNull()
-        if (title.isNullOrBlank()) return false
-        _state.update { it.copy(titles = it.titles + (sessionId to title)) }
-        return true
-    }
+    // ── the session list's index ────────────────────────────────────────────
+    //
+    // Grouping, what is remembered across launches, and the names behind the rows all
+    // live in SessionIndexCoordinator. What stays here is the one navigation call it
+    // cannot make itself: opening a session.
 
-    /**
-     * Read the titles a fresh pairing has none of, with progress on screen.
-     *
-     * A phone that has just paired knows the session list but no names: every title
-     * behind it is its own `session.stats` call, which the list otherwise fetches one
-     * row at a time as the operator scrolls. On a first pairing that reads as a list
-     * of blanks, so they are read once, here, while the connecting screen can still
-     * say how far along it is.
-     *
-     * Bounded by [WARM_TITLE_LIMIT] and newest first: a host with four hundred
-     * sessions should not make first pairing wait on four hundred round trips, and
-     * the rows the operator is about to see are the recent ones. Whatever is left
-     * over keeps the lazy path in [loadTitles].
-     */
-    private suspend fun warmTitles(socket: MizarConnection) {
-        val known = _state.value.titles
-        val pending = _state.value.sessions
-            .asSequence()
-            .filter { !known.containsKey(it.sessionId) }
-            .sortedByDescending { it.updatedMillis }
-            .take(WARM_TITLE_LIMIT)
-            .map { it.sessionId }
-            .toList()
-        if (pending.isEmpty()) return
+    private val index = SessionIndexCoordinator(
+        store = store,
+        scope = viewModelScope,
+        note = ::note,
+        indexStore = indexStore,
+        link = { connection?.let { socket -> SocketTitlesLink(socket) } },
+        lastSession = { hostId -> activity.lastSession(hostId) },
+        openSession = { sessionId -> selectSession(sessionId) },
+    )
 
-        val recent = ArrayDeque<Long>()
-        var done = 0
-        _state.update { it.copy(syncProgress = SyncProgress(done = 0, total = pending.size), syncEtaMillis = null) }
-        for (id in pending) {
-            val started = System.nanoTime()
-            learnTitle(socket, id)
-            val elapsed = (System.nanoTime() - started) / 1_000_000L
-            done++
-            recent.addLast(elapsed)
-            while (recent.size > SyncEta.SAMPLE_SIZE) recent.removeFirst()
-            val eta = SyncEta.estimateMillis(done, pending.size, recent.toList())
-            _state.update {
-                it.copy(syncProgress = SyncProgress(done = done, total = pending.size), syncEtaMillis = eta)
-            }
-        }
-        persistIndex()
-        note("warmed $done/${pending.size} titles")
-    }
-
+    /** Load titles for rows about to be drawn, one request per session, once each. */
+    fun loadTitles(sessionIds: List<String>) = index.loadTitles(sessionIds)
     /**
      * Open a session, and remember it.
      *
@@ -2099,8 +1456,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 activityError = null,
             )
         }
-        activityJob?.cancel()
-        activityJob = null
+        activityPanel.cancel()
         clearAttachments()
         if (sessionId == null) return
         viewModelScope.launch {
@@ -2110,7 +1466,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (activeHost != null) {
                 conversationCache.load(activeHost, sessionId)?.let { cached ->
                     if (_state.value.selectedSessionId == sessionId) {
-                        applyPage(cached.messages)
+                        conversation.show(cached.messages, forSession = sessionId)
                         cached.stats?.let { stats -> applyStats(stats.stats) }
                     }
                 }
@@ -2169,529 +1525,104 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // ── the open conversation ───────────────────────────────────────────────
+    //
+    // The latch that keeps two reads from overlapping, the epoch check that drops a
+    // page from a replaced socket, the paging cursors and the cache write all live in
+    // ConversationCoordinator. These keep the names the screens already call, and hand
+    // the socket over as a link so the domain never sees one.
 
-    /** Load the open session, with the latch and the retry described on this class. */
-    suspend fun reload(tail: Int = FULL_PAGE, afterSeq: Int? = null) {
-        if (loading) {
-            reloadWanted = true
-            return
-        }
-        loading = true
-        try {
-            loadOnce(tail, afterSeq)
-            val current = _state.value
-            if (current.phase == Phase.READY && (current.stats == null || current.conversation.isEmpty())) {
-                delay(700)
-                loadOnce(tail, afterSeq)
-            }
-            while (reloadWanted) {
-                reloadWanted = false
-                loadOnce(tail, afterSeq)
-            }
-        } finally {
-            loading = false
-        }
-    }
+    private val conversation = ConversationCoordinator(
+        store = store,
+        scope = viewModelScope,
+        note = ::note,
+        describe = { error -> messageOf(error, addressOf()) },
+        epoch = { connectionEpoch },
+        link = { connection?.let { socket -> SocketConversationLink(socket) } },
+        // A lambda, not a method reference: the settings coordinator is built further
+        // down this class, and a bound reference would capture it before it exists.
+        applyStats = { frame -> settings.applyStats(frame) },
+        recordPage = { hostId, sessionId, page -> conversationCache.record(hostId, sessionId, page) },
+        recordStats = { hostId, sessionId, stats -> conversationCache.recordStats(hostId, sessionId, stats) },
+    )
 
-    /** Fold one page of records into the transcript. */
-    /**
-     * Put a page's context figure on the bar.
-     *
-     * Every `session.messages` page carries the occupancy as of its cut (plugin
-     * 0.8.9), derived from the same projection baseline that names the cut. The
-     * incremental refresh — the one an open screen actually runs while a turn is
-     * going — never asks for `session.stats`, so before this the composer's figure
-     * froze at whatever the last full load saw.
-     *
-     * A page without the figure leaves the frame alone: unknown, never zero.
-     */
-    private fun applyPageContext(page: SessionMessagesResult) {
-        val pressure = page.context ?: return
-        val before = _state.value.stats?.context?.percent
-        _state.update { current ->
-            current.copy(stats = (current.stats ?: SessionStatsFrame()).copy(context = pressure))
-        }
-        // Only when it moves: this runs on every page, and a line per refresh would
-        // bury the rest of the log. A figure that *stops* moving is the bug this
-        // exists to catch, and silence here is how that reads.
-        if (before != pressure.percent) note("context ${pressure.percent}% from page")
-    }
+    /** Load the open session: latch, epoch guard and the one retry live in the domain. */
+    suspend fun reload(tail: Int = FULL_PAGE, afterSeq: Int? = null) = conversation.reload(tail, afterSeq)
 
-    private fun applyPage(page: SessionMessagesResult) {
-        val fresh = Conversation.items(page)
-        val freshTurns = Conversation.turns(page)
-        val oldest = page.records.firstNotNullOfOrNull { SessionRecord(it).payload["seq"].intValue() }
-        _state.update { current ->
-            current.copy(
-                conversation = mergeConversations(current.conversation, fresh),
-                turns = mergeTurns(current.turns, freshTurns),
-                oldestSeq = listOfNotNull(current.oldestSeq, oldest).minOrNull(),
-                hasMore = page.hasMore,
-                conversationError = null,
-                // Where this page ended. Kept even when the delta was empty, so the next
-                // refresh still asks from the right place.
-                newestSeq = listOfNotNull(current.newestSeq, page.asOfSeq).maxOrNull(),
-            )
-        }
-        applyPageContext(page)
-        // One line when the shape of the transcript changes, not one per poll: a
-        // turn's reason is what the summary row reads, and "the row says the wrong
-        // thing" is unanswerable without knowing which reason arrived.
-        val shape = _state.value.turns.joinToString("|") {
-            "${it.turn}:${it.endedReason}:${it.prompts.size}:${it.steps.size}"
-        }
-        if (shape != lastTurnShape) {
-            lastTurnShape = shape
-            note(
-                "turns: " + _state.value.turns.joinToString(" | ") {
-                    "t=${it.turn} reason=${it.endedReason} p=${it.prompts.size} s=${it.steps.size} failed=${it.failed} running=${it.isRunning}"
-                },
-            )
-        }
-        val hostId = _state.value.host?.hostId
-        val sessionId = _state.value.selectedSessionId
-        if (hostId != null && sessionId != null) {
-            viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                conversationCache.record(hostId, sessionId, page)
-            }
-        }
-    }
+    /** One page of records, then the figures. */
+    private suspend fun loadOnce(tail: Int = FULL_PAGE, afterSeq: Int? = null) =
+        conversation.readOnce(tail, afterSeq)
 
-    /**
-     * Read one turn whole: the narration and the tool calls a summary page drops.
-     *
-     * Gated with the attachments -- a paid account, or a local link -- because it
-     * is the same kind of cost: one turn's detail can weigh what a whole summary
-     * page does. Asked for per turn, when the operator opens it, never as part of
-     * a refresh.
-     *
-     * The answer is merged rather than applied: a detail page carries one turn,
-     * and running it through {@link applyPage} would move the paging cursors to
-     * that turn's edges and break "load older".
-     */
-    fun loadTurnDetail(turn: Int) {
-        val state = _state.value
-        if (!state.advancedFeaturesUnlocked) return
-        val sessionId = state.selectedSessionId ?: return
-        viewModelScope.launch {
-            val socket = connection ?: return@launch
-            val page = runCatching {
-                socket.call<SessionMessagesResult>(
-                    "session.messages",
-                    payload(
-                        *pageAddress(sessionId),
-                        "full" to me.shirazu.mizar.kit.jsonBool(true),
-                        "turn" to me.shirazu.mizar.kit.jsonInt(turn),
-                    ),
-                )
-            }.onFailure { note("turn $turn detail failed: ${it.message}") }.getOrNull() ?: return@launch
+    /** One round trip for the whole screen, when the host implements it. */
+    private suspend fun loadBundle(tail: Int, afterSeq: Int?): Boolean =
+        conversation.refreshBundle(tail, afterSeq)
 
-            val fresh = Conversation.turns(page)
-            val items = Conversation.items(page)
-            _state.update { current ->
-                current.copy(
-                    conversation = mergeConversations(current.conversation, items),
-                    turns = mergeTurns(current.turns, fresh),
-                )
-            }
-            note("turn $turn detail: ${page.records.size} records")
-        }
-    }
+    suspend fun loadOlder(): Int? = conversation.loadOlder()
 
-    /**
-     * A refresh in one round trip: transcript delta, figures and pending cards together.
-     *
-     * Three sequential calls on a tunnel is three times the latency for one screen
-     * refresh. The host answers them concurrently as `session.refresh`.
-     *
-     * @returns false when the host does not know the method, so the caller can fall
-     *   back to the three separate calls -- an older plugin must not lose the feature.
-     */
-    /**
-     * Whether the host implements `session.refresh`.
-     *
-     * Asked once per process. The call is an optimisation -- one round trip for the
-     * whole screen instead of three -- and a host without it answers NOT_IMPLEMENTED
-     * every single time, so re-asking on every pull spends a round trip to be told the
-     * same thing. The 0.8.3 plugin does not implement it; the three plain reads below
-     * are the path that runs, and they are the path this build should be judged on.
-     */
-    private var refreshBundleSupported = true
+    fun loadTurnDetail(turn: Int) = conversation.loadTurnDetail(turn)
 
-    private suspend fun loadBundle(tail: Int, afterSeq: Int?): Boolean {
-        if (!refreshBundleSupported) return false
-        val socket = connection ?: return true
-        val sessionId = _state.value.selectedSessionId ?: return true
-        val epoch = connectionEpoch
-        val bundle = try {
-            socket.call<RefreshBundle>(
-                "session.refresh",
-                payload(
-                    *buildList {
-                        addAll(pageAddress(sessionId))
-                        add("maxMessages" to me.shirazu.mizar.kit.jsonInt(tail))
-                        afterSeq?.let { add("afterSeq" to me.shirazu.mizar.kit.jsonInt(it)) }
-                    }.toTypedArray(),
-                ),
-            )
-        } catch (error: Throwable) {
-            if ((error as? me.shirazu.mizar.kit.MizarError)?.known == me.shirazu.mizar.kit.MizarErrorCode.NOT_IMPLEMENTED) {
-                note("host does not implement session.refresh; using the three reads")
-                refreshBundleSupported = false
-            }
-            return false
-        }
-        // The answer belongs to a socket that is no longer the live one: let the
-        // caller read again on the new connection instead of merging this one in.
-        if (epoch != connectionEpoch) {
-            note("discarding a bundle from a replaced socket")
-            return false
-        }
-        applyPage(bundle.messages)
-        bundle.stats?.let { stats ->
-            applyStats(stats.stats)
-            val hostId = _state.value.host?.hostId
-            if (hostId != null) {
-                viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                    conversationCache.recordStats(hostId, sessionId, stats)
-                }
-            }
-        }
-        bundle.pending?.let { pending -> _state.update { it.copy(pending = pending) } }
-        return true
-    }
 
-    private suspend fun loadOnce(tail: Int = FULL_PAGE, afterSeq: Int? = null) {
-        val socket = connection ?: return
-        val sessionId = _state.value.selectedSessionId ?: return
-        val epoch = connectionEpoch
-        _state.update { it.copy(loadingConversation = true) }
+    fun sendPrompt(text: String) = prompts.send(text)
 
-        try {
-            val page = socket.call<SessionMessagesResult>(
-                "session.messages",
-                payload(
-                    *buildList {
-                        addAll(pageAddress(sessionId))
-                        add("maxMessages" to me.shirazu.mizar.kit.jsonInt(tail))
-                        // A number is this screen's own claim about what it holds; `null`
-                        // is the claim that it holds **nothing**. The difference matters
-                        // since plugin 0.8.3: an *absent* key is silence, and the host
-                        // answers silence from a ledger of what it already delivered to
-                        // this device -- so a cold screen that stayed quiet would be sent
-                        // only the records after the last delivery and open empty.
-                        add(
-                            "afterSeq" to (
-                                afterSeq?.let { me.shirazu.mizar.kit.jsonInt(it) }
-                                    ?: kotlinx.serialization.json.JsonNull
-                                ),
-                        )
-                    }.toTypedArray(),
-                ),
-            )
-            if (epoch == connectionEpoch) {
-                applyPage(page)
-            } else {
-                note("discarding a page from a replaced socket")
-            }
-        } catch (error: Throwable) {
-            if (epoch == connectionEpoch) {
-                _state.update { it.copy(conversationError = messageOf(error, addressOf())) }
-            } else {
-                note("ignoring a failure from a replaced socket")
-            }
-        }
+    // ── attachments ─────────────────────────────────────────────────────────
+    //
+    // The domain lives in AttachmentCoordinator; these keep the names the composer
+    // already calls. The upload is handed over as a provider, so the coordinator
+    // never sees a socket and its own tests need no server.
 
-        try {
-            val stats = socket.call<SessionStatsResult>("session.stats", payload("sessionId" to jsonString(sessionId)))
-            if (epoch != connectionEpoch) {
-                _state.update { it.copy(loadingConversation = false) }
-                return
-            }
-            applyStats(stats.stats)
-            val hostId = _state.value.host?.hostId
-            if (hostId != null) {
-                viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                    conversationCache.recordStats(hostId, sessionId, stats)
-                }
-            }
-        } catch (error: Throwable) {
-            if (epoch == connectionEpoch) {
-                _state.update { it.copy(statsError = messageOf(error, addressOf())) }
-            }
-        }
+    private val attachments = AttachmentCoordinator(
+        store = store,
+        scope = viewModelScope,
+        io = Dispatchers.IO,
+        text = strings,
+        note = ::note,
+        transport = { connection?.let { socket -> AttachmentUploader(socket.attachmentRpc()) } },
+    )
 
-        _state.update { it.copy(loadingConversation = false) }
-    }
-
-    /**
-     * Load an older page.
-     *
-     * @returns the number of items added, `0` when the host says there is nothing
-     *   older, or `null` when it could not be asked — which must never be read as
-     *   "the top of the conversation".
-     */
-    suspend fun loadOlder(): Int? {
-        val socket = connection ?: return null
-        val current = _state.value
-        val sessionId = current.selectedSessionId ?: return null
-        val before = current.oldestSeq ?: return null
-        if (!current.hasMore) {
-            _state.update { it.copy(exhausted = true) }
-            return 0
-        }
-
-        return try {
-            val page = socket.call<SessionMessagesResult>(
-                "session.messages",
-                payload(
-                    *pageAddress(sessionId),
-                    "maxMessages" to me.shirazu.mizar.kit.jsonInt(200),
-                    "beforeSeq" to me.shirazu.mizar.kit.jsonInt(before),
-                ),
-            )
-            val reached = page.records.firstNotNullOfOrNull { SessionRecord(it).payload["seq"].intValue() }
-            if (reached == null || reached == before || page.records.isEmpty()) {
-                _state.update { it.copy(exhausted = true, hasMore = false) }
-                return 0
-            }
-            applyPageContext(page)
-            val fresh = Conversation.items(page)
-            val freshTurns = Conversation.turns(page)
-            val before_count = _state.value.conversation.size
-            _state.update {
-                it.copy(
-                    conversation = mergeConversations(it.conversation, fresh),
-                    turns = mergeTurns(it.turns, freshTurns),
-                    oldestSeq = listOfNotNull(before, reached).minOrNull(),
-                    hasMore = page.hasMore,
-                )
-            }
-            _state.value.conversation.size - before_count
-        } catch (_: Throwable) {
-            null
-        }
-    }
-
-    fun sendPrompt(text: String) {
-        val current = _state.value
-        val ready = current.attachments.filter { it.readyId != null }
-        if (text.isBlank() && ready.isEmpty()) return
-        if (current.attachments.any { it.readyId == null && it.error == null }) {
-            _state.update { it.copy(problem = getApplication<Application>().getString(R.string.attachment_still_uploading)) }
-            return
-        }
-        current.attachments.firstNotNullOfOrNull { it.error }?.let { message ->
-            _state.update { it.copy(problem = message) }
-            return
-        }
-        viewModelScope.launch {
-            val socket = connection ?: return@launch
-            val sessionId = _state.value.selectedSessionId ?: return@launch
-            // A fresh key per submission: reusing one would make a second identical
-            // message look like a retry of the first and be dropped by the host.
-            val requestId = UUID.randomUUID().toString()
-            try {
-                val result = socket.call<PromptResult>(
-                    "session.prompt",
-                    buildJsonObject {
-                        put("sessionId", sessionId)
-                        put("requestId", requestId)
-                        // The attached-prompt path requires a string for text even
-                        // when the file is the whole message: an omitted key is a
-                        // malformed frame, not "no text".
-                        put("text", text)
-                        if (ready.isNotEmpty()) {
-                            putJsonArray("attachmentIds") {
-                                ready.forEach { add(requireNotNull(it.readyId)) }
-                            }
-                        }
-                    },
-                )
-                if (!result.accepted) {
-                    _state.update { it.copy(problem = "the host did not accept the message") }
-                    return@launch
-                }
-                // The host owns the bytes once the prompt is accepted; the staging
-                // files have done their job and any retry would be a new prompt.
-                clearAttachments()
-                if (text.isNotBlank()) awaitPromptRecorded(text)
-                reload()
-            } catch (error: Throwable) {
-                _state.update { it.copy(problem = messageOf(error, addressOf())) }
-            }
-        }
-    }
-
-    /**
-     * Stage one attachment and upload it for the next prompt.
-     *
-     * The picker and image re-encode happen on the UI side; this keeps the state and
-     * the transport. The host advertises its own limits, read once and lowered to
-     * this app's own caps by the kit.
-     */
-    fun addAttachment(file: File, name: String, kind: String, mediaType: String?) {
-        val host = _state.value.host ?: return
-        val sessionId = _state.value.selectedSessionId ?: return
-        if (!_state.value.advancedFeaturesUnlocked) {
-            file.delete()
-            _state.update { it.copy(problem = getApplication<Application>().getString(R.string.attachment_lan_only)) }
-            return
-        }
-        val context = getApplication<Application>()
-        val displayName = attachmentDisplayName(name)
-        val size = file.length()
-        // The host accepts a media type for images only; a document is identified
-        // by its name, and sending a type is a malformed frame.
-        val effectiveMediaType = mediaType.takeIf { kind == "image" }
-        if (size <= 0L) {
-            file.delete()
-            _state.update { it.copy(problem = context.getString(R.string.attachment_unreadable)) }
-            return
-        }
-        val key = UUID.randomUUID().toString()
-        _state.update {
-            it.copy(
-                attachments = it.attachments + DraftAttachment(
-                    key = key,
-                    name = displayName,
-                    bytes = size,
-                    kind = kind,
-                    mediaType = effectiveMediaType,
-                    file = file,
-                ),
-                attachmentBusy = true,
-            )
-        }
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                note("attachment: staging $displayName ($size bytes, $kind)")
-                val socket = connection ?: error("not connected")
-                val caps = _state.value.attachmentCapabilities
-                    ?: AttachmentUploader(socket.attachmentRpc()).capabilities().also { limits ->
-                        _state.update { it.copy(attachmentCapabilities = limits) }
-                    }
-                if (_state.value.attachments.size > caps.attachments) error(context.getString(R.string.attachment_too_many))
-                val max = if (kind == "image") caps.imageBytes else caps.fileBytes
-                if (size > max) error(context.getString(R.string.attachment_too_large))
-                // Streamed, not `readBytes()`: a 32 MiB document is the host's limit,
-                // and holding a copy of it just to hash it is the difference between
-                // a phone that keeps the session alive and one the system reclaims.
-                val sha = digestOf(file)
-                val source = AttachmentSource(
-                    file = file,
-                    name = displayName,
-                    bytes = size,
-                    sha256 = sha,
-                    kind = kind,
-                    mediaType = effectiveMediaType ?: "application/octet-stream",
-                )
-                val scope = AttachmentScope(host.hostId, host.deviceId, sessionId)
-                val ready = AttachmentUploader(socket.attachmentRpc()).upload(
-                    scope = scope,
-                    source = source,
-                    limits = caps,
-                    checkpoint = AttachmentCheckpoint(scope),
-                    onProgress = { offset ->
-                        _state.update { current ->
-                            current.copy(attachments = current.attachments.map {
-                                if (it.key == key) it.copy(progress = offset) else it
-                            })
-                        }
-                    },
-                )
-                note("attachment: ready ${ready.attachmentId} for $displayName")
-                _state.update { current ->
-                    current.copy(attachments = current.attachments.map {
-                        if (it.key == key) it.copy(progress = size, readyId = ready.attachmentId) else it
-                    })
-                }
-            } catch (error: Throwable) {
-                note("attachment: failed for $displayName: ${error.message}")
-                _state.update { current ->
-                    current.copy(attachments = current.attachments.map {
-                        if (it.key == key) it.copy(error = error.message ?: context.getString(R.string.attachment_failed)) else it
-                    })
-                }
-            } finally {
-                _state.update { current ->
-                    current.copy(attachmentBusy = current.attachments.any { it.readyId == null && it.error == null })
-                }
-            }
-        }
-    }
-
-    /** Lowercase hex SHA-256 of a staged file, read in bounded chunks. */
-    private fun digestOf(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        file.inputStream().use { input ->
-            val buffer = ByteArray(64 * 1024)
-            while (true) {
-                val count = input.read(buffer)
-                if (count < 0) break
-                digest.update(buffer, 0, count)
-            }
-        }
-        return digest.digest().joinToString("") { byte -> "%02x".format(byte) }
-    }
+    fun addAttachment(file: File, name: String, kind: String, mediaType: String?) =
+        attachments.add(file, name, kind, mediaType)
 
     /** Drop one staged attachment, and its local copy. */
-    fun removeAttachment(key: String) {
-        val draft = _state.value.attachments.firstOrNull { it.key == key } ?: return
-        draft.file.delete()
-        _state.update { current ->
-            current.copy(attachments = current.attachments.filterNot { it.key == key })
-        }
-    }
+    fun removeAttachment(key: String) = attachments.remove(key)
 
     /** Drop every staged attachment after a send, or when the session changes. */
-    fun clearAttachments() {
-        val files = _state.value.attachments.map { it.file }
-        _state.update { it.copy(attachments = emptyList(), attachmentBusy = false) }
-        files.forEach { file -> runCatching { file.delete() } }
-    }
+    fun clearAttachments() = attachments.clear()
 
-    /**
-     * Wait for the host to record what was just sent.
-     *
-     * The log is written asynchronously, so a single read after an accepted prompt
-     * usually does not contain it — which looks exactly like a message that was
-     * silently dropped.
-     */
-    private suspend fun awaitPromptRecorded(text: String) {
-        repeat(8) {
-            loadOnce()
-            val recorded = _state.value.conversation.any {
-                it is ConversationItem.Message && it.role == ConversationItem.Role.USER && it.text == text
-            }
-            if (recorded) return
-            delay(500)
-        }
-    }
+    // ── sending and stopping ────────────────────────────────────────────────
+    //
+    // The domain lives in SendCoordinator: what may be sent, the fresh request id per
+    // submission, the bounded re-read that waits for the log, and the stop that takes
+    // the card down without waiting for the host.
 
-    fun cancelTurn() {
-        val sessionId = _state.value.selectedSessionId ?: return
-        cancelSession(sessionId)
-    }
+    private val prompts = SendCoordinator(
+        store = store,
+        scope = viewModelScope,
+        strings = strings,
+        describe = { error -> messageOf(error, addressOf()) },
+        link = { connection?.let { socket -> SocketSendLink(socket) } },
+        reload = { conversation.reload() },
+        readOnce = { conversation.readOnce() },
+        clearAttachments = { attachments.clear() },
+        hideCard = { liveTurn.hide() },
+    )
 
-    /**
-     * Cancel one session's turn, from the screen or from the live update's stop button.
-     *
-     * Split from [cancelTurn] because the notification names its own session: the
-     * operator can stop a turn without the conversation being the open one.
-     */
-    fun cancelSession(sessionId: String) {
-        viewModelScope.launch {
-            val socket = connection ?: return@launch
-            runCatching { socket.call<AcceptanceResult>("session.cancel", payload("sessionId" to jsonString(sessionId))) }
-            if (_state.value.selectedSessionId == sessionId) reload()
-            // The card is about a turn that was just asked to stop; waiting for the
-            // host's `turn.settled` would leave it up for however long the stop takes.
-            LiveTurn.hide(getApplication())
-            liveSessionId = null
-            liveSignature = null
-        }
-    }
+    fun cancelTurn() = prompts.cancelTurn()
+
+    /** Cancel one session's turn, from the screen or from the live update's stop button. */
+    fun cancelSession(sessionId: String) = prompts.cancel(sessionId)
+
+    // ── the running turn's activity ─────────────────────────────────────────
+    //
+    // The panel lives in ActivityCoordinator: it owns the poll and its lifetime, so
+    // switching sessions stops it from one place instead of from three hundred
+    // lines away.
+
+    private val activityPanel = ActivityCoordinator(
+        store = store,
+        scope = viewModelScope,
+        pollDispatcher = Dispatchers.Default,
+        describe = { error -> messageOf(error, addressOf()) },
+        link = { connection?.let { socket -> SocketActivityLink(socket) } },
+    )
 
     /**
      * Open or close the running turn's detail.
@@ -2700,74 +1631,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * a paying account, or any account on the LAN. On a relay socket with a free
      * account the control is not drawn and the host is never asked.
      */
-    fun toggleActivity() {
-        if (_state.value.activityExpanded) {
-            activityJob?.cancel()
-            activityJob = null
-            _state.update { it.copy(activityExpanded = false) }
-            return
-        }
-        if (!_state.value.advancedFeaturesUnlocked) return
-        _state.update { it.copy(activityExpanded = true, activityError = null) }
-        activityJob?.cancel()
-        startActivityPolling()
-    }
-
-    private fun startActivityPolling() {
-        activityJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
-            while (isActive && _state.value.activityExpanded) {
-                val socket = connection ?: break
-                val sessionId = _state.value.selectedSessionId ?: break
-                if (_state.value.activity == null) _state.update { it.copy(activityLoading = true) }
-                runCatching {
-                    socket.call<SessionActivityResult>(
-                        "session.activity",
-                        payload(
-                            "sessionId" to jsonString(sessionId),
-                            "maxEntries" to me.shirazu.mizar.kit.jsonInt(60),
-                        ),
-                    )
-                }.onSuccess { page ->
-                    _state.update { it.copy(activity = page, activityError = null, activityLoading = false) }
-                }.onFailure { error ->
-                    _state.update { it.copy(activityError = messageOf(error, addressOf()), activityLoading = false) }
-                }
-                delay(ACTIVITY_POLL_MILLIS)
-            }
-        }
-    }
+    fun toggleActivity() = activityPanel.toggle()
 
     /** Fetch the page before the oldest activity line on screen. */
-    fun loadOlderActivity() {
-        val current = _state.value.activity ?: return
-        val turn = current.turn ?: return
-        val oldest = current.oldestSeq ?: return
-        if (!current.hasMore || _state.value.activityLoadingOlder) return
-        viewModelScope.launch {
-            val socket = connection ?: return@launch
-            _state.update { it.copy(activityLoadingOlder = true) }
-            runCatching {
-                socket.call<SessionActivityResult>(
-                    "session.activity",
-                    payload(
-                        "sessionId" to jsonString(current.sessionId),
-                        "maxEntries" to me.shirazu.mizar.kit.jsonInt(100),
-                        "beforeSeq" to me.shirazu.mizar.kit.jsonInt(oldest.toInt()),
-                        "turn" to me.shirazu.mizar.kit.jsonInt(turn),
-                    ),
-                )
-            }.onSuccess { page ->
-                _state.update {
-                    val merged = (page.entries + (it.activity?.entries.orEmpty()))
-                        .distinctBy { entry -> entry.id }
-                        .takeLast(MAX_ACTIVITY_ENTRIES)
-                    it.copy(activity = page.copy(entries = merged), activityLoadingOlder = false)
-                }
-            }.onFailure { error ->
-                _state.update { it.copy(activityLoadingOlder = false, activityError = messageOf(error, addressOf())) }
-            }
-        }
-    }
+    fun loadOlderActivity() = activityPanel.loadOlder()
 
     // ── interactions ────────────────────────────────────────────────────────
 
@@ -2844,9 +1711,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             lastRefreshAt = System.currentTimeMillis()
         }
     }
-    fun refreshInteractions() {
-        viewModelScope.launch { refreshInteractionsNow() }
-    }
+    fun refreshInteractions() = interactions.refresh()
 
     /**
      * Re-read the open conversation after something made it stale, without the pull
@@ -2886,121 +1751,48 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ── interactions ────────────────────────────────────────────────────────
+    //
+    // The cards and their poll live in InteractionsCoordinator. What stays here is
+    // the wiring: the live socket, and the notifier that decides whether a batch
+    // nobody is looking at is worth a buzz.
+
+    private val interactions = InteractionsCoordinator(
+        store = store,
+        scope = viewModelScope,
+        describe = { error -> messageOf(error, addressOf()) },
+        announcePending = notifier::announcePending,
+        link = { connection?.let { socket -> SocketInteractionsLink(socket) } },
+    )
+
     /**
      * Read the pending interactions, and say whether the host answered at all.
-     *
-     * The answer matters as much as the contents: on a relay, a socket can be dead
-     * while both ends still believe it is open -- the tunnel drops the mapping, the
-     * relay keeps answering websocket pings, and nothing in either read loop ever
-     * fails. The only proof is a question that goes unanswered, which is why this
-     * returns a boolean and why every call carries a short timeout.
      *
      * @returns whether the host answered, or `true` when there is no connection to
      *   judge (a reconnect already owns that case).
      */
-    private suspend fun refreshInteractionsNow(): Boolean {
-        val socket = connection ?: return true
-        // One retry: a refresh that loses a race with a reconnect, or that lands in
-        // the same instant as the host restarting, would otherwise leave a card the
-        // operator cannot see until the next poll -- and an agent is blocked the
-        // whole time it is unseen.
-        val pending = runCatching {
-            socket.call<PendingInteractions>("interactions.pending", timeoutMillis = POLL_TIMEOUT_MILLIS)
-        }.getOrElse {
-            delay(500)
-            runCatching {
-                socket.call<PendingInteractions>("interactions.pending", timeoutMillis = POLL_TIMEOUT_MILLIS)
-            }.getOrNull()
-        } ?: return false
-        _state.update { it.copy(pending = pending) }
-        // Announced only while the operator is elsewhere: in the foreground the cards
-        // are already on screen, and a notification for what you are looking at is
-        // noise. `lastNotified` keeps the same batch from buzzing twice.
-        val signature = (pending.approvals.map { it.requestId } + pending.questions.map { it.callId })
-            .sorted().joinToString(",")
-        if (pending.isEmpty) {
-            lastNotified = null
-        } else {
-            // Split into plain steps with a log at each one: on a real phone the
-            // combined condition silently declined while the log above showed a
-            // non-empty set in the background, and only side-specific logging can
-            // say which half was false.
-            if (foreground) return true
-            if (signature == lastNotified) return true
-            lastNotified = signature
-            val app = getApplication<Application>()
-            // Only the categories the operator left on. An agent blocked on a
-            // question the phone has been told not to surface is not a notice the
-            // app is entitled to ignore, so the count is filtered rather than the
-            // whole batch.
-            val shownApprovals = if (_state.value.notifyApprovals) pending.approvals.size else 0
-            val shownQuestions = if (_state.value.notifyQuestions) pending.questions.size else 0
-            if (shownApprovals == 0 && shownQuestions == 0) {
-                note("pending: notice categories off")
-                return true
-            }
-            // Counted from the catalogue, not spelled here: the hardcoded English was
-            // the one notification that stayed English on a Chinese phone. Parity over
-            // grammar, like the rest of the catalogue, so a count of one reads
-            // "1 approvals" rather than inventing plural rules the iOS client lacks.
-            val counts = listOfNotNull(
-                pending.approvals.size.takeIf { shownApprovals > 0 }
-                    ?.let { app.getString(R.string.pending_approvals, it) },
-                pending.questions.size.takeIf { shownQuestions > 0 }
-                    ?.let { app.getString(R.string.pending_questions, it) },
-            ).joinToString(" + ")
-            runCatching {
-                Notifications.show(
-                    app,
-                    app.getString(R.string.pending_title),
-                    counts + app.getString(R.string.pending_body),
-                    pending.approvals.firstOrNull()?.sessionId ?: pending.questions.firstOrNull()?.sessionId,
-                )
-            }
-        }
-        return true
-    }
+    private suspend fun refreshInteractionsNow(): Boolean = interactions.refreshNow()
 
-    fun answerApproval(requestId: String, outcome: ApprovalOutcome) {
-        viewModelScope.launch {
-            val socket = connection ?: return@launch
-            runCatching {
-                socket.call<AcceptanceResult>(
-                    "approval.answer",
-                    payload("requestId" to jsonString(requestId), "outcome" to jsonString(outcome.wire)),
-                )
-            }.onFailure { error -> _state.update { it.copy(problem = messageOf(error, addressOf())) } }
-            refreshInteractionsNow()
-        }
-    }
+    fun answerApproval(requestId: String, outcome: ApprovalOutcome) =
+        interactions.answerApproval(requestId, outcome)
 
-    fun answerQuestions(callId: String, answers: List<QuestionAnswer>) {
-        viewModelScope.launch {
-            val socket = connection ?: return@launch
-            runCatching {
-                socket.call<AcceptanceResult>(
-                    "question.answer",
-                    buildJsonObject {
-                        put("callId", callId)
-                        putJsonArray("answers") {
-                            for (answer in answers) {
-                                add(
-                                    buildJsonObject {
-                                        put("id", answer.id)
-                                        putJsonArray("selected") { answer.selected.forEach { add(it) } }
-                                        answer.custom?.let { put("custom", it) }
-                                    },
-                                )
-                            }
-                        }
-                    },
-                )
-            }.onFailure { error -> _state.update { it.copy(problem = messageOf(error, addressOf())) } }
-            refreshInteractionsNow()
-        }
-    }
+    fun answerQuestions(callId: String, answers: List<QuestionAnswer>) =
+        interactions.answerQuestions(callId, answers)
 
     // ── catalogs, model, permissions ────────────────────────────────────────
+    //
+    // The domain lives in SettingsCoordinator. What stays here is the wiring: the
+    // live socket as a link, the connection epoch, and the diagnostics sentence a
+    // failure shows.
+
+    private val settings = SettingsCoordinator(
+        store = store,
+        scope = viewModelScope,
+        note = ::note,
+        describe = { error -> messageOf(error, addressOf()) },
+        epoch = { connectionEpoch },
+        link = { connection?.let { socket -> SocketSettingsLink(socket) } },
+    )
 
     /**
      * Read the catalogs, once unless asked again.
@@ -3009,171 +1801,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * cached the old one for the life of the process would offer a model that no
      * longer exists. `force` is what the reconnect path passes.
      */
-    fun loadCatalogs(force: Boolean = false) {
-        viewModelScope.launch {
-            val socket = connection ?: return@launch
-            if (force || _state.value.modelCatalog == null) {
-                runCatching { socket.call<ModelCatalog>("model.catalog") }
-                    .onSuccess { catalog -> _state.update { it.copy(modelCatalog = catalog) } }
-            }
-            if (force || _state.value.permissionCatalog == null) {
-                runCatching { socket.call<PermissionCatalog>("permissions.catalog") }
-                    .onSuccess { catalog -> _state.update { it.copy(permissionCatalog = catalog) } }
-            }
-        }
-    }
-
-    /**
-     * The scope a settings call belongs to, or `null` when there is nothing to ask.
-     *
-     * The connection's epoch is part of it: a reply that arrives after the socket
-     * was replaced came from a host that is no longer the one on screen, and
-     * applying it would show one computer's model for another's session.
-     */
-    private fun settingsScope(): SettingsScope? {
-        val current = _state.value
-        val host = current.host ?: return null
-        val sessionId = current.selectedSessionId ?: return null
-        return SettingsScope(host.hostId, host.deviceId, sessionId, connectionEpoch.toLong())
-    }
-
-    /** Whether a settings reply is still the one this screen is waiting for. */
-    private fun stillCurrent(scope: SettingsScope, revision: Long): Boolean =
-        SessionSettings.mayApply(scope, settingsScope(), revision, settingsRevision)
+    fun loadCatalogs(force: Boolean = false) = settings.loadCatalogs(force)
 
     /**
      * Fold a stats frame into what is on screen.
      *
-     * Keys arrive independently -- a frame carrying only the context pressure must
-     * not blank the model, the title or the permission it did not mention -- so
-     * this merges rather than replaces.
+     * The conversation's own loads carry a frame too; what a frame *means* belongs
+     * to the settings the screen shows, so the merge lives with them.
      */
-    private fun applyStats(fresh: SessionStatsFrame?) {
-        if (fresh == null) return
-        _state.update { it.copy(stats = SessionSettings.mergeStats(it.stats, fresh), statsError = null) }
-    }
+    private fun applyStats(fresh: SessionStatsFrame?) = settings.applyStats(fresh)
 
-    /**
-     * Choose the model for the session on screen.
-     *
-     * The phone shows the choice while the host is being asked, and then takes the
-     * host's answer as the truth: `session.model.set` returns what was actually
-     * selected, so a refusal clears the choice instead of leaving a model on screen
-     * that is not running. The stats readback that follows is what lets the host's
-     * own value be the one the pill names.
-     */
-    fun setModel(selection: ModelSelection) {
-        val scope = settingsScope() ?: return
-        val revision = ++settingsRevision
-        // Transient by construction: the entry is removed on either answer below.
-        _state.update { it.copy(modelChoice = it.modelChoice + (scope.sessionId to selection)) }
-        viewModelScope.launch {
-            val socket = connection ?: return@launch
-            runCatching {
-                socket.call<SelectModelResult>("session.model.set", SessionSettings.modelPayload(scope, selection))
-            }.onSuccess { result ->
-                if (!stillCurrent(scope, revision)) return@onSuccess
-                val confirmed = SessionSettings.confirmedModel(scope, result, _state.value.stats)
-                _state.update {
-                    it.copy(
-                        stats = confirmed,
-                        statsError = null,
-                        modelChoice = it.modelChoice - scope.sessionId,
-                    )
-                }
-                note("model set: ${result.selected.provider}/${result.selected.model} effort=${result.selected.reasoningEffort}")
-                refreshStats(scope, revision)
-            }.onFailure { error ->
-                if (!stillCurrent(scope, revision)) return@onFailure
-                note("model set failed: ${error.message}")
-                _state.update {
-                    it.copy(modelChoice = it.modelChoice - scope.sessionId, problem = messageOf(error, addressOf()))
-                }
-            }
-        }
-    }
+    /** Choose the model for the session on screen. */
+    fun setModel(selection: ModelSelection) = settings.setModel(selection)
 
-    /** Read the session's stats back, keeping whatever a partial frame omits. */
-    private suspend fun refreshStats(scope: SettingsScope, revision: Long) {
-        val socket = connection ?: return
-        runCatching {
-            socket.call<SessionStatsResult>("session.stats", payload("sessionId" to jsonString(scope.sessionId)))
-        }.onSuccess { result ->
-            if (!stillCurrent(scope, revision)) return@onSuccess
-            applyStats(result.stats)
-        }
-    }
+    fun setHomeModel(selection: ModelSelection) = settings.setHomeModel(selection)
 
-    fun setHomeModel(selection: ModelSelection) {
-        _state.update { it.copy(newSessionModel = selection) }
-    }
+    /** Apply the model chosen on the home screen to the session that just started. */
+    private suspend fun applyNewSessionModel(socket: MizarConnection, sessionId: String) =
+        settings.applyToNewSession(SocketSettingsLink(socket), sessionId)
 
-    /**
-     * Apply the model chosen on the home screen to the session that just started.
-     *
-     * The home screen has no session to point `session.model.set` at, so the choice is
-     * held in [UiState.newSessionModel] until `session.create` returns an id. Applied
-     * before the first prompt: the point of choosing on the home screen is that the
-     * session's first turn already runs on it, not the second.
-     */
-    private suspend fun applyNewSessionModel(socket: MizarConnection, sessionId: String) {
-        val selection = _state.value.newSessionModel ?: return
-        _state.update { it.copy(modelChoice = it.modelChoice + (sessionId to selection)) }
-        runCatching {
-            socket.call<JsonObject>(
-                "session.model.set",
-                buildJsonObject {
-                    put("sessionId", sessionId)
-                    put("provider", selection.provider)
-                    put("model", selection.model)
-                    selection.reasoningEffort?.let { put("reasoningEffort", it) }
-                },
-            )
-        }.onFailure { error ->
-            _state.update { it.copy(problem = messageOf(error, addressOf())) }
-        }
-    }
-
-    /**
-     * Change the session's permission preset.
-     *
-     * The command's own answer says the request was accepted, not that the preset
-     * changed, so the screen waits for `session.stats` to report it and says so
-     * when the host disagrees. Reloading the whole conversation for this would have
-     * cost a page of records for one line of stats.
-     */
-    fun setPermission(preset: String) {
-        val scope = settingsScope() ?: return
-        val revision = ++settingsRevision
-        viewModelScope.launch {
-            val socket = connection ?: return@launch
-            runCatching {
-                socket.call<SetPermissionResult>(
-                    "session.permission.set",
-                    payload("sessionId" to jsonString(scope.sessionId), "preset" to jsonString(preset)),
-                )
-            }.onSuccess {
-                if (!stillCurrent(scope, revision)) return@onSuccess
-                runCatching {
-                    socket.call<SessionStatsResult>(
-                        "session.stats",
-                        payload("sessionId" to jsonString(scope.sessionId)),
-                    )
-                }.onSuccess { result ->
-                    if (!stillCurrent(scope, revision)) return@onSuccess
-                    applyStats(result.stats)
-                    if (!SessionSettings.permissionConfirmed(scope, preset, result)) {
-                        _state.update {
-                            it.copy(problem = it.problem ?: "the host did not confirm the new permission")
-                        }
-                    }
-                }
-            }.onFailure { error ->
-                if (!stillCurrent(scope, revision)) return@onFailure
-                _state.update { it.copy(problem = messageOf(error, addressOf())) }
-            }
-        }
-    }
+    /** Change the session's permission preset. */
+    fun setPermission(preset: String) = settings.setPermission(preset)
 
     // ── push ────────────────────────────────────────────────────────────────
 
@@ -3206,48 +1854,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Report whether the app is on screen, which decides who gets notified. */
+    // ── preferences ─────────────────────────────────────────────────────────
+    //
+    // One line each: the switch is stored and shown together, and both halves live
+    // in PreferencesCoordinator. The view model stays the name the screens call.
+
     /** Remember the theme across launches. */
-    fun setTheme(mode: ThemeMode) {
-        activity.setThemeMode(mode.name.lowercase())
-        _state.update { it.copy(themeMode = mode) }
-    }
+    fun setTheme(mode: ThemeMode) = preferences.setTheme(mode)
 
     /** Remember the quiet-hours switch; the announcer reads the store directly. */
-    fun setQuietHours(on: Boolean) {
-        activity.setQuietHours(on)
-        _state.update { it.copy(quietHours = on) }
-    }
+    fun setQuietHours(on: Boolean) = preferences.setQuietHours(on)
 
-    fun setNotifyCompleted(on: Boolean) {
-        activity.setNotifyCompleted(on)
-        _state.update { it.copy(notifyCompleted = on) }
-    }
+    fun setNotifyCompleted(on: Boolean) = preferences.setNotifyCompleted(on)
 
-    fun setNotifyInterrupted(on: Boolean) {
-        activity.setNotifyInterrupted(on)
-        _state.update { it.copy(notifyInterrupted = on) }
-    }
+    fun setNotifyInterrupted(on: Boolean) = preferences.setNotifyInterrupted(on)
 
-    fun setNotifyQuestions(on: Boolean) {
-        activity.setNotifyQuestions(on)
-        _state.update { it.copy(notifyQuestions = on) }
-    }
+    fun setNotifyQuestions(on: Boolean) = preferences.setNotifyQuestions(on)
 
-    fun setNotifyApprovals(on: Boolean) {
-        activity.setNotifyApprovals(on)
-        _state.update { it.copy(notifyApprovals = on) }
-    }
+    fun setNotifyApprovals(on: Boolean) = preferences.setNotifyApprovals(on)
 
-    fun setHapticsEnabled(on: Boolean) {
-        activity.setHapticsEnabled(on)
-        _state.update { it.copy(hapticsEnabled = on) }
-    }
+    fun setHapticsEnabled(on: Boolean) = preferences.setHapticsEnabled(on)
 
-    fun setSlowTypewriter(on: Boolean) {
-        activity.setSlowTypewriter(on)
-        _state.update { it.copy(slowTypewriter = on) }
-    }
+    fun setSlowTypewriter(on: Boolean) = preferences.setSlowTypewriter(on)
 
     /**
      * Prefer the local network over the relay, like iOS 0.9.4's transfer setting.
@@ -3348,7 +1976,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // One dial at a time. The host cutting its tunnel usually starts the
             // patient reconnect loop, and two loops racing for the socket would
             // leave whichever finished last as the live one.
-            cancelReconnect()
+            reconnect.cancel()
             val host = _state.value.host ?: return@launch
             note("relay: redialling $baseUrl")
             connect(host, preferred = PairingRoute.Relay(baseUrl))
@@ -3406,8 +2034,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     // state on a socket that is no longer `connection` must not start a
                     // reconnect loop for the relay we just left.
                     stopWatchers()
-                    connectionObserver?.cancel()
-                    connectionObserver = null
+                    monitor.stopConnectionWatch()
                     connection = candidateWelcome
                     connectionEpoch++
                     runCatching { socket.disconnect() }
@@ -3468,90 +2095,46 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── internals ───────────────────────────────────────────────────────────
 
+    // ── the monitor ─────────────────────────────────────────────────────────
+    //
+    // The rules live in ConnectionMonitor: the poll is the heartbeat, two silent polls
+    // mean the socket is dead, and only the socket on screen may start a reconnect.
+    // What stays here is what each of those facts does to the rest of the app.
+
+    private val monitor = ConnectionMonitor(
+        store = store,
+        scope = viewModelScope,
+        note = ::note,
+        dispatcher = Dispatchers.Default,
+        pollInteractions = ::refreshInteractionsNow,
+        recordLatency = ::recordLatency,
+        pollSessions = { refreshSessionsNow() },
+        onEvent = { frame ->
+            if (frame.name in INTERACTION_EVENTS) refreshInteractionsNow()
+            // The host knows when a turn ends; a connected client should be told, not
+            // left to infer it from a list refresh.
+            if (frame.name == "turn.settled") onTurnSettled(frame.data)
+            // Another device asked the host to move its tunnel; the base URL this phone
+            // stores has to follow, or the next reconnect dials a relay the host left.
+            if (frame.name == "relay.changed") applyRelayChanged(frame.data)
+        },
+        onSilent = { reason ->
+            val host = _state.value.host
+            if (host != null) beginReconnect(host, reason) else connection?.disconnect()
+        },
+        anythingRunning = {
+            notifier.anyRunning() ||
+                _state.value.host?.hostId?.let { activity.hasRunningSessions(it) } == true
+        },
+        isForeground = { foreground },
+    )
+
     private fun startWatchers(socket: MizarConnection) {
-        // Off the main dispatcher on purpose. Everything here is network work, and the
-        // loop is also the connection's heartbeat -- a heartbeat that shares a thread
-        // with the UI stops when the UI does, which is exactly when nobody is watching
-        // it. On a backgrounded phone that showed up as minutes of silence: no polls,
-        // no reconnect, and every completion in the gap lost.
-        watchers = viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
-            // The pushed signals, plus a safety-net poll. Notifications are best
-            // effort, and a notification lost to a reconnect must not leave a card on
-            // screen that no longer exists.
-            launch {
-                socket.events().collect { frame ->
-                    if (frame is me.shirazu.mizar.kit.ServerFrame.Event) {
-                        note("event ${frame.name}")
-                        if (frame.name in INTERACTION_EVENTS) refreshInteractionsNow()
-                        // The host knows when a turn ends; a connected client should be
-                        // told, not left to infer it from a list refresh.
-                        if (frame.name == "turn.settled") onTurnSettled(frame.data)
-                        // Another device asked the host to move its tunnel; the base
-                        // URL this phone stores has to follow, or the next reconnect
-                        // dials a relay the host has left.
-                        if (frame.name == "relay.changed") applyRelayChanged(frame.data)
-                    }
-                }
-            }
-            var silentPolls = 0
-            var ticks = 0
-            try {
-                while (true) {
-                    // The relay has to survive the internet; a LAN socket is a round trip
-                    // on the same wire, so the interaction poll can be three seconds
-                    // instead of ten without making the radio work harder than the UI.
-                    delay(if (_state.value.isLocalNetwork) LAN_INTERACTION_POLL_MILLIS else INTERACTION_POLL_MILLIS)
-                    // The poll is a round trip, so it is also the clock: timing the one
-                    // request the app already makes is how the notice learns the distance
-                    // without a second protocol message invented for it.
-                    val askedAt = System.nanoTime()
-                    val answered = refreshInteractionsNow()
-                    if (answered) recordLatency((System.nanoTime() - askedAt) / 1_000_000)
-                    if (!answered && isActive) {
-                        // The poll is also the heartbeat. A websocket through a relay can
-                        // be dead while both read loops stay happy -- the tunnel drops the
-                        // mapping and the relay goes on answering websocket pings -- so an
-                        // unanswered question is the only evidence there is. Without this,
-                        // the app sat "connected" for minutes at a time and every
-                        // completion in the gap was lost: no event, and the list poll that
-                        // would have caught it was failing silently too.
-                        silentPolls += 1
-                        note("poll got no answer ($silentPolls)")
-                        if (silentPolls >= 2) {
-                            note("the socket is dead; reconnecting")
-                            val host = _state.value.host
-                            if (host != null) beginReconnect(host, "the host stopped answering") else socket.disconnect()
-                            return@launch
-                        }
-                    } else {
-                        silentPolls = 0
-                    }
-                    ticks += 1
-                    if (ticks % 6 == 0) {
-                        note("heartbeat: connected=${connection != null} silent=$silentPolls foreground=$foreground")
-                    }
-                    // No pushed signal says "the turn ended", so while the screen is elsewhere
-                    // the list is the only place to see it -- and only worth asking when
-                    // something was actually running. Bounded, because this read is the
-                    // long one: left to the default minute per call it blocked the poll
-                    // that watches for silence, and a dead socket went unnoticed for
-                    // minutes at a time.
-                    val hostId = _state.value.host?.hostId
-                    if (!foreground && (wasRunning.values.any { it } || hostId?.let { activity.hasRunningSessions(it) } == true)) {
-                        withTimeoutOrNull(SESSIONS_POLL_TIMEOUT_MILLIS) {
-                            runCatching { refreshSessionsNow() }
-                        }
-                    }
-                }
-            } finally {
-                note("watchers stopped")
-            }
-        }
+        monitor.start(SocketMonitor(socket), isLive = { connection === socket })
     }
 
     private fun stopWatchers() {
-        watchers?.cancel()
-        watchers = null
+        monitor.stop()
     }
 
     /**
@@ -3585,18 +2168,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun regroup() {
-        _state.update { current ->
-            current.copy(
-                groups = SessionGrouping.groups(
-                    current.sessions,
-                    current.workspacePaths,
-                    current.selectedSessionId,
-                    current.workspaces.associate { it.path to it.title },
-                ),
-            )
-        }
-    }
 
     /**
      * Archive a session on the computer, and take it off this phone's list.
@@ -3623,8 +2194,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         modelChoice = current.modelChoice - sessionId,
                     )
                 }
-                regroup()
-                persistIndex()
+                index.regroup()
+                index.persist()
                 refreshSessionsNow()
             }.onFailure { error ->
                 _state.update { it.copy(problem = messageOf(error, addressOf())) }
@@ -3646,70 +2217,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             ?: run { note("settled: no sessionId in the frame"); return }
         // The turn this card reports on is over: take it down before anything else,
         // so a slow refresh below cannot leave it up on the lock screen.
-        if (liveSessionId == sessionId) {
-            LiveTurn.hide(getApplication())
-            liveSessionId = null
-            liveSignature = null
-            runningSince.remove(sessionId)
-        }
+        liveTurn.forget(sessionId)
         // Before any decision about the notice: the transcript is stale the moment the
         // turn ends, in the foreground as much as in the background. A refresh that
         // only happened off screen is what left the row saying "running" while the
         // operator watched it finish.
         afterTurnSettled(sessionId)
-        if (foreground) { note("settled $sessionId: on screen, nothing to announce"); return }
-        if (announcer.announcedRecently(sessionId, System.currentTimeMillis())) { note("settled $sessionId: already announced"); return }
-        if (activity.quietHours() && isQuietNow()) { note("settled $sessionId: quiet hours"); return }
-
-        val context = getApplication<Application>()
-        val detail = describeFinished(sessionId)
-        if ((detail.failed && !_state.value.notifyInterrupted) || (!detail.failed && !_state.value.notifyCompleted)) {
-            note("settled $sessionId: notice category off")
-            return
-        }
-        val title = context.getString(
-            if (detail.failed) R.string.turn_failed_notice_title else R.string.turn_completed_title,
-        )
-        val name = _state.value.titles[sessionId] ?: sessionId.takeLast(8)
-        val body = detail.summary
-            ?.let { context.getString(R.string.turn_completed_body, name, it) }
-            ?: context.getString(R.string.turn_completed_body_plain, name)
-        val posted = runCatching {
-            Notifications.show(
-                context,
-                title,
-                body,
-                sessionId,
-                baseId = me.shirazu.dshmizar.push.Notifications.FINISHED_NOTIFICATION_BASE,
-            )
-        }.getOrDefault(false)
-        if (posted) announcer.record(sessionId, System.currentTimeMillis())
-        note("settled $sessionId: posted=$posted failed=${detail.failed} body=$body")
-    }
-
-    private fun applyIndex(index: SessionIndex) {
-        // Additive only: a stored list must never wipe what a live read put on screen.
-        _state.update { current ->
-            current.copy(
-                sessions = if (current.sessions.isEmpty()) index.sessions else current.sessions,
-                titles = index.titles + current.titles,
-                workspacePaths = if (current.workspacePaths.isEmpty()) index.workspacePaths.toSet() else current.workspacePaths,
-            )
-        }
-        regroup()
-    }
-
-    private suspend fun persistIndex() {
-        val current = _state.value
-        val host = current.host ?: return
-        indexStore.save(
-            SessionIndex(
-                hostId = host.hostId,
-                sessions = current.sessions,
-                titles = current.titles,
-                workspacePaths = current.workspacePaths.toList(),
-            ),
-        )
+        notifier.announceSettled(sessionId)
     }
 
     private fun addressOf(): String? = _state.value.host?.let { it.authority ?: it.baseUrl }
@@ -3807,33 +2321,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             "question.resolved",
         )
 
-        /**
-         * The documented safety net, not the mechanism -- and short, because the thing
-         * it backs up is an agent that is stopped until somebody answers.
-         *
-         * It was 45 s, which is long enough to watch a blocked turn sit there and
-         * conclude the app is broken. Ten seconds costs one round trip on a link that
-         * is a LAN or a USB tunnel, and bounds the worst case to something an operator
-         * will wait through.
-         */
-        const val INTERACTION_POLL_MILLIS = 10_000L
-        /** Same-wire polling: three seconds instead of ten, like iOS on a LAN link. */
-        const val LAN_INTERACTION_POLL_MILLIS = 3_000L
         /** How long one LAN probe gets before the next address is tried. */
         const val LAN_PROBE_TIMEOUT_MILLIS = 4_000L
-        /** The open activity detail polls once a second, like iOS. */
-        const val ACTIVITY_POLL_MILLIS = 1_000L
-        /** Older pages accumulate up to this many lines before the oldest are dropped. */
-        const val MAX_ACTIVITY_ENTRIES = 1500
-
-        /**
-         * How many session titles a first pairing reads before letting the list lazy-load.
-         *
-         * One `session.stats` per row: a hundred rows is a hundred round trips, and a
-         * host on a slow tunnel would turn "pairing" into a minute of waiting for
-         * names nobody is looking at yet.
-         */
-        const val WARM_TITLE_LIMIT = 80
 
         /**
          * How long the host gets to move its tunnel before this phone redials.
@@ -3844,25 +2333,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
          */
         const val RELAY_SWITCH_DELAY_MILLIS = 700L
 
-        /**
-         * How long a poll waits before deciding the host is not there.
-         *
-         * Much shorter than the 60 s a normal call gets, because this is the
-         * heartbeat: the whole value of the poll is noticing silence, and a host on
-         * the other end of a tunnel answers in milliseconds when it answers at all.
-         */
-        const val POLL_TIMEOUT_MILLIS = 5_000L
-
-        /**
-         * How long the background session-list read may take.
-         *
-         * Long enough for a slow host, short enough that it cannot hold up the poll
-         * that is the connection's heartbeat.
-         */
-        const val SESSIONS_POLL_TIMEOUT_MILLIS = 20_000L
-
         /** The transcript page an open session starts with. */
-        const val FULL_PAGE = 200
+        const val FULL_PAGE = CONVERSATION_FULL_PAGE
 
         /**
          * What a refresh asks for.
@@ -3871,35 +2343,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
          * asking for the last few dozen messages is enough -- and over a tunnel it is the
          * difference between a refresh that feels immediate and one that feels broken.
          */
-        const val REFRESH_PAGE = 60
+        const val REFRESH_PAGE = CONVERSATION_REFRESH_PAGE
 
         /** How stale the screen may get before returning to it triggers a refresh. */
         const val STALE_MILLIS = 15_000L
 
         /** How much the round trip has to move before the notice is worth rewriting. */
-    private const val LATENCY_NOTICE_STEP_MILLIS = 20L
+        const val LATENCY_NOTICE_STEP_MILLIS = 20L
 
-    /** How long a posted completion counts as "the same turn" for the other path. */
-        const val ANNOUNCE_DEDUPE_MILLIS = 5_000L
-
-        /** How long a drop must last before the banner appears: one second is a blip. */
-        const val BANNER_DELAY_MILLIS = 2_000L
     }
 }
-
-/** What session.refresh answers with: one round trip for the whole screen. */
-@kotlinx.serialization.Serializable
-private data class RefreshBundle(
-    val messages: SessionMessagesResult,
-    val stats: SessionStatsResult? = null,
-    val pending: PendingInteractions? = null,
-)
-
-/** The stored spelling back into the enum; an unknown value follows the system. */
-private fun String.toThemeMode(): ThemeMode =
-    when (lowercase()) {
-        "light" -> ThemeMode.LIGHT
-        "dark" -> ThemeMode.DARK
-        else -> ThemeMode.SYSTEM
-    }
-

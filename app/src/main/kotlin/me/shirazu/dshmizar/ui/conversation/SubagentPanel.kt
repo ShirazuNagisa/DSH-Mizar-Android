@@ -107,15 +107,18 @@ internal fun SubagentList(state: UiState, children: List<SessionRow>) {
             )
         }
         children.forEachIndexed { index, child ->
-            SubagentRowItem(number = index + 1, child = child, state = state)
+            SubagentRowItem(
+                number = index + 1,
+                child = child,
+                title = state.subagentTitles[child.sessionId]
+                    ?: SessionGrouping.sessionTitle(child, state.titles),
+            )
         }
     }
 }
 
 @Composable
-private fun SubagentRowItem(number: Int, child: SessionRow, state: UiState) {
-    val title = state.subagentTitles[child.sessionId]
-        ?: SessionGrouping.sessionTitle(child, state.titles)
+private fun SubagentRowItem(number: Int, child: SessionRow, title: String) {
     val tint = if (child.running) MizarColors.Running else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         modifier = Modifier

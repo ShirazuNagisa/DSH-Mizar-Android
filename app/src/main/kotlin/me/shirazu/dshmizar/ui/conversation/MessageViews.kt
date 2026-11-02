@@ -250,11 +250,7 @@ private fun AttachmentChip(attachment: me.shirazu.mizar.kit.ConversationAttachme
         )
         attachment.bytes?.takeIf { it > 0 }?.let { bytes ->
             Text(
-                "  " + when {
-                    bytes < 1024 -> "$bytes B"
-                    bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-                    else -> String.format("%.1f MB", bytes / 1024.0 / 1024.0)
-                },
+                "  " + Format.bytes(bytes),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

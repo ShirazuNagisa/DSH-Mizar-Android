@@ -10,7 +10,7 @@
   says "1 steps". Parity over grammar here, deliberately.
 -->
 <resources>
-    <string name="app_name">DSH-Mizar</string>
+    <string name="app_name" translatable="false">DSH-Mizar</string>
     <string name="connection_service_text">Connected to the computer — this notice keeps the connection alive in the background.</string>
     <string name="connection_service_channel">Background connection</string>
     <string name="alert_channel">Agent alerts</string>
@@ -38,7 +38,6 @@
     <string name="unpaired_body">Open DSH on your computer, find the DSH-Mizar panel in the sidebar, and scan the code it shows.</string>
     <string name="scan_code">Scan the code</string>
     <string name="enter_manually">Or enter it by hand</string>
-    <string name="hide_manual">Hide manual entry</string>
     <string name="host_label">Host, for example 192.168.1.20:19390</string>
     <string name="pairing_code">Pairing code</string>
     <string name="device_name">This device</string>
@@ -59,7 +58,6 @@
     <string name="stored_sessions_kept">These sessions are from the last time this phone reached the computer.</string>
 
     <!-- The session list -->
-    <string name="session_count">%1$d sessions</string>
     <string name="refresh">Refresh</string>
     <string name="new_session">New session</string>
     <string name="copy_session_id">Copy session ID</string>
@@ -136,7 +134,6 @@
     <string name="side_page_subagents">Subagents</string>
     <string name="side_page_preview_empty">Tap a file under a turn to read it here.</string>
     <string name="side_page_preview">Preview</string>
-    <string name="preview_under_development">Under development — stay tuned.</string>
     <string name="no_sessions">No sessions yet. Start one on your computer, then refresh.</string>
     <string name="workspace_count">%1$d sessions</string>
     <string name="show_more">Show %1$d more</string>
@@ -155,7 +152,6 @@
 
     <!-- One conversation -->
     <string name="session">Session</string>
-    <string name="back">Back</string>
     <string name="nothing_yet">Nothing yet</string>
     <string name="nothing_yet_body">This session has no messages.</string>
     <string name="conversation_failed">Could not load the conversation</string>
@@ -180,8 +176,6 @@
          label, where there is room for it. -->
     <string name="context_percent">%1$d%%</string>
     <string name="context_percent_spoken">Context %1$d%% used</string>
-    <!-- The host reported no context figure: an em dash, never 0%. -->
-    <string name="context_unknown">Context —</string>
     <string name="commands">Commands</string>
     <string name="command_goal">Goal</string>
     <string name="command_plan">Plan</string>
@@ -215,15 +209,9 @@
     <string name="status_waiting">Waiting for you</string>
     <string name="status_failed">Last turn failed</string>
     <string name="new_messages">%1$d new</string>
-    <string name="copy_message">Copy the message</string>
     <string name="copied">Copied</string>
 
     <string name="jump_to_latest">Latest</string>
-
-    <string name="expand_detail">%1$d chars · expand</string>
-    <string name="collapse_detail">Collapse</string>
-
-    <string name="refreshed">Refreshed</string>
 
     <string name="copy_code">Copy code</string>
 
@@ -243,7 +231,6 @@
     <string name="turn_completed_body_plain">%1$s is ready to read.</string>
     <string name="turn_failed_notice_title">Turn failed</string>
     <string name="quiet_hours">Silence finished-turn notices at night (23:00–08:00)</string>
-    <string name="home_hint">Swipe right, or tap the button, to see your sessions.</string>
     <string name="show_sidebar">Show sessions</string>
     <string name="workspaces">WORKSPACES</string>
     <string name="search_sessions">Search conversations</string>
@@ -267,16 +254,12 @@
     <string name="turn_count">%1$d turns</string>
     <string name="turn_index_empty">This session has no turns yet.</string>
     <string name="turn_index_untitled">(no prompt)</string>
-    <string name="turn_index_unfinished">Unfinished only</string>
     <string name="turn_index_all">All</string>
     <string name="turn_index_all_finished">Every turn here finished. Choose All to see them all.</string>
     <string name="connection_details">Connection</string>
     <string name="connection_status">Status</string>
-    <string name="connection_address">Address</string>
     <string name="connection_route">Route</string>
-    <string name="connection_problem">Last problem</string>
     <string name="connection_failed">Not connected</string>
-    <string name="retry_connection">Retry</string>
     <!-- The permanent notice: who / how far, and which half of the link is down. -->
     <string name="link_connecting">Connecting…</string>
     <string name="link_reconnecting">Reconnecting…</string>
@@ -315,7 +298,6 @@
     <string name="file_preview_unsupported">This phone cannot preview that kind of file (%1$s). It is on the computer.</string>
     <string name="file_preview_truncated">Showing the first 256 KB of %1$s.</string>
     <string name="file_card_preview">Preview</string>
-    <string name="file_card_delivered">Delivered</string>
     <string name="balance">Balance</string>
     <string name="balance_explanation">The official DeepSeek wallets on the connected computer, not this phone\'s relay credits.</string>
     <string name="balance_loading">Reading…</string>
@@ -329,7 +311,6 @@
     <string name="account_sign_in">Sign in</string>
     <string name="account_sign_out">Sign out</string>
     <string name="account_create">Create account</string>
-    <string name="account_not_signed_in">Not signed in</string>
     <string name="account_free">Free account</string>
     <string name="account_paid">Paid account</string>
     <string name="account_email">Email</string>
@@ -364,7 +345,6 @@
     <string name="account_delete_action">Delete</string>
     <string name="account_cancel">Cancel</string>
     <string name="account_unreachable">Can\'t reach the account service</string>
-    <string name="account_retry">Retry</string>
     <string name="account_handoff_entry">Have a sign-in code?</string>
     <string name="account_handoff_hint">Code from the browser</string>
     <string name="account_handoff_action">Finish signing in</string>
@@ -376,5 +356,4 @@
     <string name="account_error_password">Passwords are 8-128 characters.</string>
     <string name="account_error_generic">Something went wrong. Try again.</string>
     <string name="account_error_no_browser">No browser is available to finish GitHub sign-in.</string>
-    <string name="account_close">Close</string>
 </resources>

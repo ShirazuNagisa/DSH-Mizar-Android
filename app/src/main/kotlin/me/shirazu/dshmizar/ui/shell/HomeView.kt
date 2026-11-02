@@ -57,6 +57,7 @@ import me.shirazu.dshmizar.ui.design.mizarPerform
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.MizarColors
+import me.shirazu.dshmizar.ui.modelLabel
 import me.shirazu.dshmizar.ui.design.AnchoredPopover
 import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.Glass
@@ -362,15 +363,7 @@ private fun HomeModelPill(
 ) {
     var open by remember { mutableStateOf(false) }
     val chosen = state.newSessionModel ?: state.modelCatalog?.defaultSelection
-    val effortName = chosen?.reasoningEffort?.let { effort ->
-        state.modelCatalog?.providers
-            ?.firstOrNull { it.id == chosen.provider }
-            ?.models?.firstOrNull { it.id == chosen.model }
-            ?.efforts?.firstOrNull { it.id == effort }?.name
-            ?: effort.replaceFirstChar { it.uppercase() }
-    }
-    val label = chosen?.let { listOfNotNull(it.model, effortName).joinToString(" · ") }
-        ?: stringResource(R.string.model)
+    val label = modelLabel(chosen, state.modelCatalog) ?: stringResource(R.string.model)
 
     Box {
         Row(

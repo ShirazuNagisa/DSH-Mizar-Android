@@ -1,6 +1,7 @@
 package me.shirazu.dshmizar.store
 
 import android.content.Context
+import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import kotlinx.coroutines.Dispatchers
@@ -66,8 +67,8 @@ class EncryptedAccountStore(context: Context) : AccountStoring {
     }
 
     override suspend fun clear() = withContext(Dispatchers.IO) {
-        prefs.edit().remove(KEY).commit()
-        Unit
+        // Sign-out waits for disk, as before; do not turn this into asynchronous apply().
+        prefs.edit(commit = true) { remove(KEY) }
     }
 
     private companion object {

@@ -95,7 +95,6 @@ object Notifications {
      * and it is already HIGH.
      */
     fun ensureChannel(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         manager.createNotificationChannel(
             NotificationChannel(

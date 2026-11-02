@@ -44,6 +44,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -147,7 +148,7 @@ fun SessionScreen(
     val subagents = state.sessions.filter {
         it.isSubagent && it.parentSessionId == state.selectedSessionId
     }
-    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    var now by remember { androidx.compose.runtime.mutableLongStateOf(System.currentTimeMillis()) }
 
     BackHandler(enabled = !drawerOpen) { model.selectSession(null) }
 
@@ -197,7 +198,7 @@ fun SessionScreen(
     // there too. `itemCount` is an effect key on purpose: the first pass runs before the
     // list has measured anything, and scrolling then scrolled to the top -- which is
     // exactly the "always opens at the top" the operator reported.
-    val itemCount = list.layoutInfo.totalItemsCount
+    val itemCount by remember(list) { derivedStateOf { list.layoutInfo.totalItemsCount } }
 
     LaunchedEffect(state.selectedSessionId) {
         counted = 0
@@ -262,7 +263,7 @@ fun SessionScreen(
     // transcript are the real corrections; this is the belt.
     val sessionRunning = state.sessions.firstOrNull { it.sessionId == state.selectedSessionId }?.running == true
     val newestAt = state.conversation.lastOrNull()?.atMillis
-    val recent = newestAt != null && System.currentTimeMillis() - newestAt < IN_FLIGHT_FRESH_MILLIS
+    val recent = isRecent(newestAt, System.currentTimeMillis())
     val lastTurn = state.turns.lastOrNull()
     val inFlight = lastTurn != null && (lastTurn.isRunning || lastTurn.isPending) && (sessionRunning || recent)
     val running = sessionRunning || inFlight
@@ -415,7 +416,8 @@ fun SessionScreen(
                                 maxHeight = PopoverSize.COMPACT_HEIGHT,
                             ) {
                                 PermissionContent(
-                                    state = state,
+                                    catalog = state.permissionCatalog,
+                                    inForce = state.stats?.permissionPreset,
                                     onChoose = { preset ->
                                         showingPermissions = false
                                         model.setPermission(preset)
@@ -639,12 +641,3 @@ private fun StatusLine(running: Boolean, pending: Boolean, failed: Boolean) {
         )
     }
 }
-
-/**
- * How long a copy of the transcript is trusted to say "a turn is in flight".
- *
- * The window between sending a prompt and the host opening its turn is milliseconds;
- * two minutes is generous for that window and short enough that a stale copy cannot
- * hold the screen on "深度求索中~" after the work is over.
- */
-private const val IN_FLIGHT_FRESH_MILLIS = 120_000L

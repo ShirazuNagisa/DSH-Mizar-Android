@@ -35,12 +35,23 @@ object SessionSettings {
     fun permissions(catalog: PermissionCatalog?): List<PermissionOption> =
         catalog?.options.orEmpty().filter { it.value.isNotBlank() && it.value != "custom" }.distinctBy { it.value }
 
-    fun modelPayload(scope: SettingsScope, selection: ModelSelection): JsonObject = buildJsonObject {
-        put("sessionId", scope.sessionId)
+    /**
+     * The `session.model.set` arguments.
+     *
+     * One builder for both callers: a session being opened (which knows only its
+     * id) and a live session being changed (which has a [SettingsScope]). The scope
+     * overload exists for the second; it does not add anything to the payload, and
+     * the id overload is the same bytes without inventing a scope.
+     */
+    fun modelPayload(sessionId: String, selection: ModelSelection): JsonObject = buildJsonObject {
+        put("sessionId", sessionId)
         put("provider", selection.provider)
         put("model", selection.model)
         selection.reasoningEffort?.let { put("reasoningEffort", it) }
     }
+
+    fun modelPayload(scope: SettingsScope, selection: ModelSelection): JsonObject =
+        modelPayload(scope.sessionId, selection)
 
     fun mayApply(request: SettingsScope, current: SettingsScope?, revision: Long, currentRevision: Long): Boolean =
         request == current && revision == currentRevision

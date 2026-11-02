@@ -3,6 +3,7 @@ package me.shirazu.dshmizar.ui
 import android.text.format.DateUtils
 import java.text.DateFormat
 import java.util.Date
+import java.util.Locale
 import kotlin.math.roundToLong
 
 /**
@@ -42,10 +43,25 @@ object Format {
         DateFormat.getTimeInstance(DateFormat.MEDIUM).format(Date(millis))
 
     /** A grouped integer, which is what the usage figures are read at. */
-    fun count(value: Long): String = String.format("%,d", value)
+    fun count(value: Long): String = String.format(Locale.getDefault(Locale.Category.FORMAT), "%,d", value)
 
     /** `12,345` or an em dash — **never** a zero for a figure the host did not send. */
     fun countOrDash(value: Long?): String = value?.let { count(it) } ?: "—"
+
+    /**
+     * Bytes in the units a person reads: raw under a kilobyte, whole kilobytes
+     * under a megabyte, one decimal above.
+     *
+     * There is deliberately no gigabyte unit: a 5 GiB file reads "5120.0 MB", which
+     * is what both the attachment chip and the file preview have always shown. The
+     * kilobytes truncate rather than round, so 1023.9 KB reads "1023 KB" and a file
+     * never looks smaller than it is.
+     */
+    fun bytes(value: Long): String = when {
+        value < 1024 -> "$value B"
+        value < 1024 * 1024 -> "${value / 1024} KB"
+        else -> String.format(Locale.getDefault(Locale.Category.FORMAT), "%.1f MB", value / 1024.0 / 1024.0)
+    }
 
     /**
      * The cache-hit figure, exactly as the host spelled it.

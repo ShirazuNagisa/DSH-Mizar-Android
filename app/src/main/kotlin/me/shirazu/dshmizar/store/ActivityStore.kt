@@ -1,6 +1,8 @@
 package me.shirazu.dshmizar.store
 
 import android.content.Context
+import me.shirazu.dshmizar.domain.Preferences
+import me.shirazu.dshmizar.domain.RunningBaseline
 
 /**
  * What the operator has already looked at.
@@ -10,7 +12,7 @@ import android.content.Context
  * unavailable would be a poor trade. Keyed by host id, because "last opened" is a fact
  * about one machine's session list, not about the phone.
  */
-class ActivityStore(context: Context) {
+class ActivityStore(context: Context) : Preferences, RunningBaseline {
 
     private val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
@@ -44,9 +46,9 @@ class ActivityStore(context: Context) {
     }
 
     /** How the operator wants the screen lit: "system" (the default), "light" or "dark". */
-    fun themeMode(): String = prefs.getString(THEME, "system") ?: "system"
+    override fun themeMode(): String = prefs.getString(THEME, "system") ?: "system"
 
-    fun setThemeMode(mode: String) {
+    override fun setThemeMode(mode: String) {
         prefs.edit().putString(THEME, mode).apply()
     }
 
@@ -57,13 +59,13 @@ class ActivityStore(context: Context) {
      * a phone that was frozen mid-turn restored an empty in-memory baseline, and the
      * completion that happened while it was away was then never announced.
      */
-    fun runningSession(hostId: String, sessionId: String): Boolean =
+    override fun runningSession(hostId: String, sessionId: String): Boolean =
         prefs.getBoolean(key(hostId, "run.$sessionId"), false)
 
     /** Whether any session on this host is still recorded as running. */
     fun hasRunningSessions(hostId: String): Boolean = prefs.all.keys.any { it.startsWith("$hostId/run.") }
 
-    fun setRunningSession(hostId: String, sessionId: String, running: Boolean) {
+    override fun setRunningSession(hostId: String, sessionId: String, running: Boolean) {
         prefs.edit().apply {
             if (running) putBoolean(key(hostId, "run.$sessionId"), true)
             else remove(key(hostId, "run.$sessionId"))
@@ -71,30 +73,30 @@ class ActivityStore(context: Context) {
     }
 
     /** Whether finished-turn notices are silenced between 23:00 and 08:00. */
-    fun quietHours(): Boolean = prefs.getBoolean(QUIET, false)
-    fun setQuietHours(on: Boolean) { prefs.edit().putBoolean(QUIET, on).apply() }
+    override fun quietHours(): Boolean = prefs.getBoolean(QUIET, false)
+    override fun setQuietHours(on: Boolean) { prefs.edit().putBoolean(QUIET, on).apply() }
 
     // Four independent notice categories, as in iOS. A category that is off is
     // dropped where it arrives -- not hidden by a system setting the app cannot see.
-    fun notifyCompleted(): Boolean = prefs.getBoolean(NOTIFY_COMPLETED, true)
-    fun setNotifyCompleted(on: Boolean) { prefs.edit().putBoolean(NOTIFY_COMPLETED, on).apply() }
+    override fun notifyCompleted(): Boolean = prefs.getBoolean(NOTIFY_COMPLETED, true)
+    override fun setNotifyCompleted(on: Boolean) { prefs.edit().putBoolean(NOTIFY_COMPLETED, on).apply() }
 
-    fun notifyInterrupted(): Boolean = prefs.getBoolean(NOTIFY_INTERRUPTED, true)
-    fun setNotifyInterrupted(on: Boolean) { prefs.edit().putBoolean(NOTIFY_INTERRUPTED, on).apply() }
+    override fun notifyInterrupted(): Boolean = prefs.getBoolean(NOTIFY_INTERRUPTED, true)
+    override fun setNotifyInterrupted(on: Boolean) { prefs.edit().putBoolean(NOTIFY_INTERRUPTED, on).apply() }
 
-    fun notifyQuestions(): Boolean = prefs.getBoolean(NOTIFY_QUESTIONS, true)
-    fun setNotifyQuestions(on: Boolean) { prefs.edit().putBoolean(NOTIFY_QUESTIONS, on).apply() }
+    override fun notifyQuestions(): Boolean = prefs.getBoolean(NOTIFY_QUESTIONS, true)
+    override fun setNotifyQuestions(on: Boolean) { prefs.edit().putBoolean(NOTIFY_QUESTIONS, on).apply() }
 
-    fun notifyApprovals(): Boolean = prefs.getBoolean(NOTIFY_APPROVALS, true)
-    fun setNotifyApprovals(on: Boolean) { prefs.edit().putBoolean(NOTIFY_APPROVALS, on).apply() }
+    override fun notifyApprovals(): Boolean = prefs.getBoolean(NOTIFY_APPROVALS, true)
+    override fun setNotifyApprovals(on: Boolean) { prefs.edit().putBoolean(NOTIFY_APPROVALS, on).apply() }
 
     /** Whether the operator wants the app to use haptics at all. */
-    fun hapticsEnabled(): Boolean = prefs.getBoolean(HAPTICS, true)
-    fun setHapticsEnabled(on: Boolean) { prefs.edit().putBoolean(HAPTICS, on).apply() }
+    override fun hapticsEnabled(): Boolean = prefs.getBoolean(HAPTICS, true)
+    override fun setHapticsEnabled(on: Boolean) { prefs.edit().putBoolean(HAPTICS, on).apply() }
 
     /** Slower typewriter, for watching the reveal on a real screen. */
-    fun slowTypewriter(): Boolean = prefs.getBoolean(SLOW_TYPEWRITER, false)
-    fun setSlowTypewriter(on: Boolean) { prefs.edit().putBoolean(SLOW_TYPEWRITER, on).apply() }
+    override fun slowTypewriter(): Boolean = prefs.getBoolean(SLOW_TYPEWRITER, false)
+    override fun setSlowTypewriter(on: Boolean) { prefs.edit().putBoolean(SLOW_TYPEWRITER, on).apply() }
 
     /**
      * Whether the operator wants the LAN tried before the relay.
@@ -104,7 +106,7 @@ class ActivityStore(context: Context) {
      * probes. Turning it on is what unlocks the faster poll and the two
      * transfer features that do not go through the relay.
      */
-    fun localNetworkFirst(): Boolean = prefs.getBoolean(LAN_FIRST, false)
+    override fun localNetworkFirst(): Boolean = prefs.getBoolean(LAN_FIRST, false)
     fun setLocalNetworkFirst(on: Boolean) { prefs.edit().putBoolean(LAN_FIRST, on).apply() }
 
     private fun key(hostId: String, suffix: String) = "$hostId/$suffix"

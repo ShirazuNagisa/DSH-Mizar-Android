@@ -18,6 +18,10 @@ import java.io.File
  * @property status the status the host answered.
  * @property body the answer's body, verbatim.
  * @property note why this exchange matters, when the recording is hand-annotated.
+ * @property requestBody the body the client sent, when the scenario depends on it.
+ *   Optional so older recordings still load; when present, a request with any
+ *   other body does not match, which is what makes "the same path, a different
+ *   payload" a failure instead of a silent pass.
  */
 @Serializable
 data class RecordedExchange(
@@ -27,6 +31,14 @@ data class RecordedExchange(
     val body: String = "",
     val headers: Map<String, String> = emptyMap(),
     val note: String? = null,
+    val requestBody: String? = null,
+)
+
+/** One request a replay was actually asked for, in the order it arrived. */
+data class AskedRequest(
+    val method: String,
+    val path: String,
+    val body: String?,
 )
 
 /** A named set of exchanges: one scenario a client can be driven through. */
@@ -53,12 +65,32 @@ class HttpReplay(private val recording: Recording) : HttpTransport {
     var served: Int = 0
         private set
 
+    /**
+     * Every request this replay was asked for, in arrival order.
+     *
+     * A test that only counts answers cannot tell "asked once, correctly" from
+     * "asked twice, once wrong". This is the half the replay used to keep to itself.
+     */
+    private val asked = mutableListOf<AskedRequest>()
+
+    /** The requests so far, in order. */
+    val requests: List<AskedRequest> get() = asked.toList()
+
     override suspend fun send(request: HttpRequest): HttpResponse {
         val path = pathOf(request.url)
+        val method = request.method.uppercase()
+        asked += AskedRequest(method, path, request.body)
+
         val match = recording.exchanges.lastOrNull {
-            it.method.equals(request.method, ignoreCase = true) && it.path == path
+            it.method.equals(method, ignoreCase = true) &&
+                it.path == path &&
+                // A recording that names a body means it: the same endpoint called
+                // with a different payload is a different scenario.
+                (it.requestBody == null || it.requestBody == request.body)
         } ?: throw AssertionError(
-            "no recorded exchange for ${request.method} $path in \"${recording.name}\" " +
+            "no recorded exchange for $method $path" +
+                (request.body?.let { " with body ${it.take(120)}" } ?: "") +
+                " in \"${recording.name}\" " +
                 "(recorded: ${recording.exchanges.joinToString { "${it.method} ${it.path}" }})",
         )
         served += 1
@@ -109,6 +141,10 @@ class RecordingTransport(
             status = response.status,
             body = response.body,
             headers = response.headers,
+            // Written down so the next replay can insist on it: a pairing body
+            // carries the code and the device name, and a recording that ignored
+            // them would replay happily against a client that stopped sending them.
+            requestBody = request.body,
         )
         return response
     }

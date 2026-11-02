@@ -78,6 +78,7 @@ import me.shirazu.dshmizar.UiState
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.AnchoredPopover
 import me.shirazu.dshmizar.ui.design.Corner
+import me.shirazu.dshmizar.ui.hexColor
 import me.shirazu.dshmizar.ui.design.GlassCircleLabel
 import me.shirazu.dshmizar.ui.design.LightUp
 import me.shirazu.dshmizar.ui.design.LocalReduceMotion
@@ -583,7 +584,7 @@ private fun AccountOrSettings(
         }
         return
     }
-    val colors = profile.avatar.colors.mapNotNull(::parseHexColor).takeIf { it.isNotEmpty() }
+    val colors = profile.avatar.colors.mapNotNull(::hexColor).takeIf { it.isNotEmpty() }
         ?: listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary)
     Box(
         modifier = Modifier
@@ -610,17 +611,6 @@ private fun AccountOrSettings(
         }
     }
 }
-
-/** `#rrggbb` or `#aarrggbb`, as the account avatar palette writes it. */
-private fun parseHexColor(value: String): Color? = runCatching {
-    val hex = value.removePrefix("#")
-    val argb = when (hex.length) {
-        6 -> 0xFF000000L or hex.toLong(16)
-        8 -> hex.toLong(16)
-        else -> return null
-    }
-    Color(argb.toInt())
-}.getOrNull()
 
 /**
  * The connection, as the icon's own mark: lit and still while the socket is up,

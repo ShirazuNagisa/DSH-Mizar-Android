@@ -7,7 +7,6 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -90,11 +89,7 @@ class ConnectionService : Service() {
             val intent = Intent(context, ConnectionService::class.java).apply {
                 if (text != null) putExtra(EXTRA_TEXT, text)
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
+            context.startForegroundService(intent)
         }
 
         /** Stop the keep-alive; the connection is gone, so should the notice be. */
@@ -143,7 +138,6 @@ class ConnectionService : Service() {
          * importance — which is the only part a user owns.
          */
         fun ensureChannel(context: Context) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
             val manager = context.getSystemService(NotificationManager::class.java) ?: return
             manager.createNotificationChannel(
                 NotificationChannel(

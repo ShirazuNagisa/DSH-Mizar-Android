@@ -12,7 +12,6 @@
     <string name="unpaired_body">在电脑上打开 DSH，在侧边栏找到 DSH-Mizar 面板，扫描它显示的二维码。</string>
     <string name="scan_code">扫描二维码</string>
     <string name="enter_manually">或手动输入</string>
-    <string name="hide_manual">收起手动输入</string>
     <string name="host_label">主机，例如 192.168.1.20:19390</string>
     <string name="pairing_code">配对码</string>
     <string name="device_name">这台设备</string>
@@ -31,7 +30,6 @@
     <string name="cannot_recognise">这台电脑不认得这台手机</string>
     <string name="stored_sessions_kept">这些会话来自上次成功连接时的记录。</string>
 
-    <string name="session_count">%1$d 个会话</string>
     <string name="refresh">刷新</string>
     <string name="new_session">新建会话</string>
     <string name="copy_session_id">复制会话 ID</string>
@@ -108,7 +106,6 @@
     <string name="side_page_subagents">子代理</string>
     <string name="side_page_preview_empty">点开某一轮下面的交付文件，会在这里显示。</string>
     <string name="side_page_preview">预览</string>
-    <string name="preview_under_development">还在开发中，敬请期待。</string>
     <string name="no_sessions">还没有会话。在电脑上新建一个，然后刷新。</string>
     <string name="workspace_count">%1$d 个会话</string>
     <string name="show_more">再显示 %1$d 个</string>
@@ -125,7 +122,6 @@
     <string name="add_mac">添加一台电脑</string>
 
     <string name="session">会话</string>
-    <string name="back">返回</string>
     <string name="nothing_yet">还没有内容</string>
     <string name="nothing_yet_body">这个会话没有消息。</string>
     <string name="conversation_failed">无法加载对话</string>
@@ -147,7 +143,6 @@
     <string name="context">上下文</string>
     <string name="context_percent">%1$d%%</string>
     <string name="context_percent_spoken">上下文已用 %1$d%%</string>
-    <string name="context_unknown">上下文 —</string>
     <string name="commands">命令</string>
     <string name="command_goal">目标</string>
     <string name="command_plan">计划</string>
@@ -180,15 +175,9 @@
     <string name="status_failed">上一轮失败</string>
 
     <string name="new_messages">%1$d 条新消息</string>
-    <string name="copy_message">复制整条消息</string>
     <string name="copied">已复制</string>
 
     <string name="jump_to_latest">回到最新</string>
-
-    <string name="expand_detail">%1$d 字 · 展开全文</string>
-    <string name="collapse_detail">收起</string>
-
-    <string name="refreshed">已刷新</string>
 
     <string name="copy_code">复制代码</string>
 
@@ -208,7 +197,6 @@
     <string name="turn_completed_body_plain">%1$s 已完成，可以查看。</string>
     <string name="turn_failed_notice_title">本轮失败</string>
     <string name="quiet_hours">夜间静音（23:00–08:00 不推完成通知）</string>
-    <string name="home_hint">右滑或点按钮查看会话列表。</string>
     <string name="show_sidebar">查看会话</string>
     <string name="workspaces">工作区</string>
     <string name="search_sessions">搜索会话</string>
@@ -232,7 +220,6 @@
     <string name="turn_count">%1$d 个轮次</string>
     <string name="turn_index_empty">这个会话还没有轮次。</string>
     <string name="turn_index_untitled">（无提示）</string>
-    <string name="turn_index_unfinished">只看未完成</string>
     <string name="turn_index_all">全部</string>
     <string name="turn_index_all_finished">这里的轮次都已完成。选“全部”可看全部。</string>
 
@@ -257,11 +244,8 @@
     <string name="diagnosis_unknown_host">无法解析 %1$s。请检查配对码里的地址。</string>
     <string name="connection_details">连接</string>
     <string name="connection_status">状态</string>
-    <string name="connection_address">地址</string>
     <string name="connection_route">路径</string>
-    <string name="connection_problem">最近的错误</string>
     <string name="connection_failed">未连接</string>
-    <string name="retry_connection">重试</string>
     <!-- 常驻通知：连上时是谁、多远；断了是哪一段。 -->
     <string name="link_connecting">正在连接…</string>
     <string name="link_reconnecting">正在重新连接…</string>
@@ -300,7 +284,6 @@
     <string name="file_preview_unsupported">这种文件手机预览不了（%1$s），文件在电脑上。</string>
     <string name="file_preview_truncated">只显示前 256 KB，共 %1$s。</string>
     <string name="file_card_preview">预览</string>
-    <string name="file_card_delivered">交付文件</string>
     <string name="balance">余额</string>
     <string name="balance_explanation">这里显示所连电脑的 DeepSeek 官方钱包，不是这台手机的中继额度。</string>
     <string name="balance_loading">读取中…</string>
@@ -314,7 +297,6 @@
     <string name="account_sign_in">登录</string>
     <string name="account_sign_out">退出登录</string>
     <string name="account_create">注册账户</string>
-    <string name="account_not_signed_in">未登录</string>
     <string name="account_free">免费账户</string>
     <string name="account_paid">付费账户</string>
     <string name="account_email">邮箱</string>
@@ -349,7 +331,6 @@
     <string name="account_delete_action">删除</string>
     <string name="account_cancel">取消</string>
     <string name="account_unreachable">暂时无法连接账户服务</string>
-    <string name="account_retry">重试</string>
     <string name="account_handoff_entry">有登录代码？</string>
     <string name="account_handoff_hint">浏览器里显示的代码</string>
     <string name="account_handoff_action">完成登录</string>
@@ -361,6 +342,5 @@
     <string name="account_error_password">密码长度为 8-128 个字符。</string>
     <string name="account_error_generic">出了点问题，请重试。</string>
     <string name="account_error_no_browser">没有可用的浏览器，无法完成 GitHub 登录。</string>
-    <string name="account_close">关闭</string>
 </resources>
 

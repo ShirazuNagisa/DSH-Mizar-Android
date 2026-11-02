@@ -104,7 +104,6 @@ object LiveTurn {
 
     /** Create the channel, or bring its text up to date in the current language. */
     fun ensureChannel(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         manager.createNotificationChannel(
             NotificationChannel(

@@ -35,7 +35,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
+import me.shirazu.mizar.kit.ContextPressure
 import me.shirazu.mizar.kit.ModelRouting
+import me.shirazu.mizar.kit.PermissionCatalog
 import me.shirazu.mizar.kit.SessionSettings
 import me.shirazu.dshmizar.ui.Format
 import me.shirazu.dshmizar.ui.MizarColors
@@ -188,9 +190,12 @@ private fun EffortChooser(
 
 /** Choose a permission preset, with a warning in front of the dangerous one. */
 @Composable
-internal fun PermissionContent(state: UiState, onChoose: (String) -> Unit) {
+internal fun PermissionContent(
+    catalog: PermissionCatalog?,
+    inForce: String?,
+    onChoose: (String) -> Unit,
+) {
     var confirming by remember { mutableStateOf<String?>(null) }
-    val catalog = state.permissionCatalog
     if (catalog == null) {
         Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -200,7 +205,6 @@ internal fun PermissionContent(state: UiState, onChoose: (String) -> Unit) {
     // `custom` is reported by the host but is not a preset a phone can set, so it
     // is not offered; and the preset in force is the one the host says, not the one
     // last tapped -- the two disagree exactly when the host refused.
-    val inForce = state.stats?.permissionPreset
     for (option in SessionSettings.permissions(catalog)) {
         val current = option.value == inForce
         PopoverRow(
@@ -255,8 +259,7 @@ internal fun PermissionContent(state: UiState, onChoose: (String) -> Unit) {
 
 /** The context breakdown, with an em dash for everything the host did not send. */
 @Composable
-internal fun ContextContent(state: UiState) {
-    val context = state.stats?.context
+internal fun ContextContent(context: ContextPressure?) {
     if (context == null) {
         Text(
             stringResource(R.string.no_context_figure),
