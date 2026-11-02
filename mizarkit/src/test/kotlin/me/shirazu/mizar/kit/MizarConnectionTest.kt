@@ -6,6 +6,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.jupiter.api.Test
@@ -43,6 +44,29 @@ class MizarConnectionTest {
     private suspend fun awaitRequests(socket: FakeSocket, count: Int) {
         withTimeout(3_000) {
             while (socket.requestIds().size < count) delay(5)
+        }
+    }
+
+    /**
+     * Wait for the connection to report failure.
+     *
+     * The state flip deliberately trails the error: `failAll` completes the waiters
+     * and `closeSocket` sets `Failed` afterwards, so a caller can hold the specific
+     * error for a few microseconds while the state still says `Ready`. Asserting
+     * the flip *synchronously* after `await()` pins an ordering the code does not
+     * promise -- it passed on a fast machine and failed on a two-core runner, which
+     * is the worst kind of green.
+     */
+    private suspend fun awaitFailed(connection: MizarConnection) {
+        try {
+            withTimeout(3_000) {
+                while (connection.state.value !is MizarConnection.State.Failed) delay(5)
+            }
+        } catch (timeout: TimeoutCancellationException) {
+            throw AssertionError(
+                "the connection never reported failure; state stayed ${connection.state.value}",
+                timeout,
+            )
         }
     }
 
@@ -199,10 +223,7 @@ class MizarConnectionTest {
 
             val mizar = assertIs<MizarError>(error)
             assertEquals("CONNECTION_CLOSED", mizar.code)
-            assertTrue(
-                connection.state.value is MizarConnection.State.Failed,
-                "the connection reports the failure it just took",
-            )
+            awaitFailed(connection)
         } finally {
             connection.disconnect()
         }
@@ -241,10 +262,7 @@ class MizarConnectionTest {
                 mizar.message.contains("protocol version", ignoreCase = true),
                 "the reason names the mismatch: ${mizar.message}",
             )
-            assertTrue(
-                connection.state.value is MizarConnection.State.Failed,
-                "a mismatched host closes the socket",
-            )
+            awaitFailed(connection)
         } finally {
             connection.disconnect()
         }
