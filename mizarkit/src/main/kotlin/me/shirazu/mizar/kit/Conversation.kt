@@ -799,5 +799,16 @@ fun reclaimStrandedPrompts(turns: List<ConversationTurn>): List<ConversationTurn
         }
     }
     held?.let { out += it }
-    return out
+    // A group that the host has since given a number is the same message twice.
+    //
+    // The copy is written without a turn -- an inbox splice, or a prompt recorded
+    // before its `turn/start` -- and the turn that owns it arrives separately. The
+    // merge is additive, so nothing ever retires the copy: it sits under the real
+    // turn with no turn, no end and no steps, which `isPending` reports as running
+    // for ever. That ghost keeps the session looking busy (the lock-screen card never
+    // comes down) and hides the completion notification.
+    val claimed = out.filter { it.turn != null }.flatMap { it.prompts }.map { it.id }.toSet()
+    return out.filterNot { turn ->
+        turn.turn == null && turn.prompts.isNotEmpty() && turn.prompts.all { it.id in claimed }
+    }
 }
