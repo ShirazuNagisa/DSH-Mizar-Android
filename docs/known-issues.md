@@ -75,29 +75,26 @@ discovered while verifying the new UI.
 
 ## KI-5 — the live card stays on "电脑正在处理…" while the app is in the background
 
-Reported on the phone at 0.10.6: a turn finishes while the app is backgrounded, the notification
-keeps counting, and only opening the app shows that the work is done.
+**Measured, not guessed.** With the app backgrounded for 70 s: the process is alive and not
+frozen (`fg-service-act`, `isFrozen=false`), the `ConnectionService` is running, and yet the app
+wrote **zero** log lines (13 in 30 s in the foreground) and held **zero TCP connections**. The
+socket is gone in the background.
 
-`LiveTurnCoordinator` has exactly two ways to take the card down:
+That explains all three symptoms at once. `turn.settled` never arrives, so `LiveTurnCoordinator
+.forget` is never called and the card keeps counting; the session list is never re-read, so `sync`
+never sees the row idle; and the completion notification is posted by the settle path, so it waits
+until the app comes back.
 
-- `forget(sessionId)` — the host's `turn.settled` reached the app.
-- `sync(rows)` — the session list says nothing is running any more. This is the fallback the code
-  itself calls "the path that covers a host too old to broadcast `turn.settled`".
+`ConnectionService` is only a notification and a keep-alive: it owns no socket. The connection
+lives in the activity's view model, so "backgrounded" and "connected" are mutually exclusive by
+construction. `setPresence` even says so — "the socket paused in the background".
 
-Both need something the background app is evidently not doing: `forget` needs the socket frame to
-be read and routed while the UI is gone, and `sync` needs the session list to be re-read after the
-turn ends — but the sessions poll is the one that only runs while something *is* running, so the
-last read is the one before the settle. When the turn ends, the poller stops and nobody takes the
-card down.
+So this is not a bug in the notification code, and no amount of hiding the card sooner will fix
+it. The fix is to give the connection an owner that outlives the screen: the service opens the
+socket, runs the monitor and the settle path, and the view model observes it. That is a real piece
+of work, not a patch, and it should be scoped on its own.
 
-So the fix is not "hide the card sooner"; it is to make one of those two paths run in the
-background: either keep routing `turn.settled` with the UI gone, or re-read the list once when the
-poller stops. Which one is right depends on whether the socket is actually read in the background,
-which has not been measured yet.
-
-Same session also reported the completion notification arriving late. That may be the same cause:
-the completion notification is posted by the settle path, so a settle the app does not process in
-the background delays the notification until the app is opened.
+## Open verification items
 
 ## KI-6 — one prompt is drawn twice after a reconnect
 
