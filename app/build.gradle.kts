@@ -129,6 +129,9 @@ dependencies {
     implementation(libs.firebase.messaging)
 
     testImplementation(libs.junit4)
+    // Virtual time. The connection monitor polls on a real clock, so its tests used
+    // to wait 30-80 real milliseconds per case and were only as stable as the machine.
+    testImplementation(libs.kotlinx.coroutines.test)
 
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.androidx.test.junit)
