@@ -58,6 +58,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 | 0.10.3 | 45 | `dist/dsh-mizar-0.10.3.apk` | 跟插件 0.8.9：子代理页、逐页上下文、中继档位；附件入口进 `+`；中断轮不再显示「已完成」。首次 CI 因 `ProtocolLogTest` 的顺序问题失败，修复（`a3e4b76`）后 tag 移到该提交 |
 | 0.10.4 | 46 | `dist/dsh-mizar-0.10.4.apk` | 一轮的完整记录（付费或局域网解锁）、余额页、密码重置、两步注册、兑换码入口、付费说明；Play 计费不做，改走兑换码 |
 | **0.10.5** | **47** | `dist/dsh-mizar-0.10.5.apk` | 并行拨号与失败归因、交付文件卡片（文本/图片/PDF）、右侧栏三页（轮次/子代理/预览）、侧栏余额圆钮 |
+| **0.10.6** | **48** | `dist/dsh-mizar-0.10.6.apk` | 结构重构：`AppViewModel` 3903 → 2355 行，规则搬进 15 个域协调者；app 用例 9 → 185、kit 346 → 360。顺带修掉三个缺陷：Android 8–12L 上扫码/深链崩溃（`URLDecoder` 的 API 33 重载）、取消被报成 `SOCKET_CLOSED`、版本不匹配的具体错误被 `CONNECTION_CLOSED` 覆盖。**行为只有这三处变化** |
 
 ### 0.9.2 / 0.10.x 版本沿革（2026-10）
 
