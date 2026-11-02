@@ -11,6 +11,9 @@ $env:JAVA_HOME = '<jdk-17>'
 # `BUILD SUCCESSFUL` 不代表测试通过。0.10.3 就是这样把两条从没执行过的
 # 测试带进了 CI（见 docs/android-testing.md 的「A green build is not a green test run」）。
 .\gradlew.bat :mizarkit:test :app:testDebugUnitTest --rerun-tasks
+# 需要 platforms;android-26（minSdk 的 android.jar）：kit 是纯 JVM 模块，
+# Android lint 看不到它，只有这一步能把「Android 没有这个方法」变成编译错误。
+.\gradlew.bat :mizarkit-android-api:androidApiCheck
 .\gradlew.bat :app:assembleRelease
 
 # 产物：app/build/outputs/apk/release/app-release.apk

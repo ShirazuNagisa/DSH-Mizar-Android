@@ -8,6 +8,7 @@ on:
     paths:
       - 'app/**'
       - 'mizarkit/**'
+      - 'mizarkit-android-api/**'
       - 'protocol/**'
       - 'gradle/**'
       - '*.gradle.kts'
@@ -42,9 +43,13 @@ jobs:
       # `tools platform-tools`, and Google removed the legacy `tools` package.
       # Pinned to the same platform and build-tools the app declares, so CI cannot
       # quietly build against a different SDK than a local build.
+      #
+      # android-26 is not decoration: `:mizarkit-android-api` compiles the kit
+      # against that jar, which is how a JDK-only method (the one that crashed
+      # every phone below Android 13) becomes a compile error.
       - uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+          packages: 'platform-tools platforms;android-36 platforms;android-26 build-tools;36.0.0'
 
       # A committed keystore.properties would put signing material in the repo and
       # would also make the debug build use the release key -- which is exactly the
@@ -65,6 +70,7 @@ jobs:
           GRADLE_USER_HOME: ${{ github.workspace }}/.gradle-home
         run: |
           ./gradlew --no-daemon --console=plain \
+            :mizarkit-android-api:androidApiCheck \
             :mizarkit:test :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
 
       # A suite that silently discovered nothing is a green check that proves

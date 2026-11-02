@@ -26,6 +26,41 @@ protocol suite, `app/src/main/kotlin/**/ui/**` adds instrumentation, a resource
 change runs `:app:assembleDebug` (resources fail the build, not a test), and a
 docs-only diff runs nothing. `--run` executes the selection.
 
+## Compiling against android.jar, not the JDK
+
+```sh
+./gradlew :mizarkit-android-api:androidApiCheck
+```
+
+`:mizarkit` is a plain Kotlin/JVM module compiled by the JDK 17 toolchain, and
+**Android lint never looks at a JVM module**. `URLDecoder.decode(String, Charset)`
+is a Java 10 addition that Android only gained in API 33, so the compiler was
+happy, all 360 kit tests were happy, and every phone below Android 13 threw
+`NoSuchMethodError` the moment a pairing link was decoded. The API 26 smoke test
+found it; nothing in the build could have.
+
+`:mizarkit-android-api` compiles the same sources a second time with `-no-jdk`
+against `platforms/android-26/android.jar` — the jar for `minSdk`. A method
+Android does not have is then a compile error. It ships nothing, has no tests,
+and nothing depends on it; the compile is the whole check.
+
+Two things worth knowing if you touch it:
+
+- **`-Xno-jdk` is silently ignored** by the Kotlin 2.x compiler. It prints
+  `Flag is not supported by this version of the compiler` as a warning and then
+  compiles against the JDK anyway, so the module still reports `BUILD SUCCESSFUL`
+  and checks nothing. The flag is `-no-jdk`.
+- The check was proved by mutation, not by a green run: adding
+  `URLDecoder.decode(s, Charsets.UTF_8)` and `List.of(...)` to a scratch file
+  fails it with `Argument type mismatch: actual type is 'Charset', but
+  'String!' was expected` and `Unresolved reference 'of'`. Both were removed
+  afterwards.
+
+The jar comes from `sdk.dir` in `local.properties`, else `ANDROID_HOME`, at
+`platforms/android-26/android.jar`; install it with
+`sdkmanager "platforms;android-26"`. `-PandroidApiJar=<path>` overrides the path
+and `-PandroidApiLevel=<n>` the level.
+
 ## A green build is not a green test run
 
 Gradle prints `BUILD SUCCESSFUL` for a test task that was **up to date**, and an up-to-date

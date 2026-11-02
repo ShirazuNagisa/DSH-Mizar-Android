@@ -33,7 +33,7 @@ jobs:
       # "Failed to find package 'tools'" before any of this workflow runs.
       - uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          packages: 'platform-tools platforms;android-35 platforms;android-26 build-tools;35.0.0'
 
       - name: Decode the keystore
         env:
@@ -67,7 +67,7 @@ jobs:
             tag="${GITHUB_REF_NAME#v}"
             [ "$tag" = "$version" ] || { echo "tag $tag != versionName $version" >&2; exit 1; }
           fi
-          ./gradlew :mizarkit:test :app:assembleRelease --no-daemon
+          ./gradlew :mizarkit-android-api:androidApiCheck :mizarkit:test :app:assembleRelease --no-daemon
           mkdir -p dist
           cp app/build/outputs/apk/release/app-release.apk "dist/dsh-mizar-${version}.apk"
 

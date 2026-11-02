@@ -30,4 +30,7 @@ dependencyResolutionManagement {
 rootProject.name = "dsh-mizar-android"
 
 include(":mizarkit")
+// Compiles mizarkit's sources against android.jar so a JDK-only method cannot
+// reach a phone. Ships nothing; see the module's build file.
+include(":mizarkit-android-api")
 include(":app")
