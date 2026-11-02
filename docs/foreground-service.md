@@ -61,6 +61,37 @@ list 轮询看到结束 ──┘   静音时段？      → 不发
 
 服务不拥有连接：连接在 App 的 ViewModel 里，服务只负责让系统不回收进程；任务被划掉时 ViewModel 清空、socket 关闭，服务随之停止。
 
+## 待办：把连接下沉到服务（未做）
+
+**现状**：`ConnectionService` 只有 155 行，挂一条通知、把进程保活，**不持有 socket**。连接在
+Activity 的 `AppViewModel` 里，所以「切到后台」和「保持连接」在这个结构下互斥。
+
+**实测（0.10.6，真机）**：后台 70 秒，进程存活且 `isFrozen=false`、`fg-service-act`、服务在跑，
+但应用写了 **0** 行日志（前台 30 秒写 13 行）、持有 **0** 个 TCP 连接。连接就是没了。
+
+**后果**：`turn.settled` 收不到 → 锁屏卡片不收（一直数秒）；会话列表不刷新 → `sync` 看不到空闲；
+完成通知由 settle 路径发出 → 只能等回到前台。三条症状是同一件事。
+
+**目标**：让连接有一个比界面活得久的持有者。服务开 socket、跑 `ConnectionMonitor` 与 settle
+路径，ViewModel 只观察它。
+
+**分阶段**（每阶段单独可验，不要一次改完）：
+
+1. **抽出连接宿主**：把「打开/关闭 socket、跑 monitor、发 settle」收进一个不依赖 `Context` 的
+   对象（`MizarConnection` 已经是纯 kit，缺的是它的生命周期所有者）。此时仍由 ViewModel 持有，
+   行为不变，只是有了边界。
+2. **服务启动它**：`ConnectionService.onCreate` 建宿主，`onDestroy` 关。ViewModel 改为从服务取
+   （`binder` 或单例 + `StateFlow`）。此阶段要能证明：后台 70 秒仍有日志与 TCP 连接。
+3. **把通知路径接到宿主**：settle → `LiveTurn.forget` + `announceSettled` 不再依赖界面存在。
+4. **收尾**：`setPresence` 的「后台 socket 暂停」假设失效，检查 `maybeSwitchToLan`、重连退避、
+   电量策略是否还成立；`docs/known-issues.md` 的 KI-5 才能关。
+
+**验收**：手机后台放一条会跑 60 秒以上的任务，全程不碰 App——锁屏卡片在结束时收起，通知栏出现
+「已完成」。这是唯一能证明做完了的实验。
+
+**风险**：配对的持有者、`viewModelScope` 的取消时机、194 条 app 测试的夹具都依赖「连接在
+ViewModel 里」。第 1 阶段不改变行为，正是为了让第 2 阶段失败时能退回去。
+
 ## 常驻通知说什么（0.9.0）
 
 `id = 1` 的那条通知不再只是"保持连接"，它按状态说三种话：

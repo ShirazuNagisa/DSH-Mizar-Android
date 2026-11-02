@@ -92,7 +92,8 @@ construction. `setPresence` even says so — "the socket paused in the backgroun
 So this is not a bug in the notification code, and no amount of hiding the card sooner will fix
 it. The fix is to give the connection an owner that outlives the screen: the service opens the
 socket, runs the monitor and the settle path, and the view model observes it. That is a real piece
-of work, not a patch, and it should be scoped on its own.
+of work, not a patch, and it should be scoped on its own. The plan is in
+[](foreground-service.md) under 「待办：把连接下沉到服务」.
 
 ## Open verification items
 
