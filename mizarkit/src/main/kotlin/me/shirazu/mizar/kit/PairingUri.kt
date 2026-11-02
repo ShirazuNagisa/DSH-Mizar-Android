@@ -204,8 +204,15 @@ object PairingUri {
     fun httpUrl(authority: String, path: String, secure: Boolean = false): String? =
         url(authority, path, if (secure) "https" else "http")
 
-    /** `application/x-www-form-urlencoded`, as `URLSearchParams` writes it. */
-    private fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8)
+    /**
+     * `application/x-www-form-urlencoded`, as `URLSearchParams` writes it.
+     *
+     * The charset is passed as a name, not as [Charsets.UTF_8]: the `Charset`
+     * overloads are Java 10 additions that Android only gained in API 33, while
+     * this module compiles against the full JDK and no Android lint sees it.
+     * The name overload has existed since Android 1 and encodes UTF-8 the same way.
+     */
+    private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
 
     /** Decode a query string; the first occurrence of a name wins, as in `URLSearchParams.get`. */
     private fun decodeQuery(query: String): Map<String, String> {
@@ -215,12 +222,13 @@ object PairingUri {
             val index = pair.indexOf('=')
             val name = if (index < 0) pair else pair.substring(0, index)
             val value = if (index < 0) "" else pair.substring(index + 1)
-            val decodedName = URLDecoder.decode(name, Charsets.UTF_8)
+            // "UTF-8" by name: the Charset overload only exists from API 33.
+            val decodedName = URLDecoder.decode(name, "UTF-8")
             // First wins: `URLSearchParams.get` returns the first value, and a
             // crafted QR with two `h=` parameters must not be able to change which
             // address this client dials by appending one.
             if (!result.containsKey(decodedName)) {
-                result[decodedName] = URLDecoder.decode(value, Charsets.UTF_8)
+                result[decodedName] = URLDecoder.decode(value, "UTF-8")
             }
         }
         return result
