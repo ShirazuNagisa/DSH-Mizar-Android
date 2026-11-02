@@ -44,6 +44,7 @@ import me.shirazu.dshmizar.domain.Text
 import me.shirazu.dshmizar.domain.NotificationCoordinator
 import me.shirazu.dshmizar.domain.InteractionsCoordinator
 import me.shirazu.dshmizar.domain.SocketInteractionsLink
+import me.shirazu.dshmizar.domain.LinkOwnership
 import me.shirazu.dshmizar.domain.LiveTurnCoordinator
 import me.shirazu.dshmizar.domain.FlowStateStore
 import me.shirazu.dshmizar.domain.SettingsCoordinator
@@ -375,16 +376,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
     }
 
-    private var connection: MizarConnection? = null
     /**
-     * Bumped whenever a new socket becomes the live one.
+     * The live socket, the epoch that identifies it, and why the last dial failed.
      *
-     * A read that was waiting on the old socket can fail -- or succeed -- long after
-     * the reconnect, and writing either result over the new socket's transcript is
-     * how a recovered screen went back to "there is no connection to the host" all
-     * on its own. Reads capture this number and only publish when it still matches.
+     * The rules that used to be comments beside three separate fields -- a replaced
+     * socket cannot act, and replacing comes before closing -- live in the object.
      */
-    private var connectionEpoch = 0
+    private val ownership = LinkOwnership()
     /** Bumped per settings request, so a late answer cannot overwrite a newer one. */
     private var settingsRevision = 0L
     /** Last presence we reported, re-asserted after a reconnect. */
@@ -424,10 +422,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * within the same second. One job, replaced never, keeps the two from fighting.
      */
     private var quietRefreshJob: Job? = null
-
-    /** Why the last dial failed, and where it was dialling: the notice classifies from these. */
-    private var lastConnectFailure: Throwable? = null
-    private var lastConnectEndpoint: MizarConnection.Endpoint? = null
 
     /** The sentence the permanent notice currently shows, so it is only rewritten on change. */
     private var lastLinkNotice: String? = null
@@ -482,7 +476,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         onIdentityChanged = ::reconnectForIdentity,
         // The plan decides which relay the host's tunnel uses; a change asks the
         // host to move. Nothing else in the account domain touches the socket.
-        onPlanChanged = { connection?.let { socket -> viewModelScope.launch { syncRelayTier(socket) } } },
+        onPlanChanged = { ownership.current?.let { socket -> viewModelScope.launch { syncRelayTier(socket) } } },
     )
 
     /** Read the stored session and quietly refresh it. Never blocks a launch. */
@@ -501,7 +495,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshBalance() {
         _state.update { it.copy(balance = it.balance.copy(loading = true, failed = false)) }
         viewModelScope.launch {
-            val socket = connection
+            val socket = ownership.current
             if (socket == null) {
                 _state.update { it.copy(balance = it.balance.copy(loading = false, failed = true)) }
                 return@launch
@@ -562,7 +556,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
-            val socket = connection
+            val socket = ownership.current
             val sessionId = _state.value.selectedSessionId
             val slice = if (socket == null || sessionId == null) {
                 null
@@ -815,8 +809,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun connect(host: PairedHost, preferred: PairingRoute? = null, warm: Boolean = false) {
         stopWatchers()
-        connection?.disconnect()
-        connection = null
+        ownership.current?.disconnect()
+        ownership.release()
 
         // The stored list first: a phone with no network still shows what it knows.
         index.restore(host.hostId)
@@ -836,15 +830,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
             is RouteOutcome.Lost -> {
                 val address = host.authority ?: host.baseUrl
-                lastConnectFailure = outcome.failure
-                lastConnectEndpoint = outcome.endpoint ?: host.endpoints.lastOrNull()
+                ownership.recordFailure(
+                    outcome.failure,
+                    outcome.endpoint ?: host.endpoints.lastOrNull(),
+                )
                 _state.update {
                     it.copy(
                         phase = Phase.FAILED,
                         problem = messageOf(
                             outcome.failure ?: IOException("no address answered"),
                             address,
-                            throughRelay = lastConnectEndpoint is MizarConnection.Endpoint.Relay,
+                            throughRelay = ownership.lastEndpoint is MizarConnection.Endpoint.Relay,
                         ),
                         needsPairing = outcome.failure?.isRepairNeeded() == true,
                         pairingStage = null,
@@ -941,8 +937,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         welcome: ServerFrame.Welcome,
         plan: AdoptionPlan,
     ) {
-        connection = candidate
-        connectionEpoch++
+        ownership.adopt(candidate)
         _state.update {
             it.copy(
                 phase = plan.phase,
@@ -1008,8 +1003,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun publishLinkFailure() {
         val context = getApplication<Application>()
-        val endpoint = lastConnectEndpoint
-        val status = (lastConnectFailure as? me.shirazu.mizar.kit.UpgradeRefused)?.status
+        val endpoint = ownership.lastEndpoint
+        val status = (ownership.lastFailure as? me.shirazu.mizar.kit.UpgradeRefused)?.status
         val text = when {
             endpoint is MizarConnection.Endpoint.Direct -> context.getString(R.string.link_host_offline)
             status == 404 || status == 410 -> context.getString(R.string.link_host_offline)
@@ -1062,7 +1057,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         monitor.watchConnection(
             socket = SocketMonitor(socket),
             // A replaced socket failing later is old news, and two loops would fight.
-            isLive = { connection === socket },
+            isLive = { ownership.owns(socket) },
             onFailed = { message -> beginReconnect(host, message) },
         )
     }
@@ -1083,7 +1078,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         afterReconnected = ::refreshAfterReconnect,
         announcePresence = { setPresence(foreground) },
         publishNotice = ::publishLinkNotice,
-        connected = { connection != null },
+        connected = { ownership.current != null },
     )
 
     /** Retry a dropped connection; the loop and its rules live in the domain. */
@@ -1105,7 +1100,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         hourOfDay = { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) },
         isForeground = { foreground },
         tail = { sessionId ->
-            connection?.let { socket ->
+            ownership.current?.let { socket ->
                 runCatching {
                     socket.call<SessionMessagesResult>(
                         "session.messages",
@@ -1177,7 +1172,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         val pending = children.map { it.sessionId }.filterNot { it in _state.value.subagentTitles }.take(20)
         if (pending.isEmpty()) return
-        val socket = connection ?: return
+        val socket = ownership.current ?: return
         _state.update { it.copy(subagentLoading = true) }
         viewModelScope.launch {
             try {
@@ -1288,8 +1283,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         reconnect.cancel()
         viewModelScope.launch {
             stopWatchers()
-            connection?.disconnect()
-            connection = null
+            ownership.current?.disconnect()
+            ownership.release()
             _state.update {
                 it.copy(phase = Phase.UNPAIRED, problem = null, needsPairing = false, selectedSessionId = null)
             }
@@ -1302,10 +1297,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val wasOpen = _state.value.host?.hostId == hostId
             if (wasOpen) {
                 reconnect.cancel()
-                runCatching { connection?.call<AcceptanceResult>("push.unregister") }
+                runCatching { ownership.current?.call<AcceptanceResult>("push.unregister") }
                 stopWatchers()
-                connection?.disconnect()
-                connection = null
+                ownership.current?.disconnect()
+                ownership.release()
             }
             credentials.remove(hostId)
             indexStore.remove(hostId)
@@ -1328,7 +1323,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // operator pulled because something looked stale, often after moving onto the
         // same Wi-Fi as the computer.
         val host = _state.value.host
-        val socket = connection
+        val socket = ownership.current
         val welcome = _state.value.welcome
         if (host != null && socket != null && welcome != null) maybeSwitchToLan(host, socket, welcome)
         if (_state.value.refreshing) return
@@ -1344,7 +1339,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun refreshSessionsNow() {
-        val socket = connection ?: return
+        val socket = ownership.current ?: return
         val list = try {
             socket.call<SessionListResult>("session.list")
         } catch (error: Throwable) {
@@ -1412,7 +1407,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         scope = viewModelScope,
         note = ::note,
         indexStore = indexStore,
-        link = { connection?.let { socket -> SocketTitlesLink(socket) } },
+        link = { ownership.current?.let { socket -> SocketTitlesLink(socket) } },
         lastSession = { hostId -> activity.lastSession(hostId) },
         openSession = { sessionId -> selectSession(sessionId) },
     )
@@ -1479,7 +1474,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Create a session whose first prompt is already typed: create, then send. */
     fun createSessionWithPrompt(cwd: String, prompt: String) {
         viewModelScope.launch {
-            val socket = connection ?: return@launch
+            val socket = ownership.current ?: return@launch
             _state.update { it.copy(busy = true) }
             try {
                 val created = socket.call<CreateSessionResult>(
@@ -1501,7 +1496,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Create a session in a directory, which the host turns into a workspace. */
     fun createSession(cwd: String) {
         viewModelScope.launch {
-            val socket = connection ?: return@launch
+            val socket = ownership.current ?: return@launch
             _state.update { it.copy(busy = true) }
             try {
                 // Only `cwd`. The host resolves it to a workspace and creates one when
@@ -1536,8 +1531,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         scope = viewModelScope,
         note = ::note,
         describe = { error -> messageOf(error, addressOf()) },
-        epoch = { connectionEpoch },
-        link = { connection?.let { socket -> SocketConversationLink(socket) } },
+        epoch = { ownership.currentEpoch },
+        link = { ownership.current?.let { socket -> SocketConversationLink(socket) } },
         // A lambda, not a method reference: the settings coordinator is built further
         // down this class, and a bound reference would capture it before it exists.
         applyStats = { frame -> settings.applyStats(frame) },
@@ -1575,7 +1570,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         io = Dispatchers.IO,
         text = strings,
         note = ::note,
-        transport = { connection?.let { socket -> AttachmentUploader(socket.attachmentRpc()) } },
+        transport = { ownership.current?.let { socket -> AttachmentUploader(socket.attachmentRpc()) } },
     )
 
     fun addAttachment(file: File, name: String, kind: String, mediaType: String?) =
@@ -1598,7 +1593,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         scope = viewModelScope,
         strings = strings,
         describe = { error -> messageOf(error, addressOf()) },
-        link = { connection?.let { socket -> SocketSendLink(socket) } },
+        link = { ownership.current?.let { socket -> SocketSendLink(socket) } },
         reload = { conversation.reload() },
         readOnce = { conversation.readOnce() },
         clearAttachments = { attachments.clear() },
@@ -1621,7 +1616,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         scope = viewModelScope,
         pollDispatcher = Dispatchers.Default,
         describe = { error -> messageOf(error, addressOf()) },
-        link = { connection?.let { socket -> SocketActivityLink(socket) } },
+        link = { ownership.current?.let { socket -> SocketActivityLink(socket) } },
     )
 
     /**
@@ -1700,7 +1695,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             note("reconnected: full page for ${current.selectedSessionId}")
             reload(FULL_PAGE, afterSeq = null)
-            if (_state.value.conversationError != null && connection != null) {
+            if (_state.value.conversationError != null && ownership.current != null) {
                 // A socket that just came back can lose the first race with the old
                 // one's teardown; one quiet retry is enough to make recovery invisible.
                 delay(900)
@@ -1762,7 +1757,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         scope = viewModelScope,
         describe = { error -> messageOf(error, addressOf()) },
         announcePending = notifier::announcePending,
-        link = { connection?.let { socket -> SocketInteractionsLink(socket) } },
+        link = { ownership.current?.let { socket -> SocketInteractionsLink(socket) } },
     )
 
     /**
@@ -1790,8 +1785,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         scope = viewModelScope,
         note = ::note,
         describe = { error -> messageOf(error, addressOf()) },
-        epoch = { connectionEpoch },
-        link = { connection?.let { socket -> SocketSettingsLink(socket) } },
+        epoch = { ownership.currentEpoch },
+        link = { ownership.current?.let { socket -> SocketSettingsLink(socket) } },
     )
 
     /**
@@ -1826,7 +1821,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // ── push ────────────────────────────────────────────────────────────────
 
     /** Tell the host this device's push token, and that it is on screen. */
-    fun registerPush(candidate: MizarConnection? = connection) {
+    fun registerPush(candidate: MizarConnection? = ownership.current) {
         viewModelScope.launch {
             val socket = candidate ?: return@launch
             val context = getApplication<Application>()
@@ -1888,7 +1883,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(localNetworkFirst = on) }
         if (!on) return
         val host = _state.value.host ?: return
-        val socket = connection ?: return
+        val socket = ownership.current ?: return
         val welcome = _state.value.welcome ?: return
         maybeSwitchToLan(host, socket, welcome)
     }
@@ -2035,8 +2030,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     // reconnect loop for the relay we just left.
                     stopWatchers()
                     monitor.stopConnectionWatch()
-                    connection = candidateWelcome
-                    connectionEpoch++
+                    ownership.adopt(candidateWelcome)
                     runCatching { socket.disconnect() }
                     credentials.save(updated)
                     _state.update { current ->
@@ -2081,12 +2075,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (foreground) {
             val host = _state.value.host
-            val socket = connection
+            val socket = ownership.current
             val welcome = _state.value.welcome
             if (host != null && socket != null && welcome != null) maybeSwitchToLan(host, socket, welcome)
         }
         viewModelScope.launch {
-            val socket = connection ?: return@launch
+            val socket = ownership.current ?: return@launch
             runCatching {
                 socket.call<AcceptanceResult>("push.presence", buildJsonObject { put("foreground", foreground) })
             }
@@ -2120,7 +2114,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         },
         onSilent = { reason ->
             val host = _state.value.host
-            if (host != null) beginReconnect(host, reason) else connection?.disconnect()
+            if (host != null) beginReconnect(host, reason) else ownership.current?.disconnect()
         },
         anythingRunning = {
             notifier.anyRunning() ||
@@ -2130,7 +2124,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     private fun startWatchers(socket: MizarConnection) {
-        monitor.start(SocketMonitor(socket), isLive = { connection === socket })
+        monitor.start(SocketMonitor(socket), isLive = { ownership.owns(socket) })
     }
 
     private fun stopWatchers() {
@@ -2179,7 +2173,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun archiveSession(sessionId: String) {
         viewModelScope.launch {
-            val socket = connection ?: return@launch
+            val socket = ownership.current ?: return@launch
             runCatching {
                 socket.call<ArchiveSessionResult>(
                     "session.archive",
