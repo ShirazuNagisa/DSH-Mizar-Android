@@ -31,27 +31,22 @@ discovered while verifying the new UI.
 
 ## KI-3 — a send at the bottom does not follow when the previous item is taller than the viewport
 
-- At the bottom of a transcript with long replies, sending does not follow the new turn; the list
-  stays in place and shows "N new".
-- Reproduced identically on the pre-refactor baseline APK, so it predates the branch.
-- **Cause confirmed by reading `SessionScreen.kt` (the effect at `state.conversation.size`,
-  `itemCount`).** `atBottom` is `!list.canScrollForward`, which is a *layout* fact. Appending an
-  item makes `canScrollForward` true, so by the time the effect runs the list reports "there is
-  more below" even though the operator never moved. The effect then takes the `added > 0` branch,
-  sets `following = false` and counts the item as new. Whether it loses that race depends on
-  whether the new item was laid out before the effect ran, which is why a short previous item
-  usually follows and a tall one does not.
-- **The fix is not a different comparison — it is a different signal.** No layout-derived value can
-  tell "the operator scrolled away" from "the content grew", because growth changes every one of
-  them. `following` has to be driven by user intent: set it false on a drag that leaves the end,
-  true on a drag that reaches it, and never let an append change it. `list.interactionSource`
-  exposes exactly those drag events.
-- The sharper form of the same problem: **`following` is set only inside this effect** — there is
-  no scroll listener anywhere in the screen. So the app does not know the operator scrolled away
-  until the next item arrives, and the "N new" count is therefore one item late even in the cases
-  that look like they work.
-- Not done yet: it changes scroll behaviour in the transcript, so it wants a device pass with a
-  long reply (the reproduction above) before it lands, not just a green suite.
+**Fixed.** Reproduced on the phone at 0.10.6, fixed and re-checked on the same session.
+
+- Symptom: at the bottom of a transcript with a long reply, sending left the list in place and
+  showed "1 new message" instead of following the turn just sent.
+- Cause: `atBottom` is `!list.canScrollForward`, a *layout* fact. Appending an item makes
+  `canScrollForward` true by itself, so by the time the follow effect ran the list reported "there
+  is more below" even though the operator never moved. Whether that landed before or after the new
+  item was measured is why a short previous item usually followed and a tall one did not. Opening
+  the keyboard produced the same result by shrinking the viewport.
+- The sharper form: `following` was set **only** inside that effect, so the app did not know the
+  operator had scrolled away until the next item arrived — the count was one item late even where
+  it looked like it worked.
+- Fix: `following` is now set when a scroll ends (`snapshotFlow { list.isScrollInProgress }`), never
+  after an append: a scroll that ends at the end means follow, anywhere else means don't. The
+  "back to latest" pill also sets it, so asking for the end is asking to follow again. `atBottom`
+  stays where it belongs — deciding whether the pill is visible.
 
 ## Open verification items
 

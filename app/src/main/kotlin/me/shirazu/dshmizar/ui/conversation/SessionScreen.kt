@@ -49,6 +49,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -183,6 +184,28 @@ fun SessionScreen(
     var following by remember { mutableStateOf(true) }
 
     /**
+     * Whether the operator is following live output.
+     *
+     * Set at the end of a scroll, never after an append. `atBottom` is a layout fact --
+     * appending an item makes `canScrollForward` true on its own -- so using it to
+     * decide "should this new item be followed" answered a different question, and the
+     * answer arrived after the content had already changed. That is KI-3: sending from
+     * the bottom showed "1 new message" instead of following, whenever the previous
+     * item was tall enough for the layout pass to land in that order. Opening the
+     * keyboard did the same thing by shrinking the viewport.
+     *
+     * A scroll that ends at the end means follow; a scroll that ends anywhere else
+     * means don't. Nothing else may touch it except the first load, which starts over.
+     */
+    LaunchedEffect(list) {
+        snapshotFlow { list.isScrollInProgress }.collect { scrolling ->
+            if (scrolling) return@collect
+            following = !list.canScrollForward
+            if (following) waitingNew = 0
+        }
+    }
+
+    /**
      * The end of the list, whatever is in it.
      *
      * The transcript is `[load earlier]? + items`, so the last index is not simply the
@@ -228,10 +251,9 @@ fun SessionScreen(
             // the operator should be able to track.
             list.scrollToItem(itemCount - 1)
             positioned = true
-        } else if (atBottom) {
+        } else if (following) {
             counted = size
             waitingNew = 0
-            following = true
             list.animateScrollToItem(itemCount - 1)
         } else if (added > 0) {
             counted = size
@@ -451,6 +473,10 @@ fun SessionScreen(
                                 .shapedClickable(androidx.compose.foundation.shape.CircleShape) {
                                     scope.launch {
                                         scrollToEnd()
+                                        // Asking for the end is asking to follow again;
+                                        // otherwise the next item would be counted as new
+                                        // for a second time.
+                                        following = true
                                         waitingNew = 0
                                     }
                                 }
