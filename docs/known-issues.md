@@ -34,8 +34,24 @@ discovered while verifying the new UI.
 - At the bottom of a transcript with long replies, sending does not follow the new turn; the list
   stays in place and shows "N new".
 - Reproduced identically on the pre-refactor baseline APK, so it predates the branch.
-- Likely cause: the follow effect reads `atBottom` after the new items have already been laid
-  out. Deferred with KI-1/KI-2.
+- **Cause confirmed by reading `SessionScreen.kt` (the effect at `state.conversation.size`,
+  `itemCount`).** `atBottom` is `!list.canScrollForward`, which is a *layout* fact. Appending an
+  item makes `canScrollForward` true, so by the time the effect runs the list reports "there is
+  more below" even though the operator never moved. The effect then takes the `added > 0` branch,
+  sets `following = false` and counts the item as new. Whether it loses that race depends on
+  whether the new item was laid out before the effect ran, which is why a short previous item
+  usually follows and a tall one does not.
+- **The fix is not a different comparison — it is a different signal.** No layout-derived value can
+  tell "the operator scrolled away" from "the content grew", because growth changes every one of
+  them. `following` has to be driven by user intent: set it false on a drag that leaves the end,
+  true on a drag that reaches it, and never let an append change it. `list.interactionSource`
+  exposes exactly those drag events.
+- The sharper form of the same problem: **`following` is set only inside this effect** — there is
+  no scroll listener anywhere in the screen. So the app does not know the operator scrolled away
+  until the next item arrives, and the "N new" count is therefore one item late even in the cases
+  that look like they work.
+- Not done yet: it changes scroll behaviour in the transcript, so it wants a device pass with a
+  long reply (the reproduction above) before it lands, not just a green suite.
 
 ## Open verification items
 
