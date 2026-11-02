@@ -99,6 +99,26 @@ Same session also reported the completion notification arriving late. That may b
 the completion notification is posted by the settle path, so a settle the app does not process in
 the background delays the notification until the app is opened.
 
+## KI-6 — one prompt is drawn twice after a reconnect
+
+Seen on the phone at 0.10.6 in a fresh session: one send, one turn that answered, and a second
+copy of the same prompt below it with no turn at all — drawn as 未完成, or as 深度求索中 while
+anything else runs. The log shows the app reconnecting and loading a full page (12 records) right
+before the copy appears, and only one prompt was ever typed.
+
+So this is a merge artefact, not a double send. `mergeTurns` dedupes by `ConversationTurn.id`, and
+that id is `turn?.toString() ?: "unopened-${orderSeq ?: "head"}"`. The same prompt can therefore be
+"turn 7" in one copy and `unopened-head` in the other — two ids, both kept, one of them a turn-less
+group with no end and no steps, which `isPending` reports as still running for ever.
+
+That ghost is what keeps the lock-screen card up (KI-5) and delays the completion notification.
+
+Next step: the `applyPage` note already prints the shape (`t=<turn> ... p=<prompts>`), so a
+reconnect with that line in logcat names the two ids directly. The fix belongs where the groups are
+built or merged — dedupe by the prompt record's own id across groups, not by the group's synthetic
+id. `submitting` in `SendCoordinator` guards a real hazard (button and IME both firing) but does not
+address this one.
+
 ## Open verification items
 
 - **Interactions after-dock** — verified on the operator's phone in 0.10.1: the Next pill's
