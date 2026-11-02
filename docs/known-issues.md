@@ -73,6 +73,32 @@ discovered while verifying the new UI.
   same question KI-3 answered for scrolling, and it deserves the same treatment rather than a
   quick comparison change.
 
+## KI-5 — the live card stays on "电脑正在处理…" while the app is in the background
+
+Reported on the phone at 0.10.6: a turn finishes while the app is backgrounded, the notification
+keeps counting, and only opening the app shows that the work is done.
+
+`LiveTurnCoordinator` has exactly two ways to take the card down:
+
+- `forget(sessionId)` — the host's `turn.settled` reached the app.
+- `sync(rows)` — the session list says nothing is running any more. This is the fallback the code
+  itself calls "the path that covers a host too old to broadcast `turn.settled`".
+
+Both need something the background app is evidently not doing: `forget` needs the socket frame to
+be read and routed while the UI is gone, and `sync` needs the session list to be re-read after the
+turn ends — but the sessions poll is the one that only runs while something *is* running, so the
+last read is the one before the settle. When the turn ends, the poller stops and nobody takes the
+card down.
+
+So the fix is not "hide the card sooner"; it is to make one of those two paths run in the
+background: either keep routing `turn.settled` with the UI gone, or re-read the list once when the
+poller stops. Which one is right depends on whether the socket is actually read in the background,
+which has not been measured yet.
+
+Same session also reported the completion notification arriving late. That may be the same cause:
+the completion notification is posted by the settle path, so a settle the app does not process in
+the background delays the notification until the app is opened.
+
 ## Open verification items
 
 - **Interactions after-dock** — verified on the operator's phone in 0.10.1: the Next pill's
