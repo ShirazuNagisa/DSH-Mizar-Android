@@ -1,0 +1,174 @@
+name: android-pr
+
+# Verification only. No keystore, no release secrets, no publishing: a pull request
+# must be provable without any of the material that could sign or ship a build.
+# The release pipeline lives in release.yml and is the only thing that touches a tag.
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'mizarkit/**'
+      - 'protocol/**'
+      - 'gradle/**'
+      - '*.gradle.kts'
+      - '.github/workflows/android-pr.yml'
+  workflow_dispatch:
+    inputs:
+      instrumentation:
+        description: 'Also run the isolated emulator suite (slow, needs KVM)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: JVM, lint and debug build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Named packages, never the action's default: that default is
+      # `tools platform-tools`, and Google removed the legacy `tools` package.
+      # Pinned to the same platform and build-tools the app declares, so CI cannot
+      # quietly build against a different SDK than a local build.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+
+      # A committed keystore.properties would put signing material in the repo and
+      # would also make the debug build use the release key -- which is exactly the
+      # situation the instrumentation note in app/build.gradle.kts warns about.
+      - name: Refuse signing material in the checkout
+        run: |
+          if [ -e keystore.properties ]; then
+            echo 'keystore.properties must not be committed; PR verification builds with the debug key' >&2
+            exit 1
+          fi
+          if [ -n "${MIZAR_KEYSTORE:-}" ]; then
+            echo 'MIZAR_KEYSTORE is set; this workflow must not see release secrets' >&2
+            exit 1
+          fi
+
+      - name: Unit tests, lint and debug build
+        env:
+          GRADLE_USER_HOME: ${{ github.workspace }}/.gradle-home
+        run: |
+          ./gradlew --no-daemon --console=plain \
+            :mizarkit:test :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+
+      # A suite that silently discovered nothing is a green check that proves
+      # nothing. Count the cases the JVM actually ran.
+      - name: Require a non-empty JVM suite
+        run: |
+          python3 - <<'PY'
+          import glob, sys, xml.etree.ElementTree as ET
+          total = failed = skipped = 0
+          for path in glob.glob('**/build/test-results/**/TEST-*.xml', recursive=True):
+              for case in ET.parse(path).iter('testcase'):
+                  total += 1
+                  failed += case.find('failure') is not None or case.find('error') is not None
+                  skipped += case.find('skipped') is not None
+          print(f'JVM cases: {total}, failed: {failed}, skipped: {skipped}')
+          if total < 300:
+              sys.exit(f'only {total} JVM cases ran; the suite is expected to be in the hundreds')
+          if failed:
+              sys.exit(f'{failed} JVM cases failed')
+          PY
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-pr-reports
+          if-no-files-found: ignore
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
+            app/build/reports/lint-results-debug.*
+
+  instrumentation:
+    name: Isolated emulator suite
+    # Not on every pull request: the emulator is the slow, flaky half, and the
+    # comment on the PR is what decides whether it is needed. A manual dispatch can
+    # ask for it directly.
+    if: >-
+      github.event_name == 'workflow_dispatch' && github.event.inputs.instrumentation == 'true'
+      || contains(github.event.pull_request.labels.*.name, 'instrumentation')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Instrumentation on API 36
+        uses: ReactiveCircus/android-emulator-runner@v2
+        env:
+          GRADLE_USER_HOME: ${{ github.workspace }}/.gradle-home
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          # No snapshot: a restored snapshot hides a cold-boot failure, and the
+          # Live Updates tests are the ones that care.
+          #
+          # Animations stay ON. Turning them off (animator_duration_scale = 0) makes
+          # the typewriter reveal jump to its final frame, and the two reveal tests
+          # then fail for a reason that has nothing to do with the change.
+          disable-animations: false
+          script: ./gradlew --no-daemon --console=plain :app:connectedDebugAndroidTest
+
+      # The API 36-only tests report as skipped on older platforms. A run where
+      # everything was skipped is not a pass, so both numbers are checked.
+      - name: Require executed cases and report skips
+        run: |
+          python3 - <<'PY'
+          import glob, sys, xml.etree.ElementTree as ET
+          total = ran = skipped = 0
+          skipped_names = []
+          for path in glob.glob('app/build/outputs/androidTest-results/**/TEST-*.xml', recursive=True):
+              for case in ET.parse(path).iter('testcase'):
+                  total += 1
+                  if case.find('skipped') is not None:
+                      skipped += 1
+                      skipped_names.append(case.get('name'))
+                  else:
+                      ran += 1
+          print(f'cases: {total}, executed: {ran}, skipped: {skipped}')
+          for name in skipped_names:
+              print(f'  skipped: {name}')
+          if ran == 0:
+              sys.exit('no instrumentation test executed')
+          PY
+
+      - name: Upload instrumentation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-instrumentation-reports
+          if-no-files-found: ignore
+          path: app/build/outputs/androidTest-results/**
