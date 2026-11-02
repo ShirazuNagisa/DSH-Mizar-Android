@@ -48,6 +48,31 @@ discovered while verifying the new UI.
   "back to latest" pill also sets it, so asking for the end is asking to follow again. `atBottom`
   stays where it belongs — deciding whether the pill is visible.
 
+## KI-4 — a finished turn shows "深度求索中~" while the next one starts
+
+- Seen on the phone at 0.10.6 while sending a prompt from the bottom of a transcript: the turn
+  before it had already ended, yet it was drawn as running until the new turn landed. It corrected
+  itself on its own, so this is a transient mis-attribution, not a stuck state.
+- `SessionScreen.kt` decides it like this:
+
+  ```kotlin
+  val inFlight = lastTurn != null && (lastTurn.isRunning || lastTurn.isPending) && (sessionRunning || recent)
+  val runningTurnId = lastTurn?.takeIf { inFlight || it.isRunning }?.id
+  ```
+
+  "This turn is running" is therefore derived from the *session-level* `running` flag and hung on
+  whatever the last turn happens to be. In the window between "the session says running" and "the
+  new turn appears in `state.turns`", the last turn is still the previous one, so the previous one
+  wears the marker.
+- Same shape as KI-3: a coarse signal answering a fine-grained question, so the answer lands on
+  the wrong item. The difference is that this one is visible for a second and then fixes itself,
+  which is why it went unnoticed until a send was watched closely.
+- Not fixed. The rule that would fix it is "a turn is running only if the host says *that turn* is
+  running, or it is the newest and has no end"; the second half is what `isPending` already means,
+  so the work is deciding what to do while the new turn is still only optimistic — which is the
+  same question KI-3 answered for scrolling, and it deserves the same treatment rather than a
+  quick comparison change.
+
 ## Open verification items
 
 - **Interactions after-dock** — verified on the operator's phone in 0.10.1: the Next pill's
