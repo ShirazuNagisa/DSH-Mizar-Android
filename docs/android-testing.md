@@ -26,6 +26,23 @@ protocol suite, `app/src/main/kotlin/**/ui/**` adds instrumentation, a resource
 change runs `:app:assembleDebug` (resources fail the build, not a test), and a
 docs-only diff runs nothing. `--run` executes the selection.
 
+## Time in tests is virtual
+
+`kotlinx-coroutines-test` is on the app test classpath. Anything that polls or waits
+takes a `CoroutineDispatcher` for exactly this reason: hand it a
+`StandardTestDispatcher(testScheduler)` and `advanceTimeBy` drives the clock, so
+"sixteen polls at a 5 ms interval" is arithmetic instead of a bet on how busy the
+machine is. `ConnectionMonitorTest` is the worked example; its ten cases went from
+~0.6 s of sleeping to 0.189 s in total.
+
+A real `delay(80)` in a test is a race, and it is the race that made 0.10.6 fail on
+CI while passing four times locally. Two rules that go with it:
+
+- **Stop the loop before the test returns.** `runTest` drains the scheduler when the
+  body ends, and an endless 5 ms poll loop is drained forever.
+- **Assert the number, not the bound.** `polls <= 3` passed with the threshold moved
+  from 2 to 3, which was the one thing that test was named after.
+
 ## Compiling against android.jar, not the JDK
 
 ```sh
