@@ -55,12 +55,16 @@ add() {
 while IFS= read -r file; do
     case "$file" in
         # The protocol module and the shared golden frames: the fast layer, and the
-        # one place a frame change is actually pinned.
+        # one place a frame change is actually pinned. The android.jar compile
+        # rides along because the module is built by the JDK, and that is exactly
+        # how a JDK-only method reached a phone once already.
         mizarkit/*|protocol/*)
-            add ":mizarkit:test" ;;
+            add ":mizarkit:test"
+            add ":mizarkit-android-api:androidApiCheck" ;;
         # Gradle wiring can change every module's output; run everything cheap.
         *.gradle.kts|gradle/*|gradle.properties|settings.gradle.kts)
             add ":mizarkit:test"
+            add ":mizarkit-android-api:androidApiCheck"
             add ":app:testDebugUnitTest"
             add ":app:assembleDebug" ;;
         # Resources and the manifest fail the build, not a test.
