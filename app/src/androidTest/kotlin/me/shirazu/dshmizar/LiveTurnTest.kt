@@ -4,7 +4,9 @@ import android.Manifest
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -40,11 +42,24 @@ class LiveTurnTest {
     @Before
     fun requireLiveUpdatesAndNotifications() {
         assumeTrue("Live Updates need API 36", Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA)
+        if (granted()) return
         // A debug build can grant itself this; on a real phone the operator does.
+        //
+        // `pm grant` is a request to the package manager, not a synchronous write.
+        // On a freshly booted device it can land *after* the test's `notify`, the
+        // card is dropped, and the failure reads "no live update was posted" -- which
+        // is what this test reported on two cold emulators before the wait was added.
         InstrumentationRegistry.getInstrumentation().uiAutomation
             .executeShellCommand("pm grant ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS}")
             .close()
+        val deadline = System.currentTimeMillis() + 5_000
+        while (!granted() && System.currentTimeMillis() < deadline) Thread.sleep(25)
+        assertTrue("POST_NOTIFICATIONS was never granted", granted())
     }
+
+    private fun granted(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
 
     private fun active(): android.service.notification.StatusBarNotification? =
         manager.activeNotifications.firstOrNull { it.id == LiveTurn.NOTIFICATION_ID }

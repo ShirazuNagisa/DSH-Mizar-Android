@@ -80,4 +80,30 @@ class SessionSettingsTest {
         assertEquals("custom", merged.permissionPreset)
         assertEquals(original, SessionSettings.mergeStats(original, null))
     }
+
+    /**
+     * The new-session call and the settings call send the same four keys.
+     *
+     * They used to be two hand-written `buildJsonObject` blocks, one in the view
+     * model and one here, that had to be kept in step by eye. The payload is now
+     * built once; these cases pin the bytes, including that an absent effort is an
+     * absent key rather than a null.
+     */
+    @Test fun `the payload is the same whether it is built from a scope or a session id`() {
+        val selection = ModelSelection("p", "thinking", "max")
+        assertEquals(
+            SessionSettings.modelPayload(scope, selection).toString(),
+            SessionSettings.modelPayload(scope.sessionId, selection).toString(),
+        )
+        assertEquals(
+            """{"sessionId":"session","provider":"p","model":"thinking","reasoningEffort":"max"}""",
+            SessionSettings.modelPayload(scope.sessionId, selection).toString(),
+        )
+    }
+
+    @Test fun `an absent effort leaves the key out entirely`() {
+        val payload = SessionSettings.modelPayload("session", ModelSelection("p", "plain"))
+        assertEquals("""{"sessionId":"session","provider":"p","model":"plain"}""", payload.toString())
+        assertFalse("reasoningEffort" in payload)
+    }
 }

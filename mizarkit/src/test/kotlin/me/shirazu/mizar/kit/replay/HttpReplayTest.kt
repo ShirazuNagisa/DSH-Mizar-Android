@@ -137,4 +137,108 @@ class HttpReplayTest {
             file.delete()
         }
     }
+
+    /**
+     * The other half of a replay: what was asked, in what order.
+     *
+     * Counting answers alone cannot tell "asked once, correctly" from "asked twice,
+     * once wrong" -- and the pairing path asks twice on purpose when the LAN address
+     * is dead, so the order is part of the contract.
+     */
+    @Test
+    fun `a replay remembers every request it was asked for, in order`() = runBlocking {
+        val replay = HttpReplay(
+            Recording(
+                name = "order",
+                exchanges = listOf(
+                    RecordedExchange("POST", "/mizar/v1/pair", 200, """{"ok":1}"""),
+                    RecordedExchange("GET", "/mizar/v1/hello", 200, """{"ok":2}"""),
+                ),
+            ),
+        )
+
+        replay.send(HttpRequest(method = "post", url = "http://10.0.2.2:19390/mizar/v1/pair", body = """{"code":"A"}"""))
+        replay.send(HttpRequest(method = "GET", url = "https://relay.test/mizar/v1/hello"))
+
+        assertEquals(2, replay.served)
+        assertEquals(listOf("POST", "GET"), replay.requests.map { it.method })
+        assertEquals(listOf("/mizar/v1/pair", "/mizar/v1/hello"), replay.requests.map { it.path })
+        assertEquals("""{"code":"A"}""", replay.requests.first().body)
+        assertNull(replay.requests.last().body)
+    }
+
+    /** A recording that names a body is a scenario, not just an endpoint. */
+    @Test
+    fun `a recording that names a body refuses a different one`() = runBlocking {
+        val replay = HttpReplay(
+            Recording(
+                name = "body",
+                exchanges = listOf(
+                    RecordedExchange(
+                        "POST", "/mizar/v1/pair", 200, """{"ok":1}""",
+                        requestBody = """{"code":"RIGHT","name":"Pixel"}""",
+                    ),
+                ),
+            ),
+        )
+
+        val error = assertThrows<AssertionError> {
+            runBlocking {
+                replay.send(
+                    HttpRequest(
+                        method = "POST",
+                        url = "http://10.0.2.2:19390/mizar/v1/pair",
+                        body = """{"code":"WRONG","name":"Pixel"}""",
+                    ),
+                )
+            }
+        }
+
+        // The message has to name the body it saw, or the drift is invisible.
+        assertTrue(error.message!!.contains("WRONG"), error.message)
+        assertEquals(0, replay.served)
+    }
+
+    /** What the recorder writes down is what the replay insists on, round trip. */
+    @Test
+    fun `a recorded request body survives save and load and is enforced`() = runBlocking {
+        val real = object : HttpTransport {
+            override suspend fun send(request: HttpRequest) = HttpResponse(status = 200, body = """{"ok":true}""")
+        }
+        val recorder = RecordingTransport(real)
+        recorder.send(
+            HttpRequest(method = "POST", url = "https://relay.test/r/room/mizar/v1/pair", body = """{"code":"A"}"""),
+        )
+
+        val file = File.createTempFile("mizar-body", ".json")
+        try {
+            HttpReplay.save(file, recorder.snapshot("body-round-trip"))
+            val replayed = HttpReplay.load(file)
+
+            assertThrows<AssertionError> {
+                runBlocking {
+                    replayed.send(
+                        HttpRequest(
+                            method = "POST",
+                            url = "https://relay.test/r/room/mizar/v1/pair",
+                            body = """{"code":"B"}""",
+                        ),
+                    )
+                }
+            }
+            assertEquals(0, replayed.served)
+
+            // The recorded body itself still replays.
+            replayed.send(
+                HttpRequest(
+                    method = "POST",
+                    url = "https://relay.test/r/room/mizar/v1/pair",
+                    body = """{"code":"A"}""",
+                ),
+            )
+            assertEquals(1, replayed.served)
+        } finally {
+            file.delete()
+        }
+    }
 }
