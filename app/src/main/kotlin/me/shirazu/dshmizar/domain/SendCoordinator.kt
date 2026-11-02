@@ -52,6 +52,21 @@ internal class SendCoordinator(
     private val hideCard: () -> Unit,
 ) {
 
+    /**
+     * A submission already on its way to the host.
+     *
+     * The composer has two ways to send -- the button and the keyboard's action -- and
+     * both call this. Without this flag a single press that reaches both produces two
+     * frames with two request ids, so the host records the message twice: one turn
+     * runs and answers, the other is left with no turn at all and is drawn as
+     * "未完成" forever. A ghost like that also keeps the session looking busy, which
+     * holds the lock-screen card up after the real turn has finished.
+     *
+     * Held only until the frame is away, not through the wait for the log: two
+     * messages typed in quick succession are two prompts, not a double press.
+     */
+    private var submitting = false
+
     /** Send what the composer holds, or explain why it cannot go. */
     fun send(message: String) {
         val current = store.state.value
@@ -65,28 +80,41 @@ internal class SendCoordinator(
             store.update { it.copy(problem = failure) }
             return
         }
+        if (submitting) return
+        submitting = true
         scope.launch {
-            val socket = link() ?: return@launch
-            val sessionId = store.state.value.selectedSessionId ?: return@launch
+            val socket = link()
+            val sessionId = store.state.value.selectedSessionId
+            if (socket == null || sessionId == null) {
+                submitting = false
+                return@launch
+            }
             // A fresh key per submission: reusing one would make a second identical
             // message look like a retry of the first and be dropped by the host.
             val requestId = UUID.randomUUID().toString()
             try {
-                val result = socket.prompt(
-                    buildJsonObject {
-                        put("sessionId", sessionId)
-                        put("requestId", requestId)
-                        // The attached-prompt path requires a string for text even
-                        // when the file is the whole message: an omitted key is a
-                        // malformed frame, not "no text".
-                        put("text", message)
-                        if (ready.isNotEmpty()) {
-                            putJsonArray("attachmentIds") {
-                                ready.forEach { add(JsonPrimitive(requireNotNull(it.readyId))) }
+                val result = try {
+                    socket.prompt(
+                        buildJsonObject {
+                            put("sessionId", sessionId)
+                            put("requestId", requestId)
+                            // The attached-prompt path requires a string for text even
+                            // when the file is the whole message: an omitted key is a
+                            // malformed frame, not "no text".
+                            put("text", message)
+                            if (ready.isNotEmpty()) {
+                                putJsonArray("attachmentIds") {
+                                    ready.forEach { add(JsonPrimitive(requireNotNull(it.readyId))) }
+                                }
                             }
-                        }
-                    },
-                )
+                        },
+                    )
+                } finally {
+                    // Released as soon as the frame is away. Holding it through the
+                    // wait below would swallow a second message typed quickly, and the
+                    // wait is not a submission.
+                    submitting = false
+                }
                 if (!result.accepted) {
                     store.update { it.copy(problem = "the host did not accept the message") }
                     return@launch
