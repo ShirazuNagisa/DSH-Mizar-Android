@@ -403,6 +403,13 @@ object Conversation {
         val reason = HashMap<Int?, String?>()
         val delivered = HashMap<Int?, MutableList<DeliveredFile>>()
         var pending = mutableListOf<ConversationItem>()
+        // The last prompt accepted, so an adjacent copy of it can be dropped. The host
+        // writes the operator's message twice -- once with the turn it starts, once as
+        // an inbox splice without one -- and `items` already ignores the second copy.
+        // Without the same rule here the copy lands in `pending`, which becomes a
+        // turn-less group of its own: drawn as 未完成 for ever, and keeping the session
+        // looking busy so the lock-screen card never comes down.
+        var lastPrompt: ConversationItem.Message? = null
 
         fun flush(into: Int?) {
             if (pending.isEmpty()) return
@@ -442,6 +449,16 @@ object Conversation {
                     val items = recordItems(record)
                     if (items.isEmpty()) continue
                     if (name == "user/message") {
+                        val prompt = items.firstOrNull() as? ConversationItem.Message
+                        val previous = lastPrompt
+                        if (prompt != null && previous != null &&
+                            previous.role == prompt.role &&
+                            previous.text == prompt.text &&
+                            previous.attachments == prompt.attachments
+                        ) {
+                            continue
+                        }
+                        if (prompt != null) lastPrompt = prompt
                         // A prompt belongs to the turn it starts, and it is written
                         // before that turn exists.
                         if (turn != null && order.contains(turn)) {
@@ -782,5 +799,16 @@ fun reclaimStrandedPrompts(turns: List<ConversationTurn>): List<ConversationTurn
         }
     }
     held?.let { out += it }
-    return out
+    // A group that the host has since given a number is the same message twice.
+    //
+    // The copy is written without a turn -- an inbox splice, or a prompt recorded
+    // before its `turn/start` -- and the turn that owns it arrives separately. The
+    // merge is additive, so nothing ever retires the copy: it sits under the real
+    // turn with no turn, no end and no steps, which `isPending` reports as running
+    // for ever. That ghost keeps the session looking busy (the lock-screen card never
+    // comes down) and hides the completion notification.
+    val claimed = out.filter { it.turn != null }.flatMap { it.prompts }.map { it.id }.toSet()
+    return out.filterNot { turn ->
+        turn.turn == null && turn.prompts.isNotEmpty() && turn.prompts.all { it.id in claimed }
+    }
 }

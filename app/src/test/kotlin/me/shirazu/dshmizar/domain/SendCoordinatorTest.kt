@@ -1,5 +1,6 @@
 package me.shirazu.dshmizar.domain
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -83,8 +84,12 @@ class SendCoordinatorTest {
         var cancelFailure: Throwable? = null
         var promptFailure: Throwable? = null
 
+        /** When set, the prompt waits here, so a send can be caught mid-flight. */
+        var gate: CompletableDeferred<Unit>? = null
+
         override suspend fun prompt(payload: JsonObject): PromptResult {
             prompts += payload
+            gate?.await()
             promptFailure?.let { throw it }
             return answer
         }
@@ -117,8 +122,41 @@ class SendCoordinatorTest {
     }
 
     @Test
-    fun `nothing is sent when the composer is empty`() {
+    fun `a second press while the first is in flight does not send twice`() = runBlocking {
         val f = Fixture()
+        val gate = CompletableDeferred<Unit>()
+        f.server.gate = gate
+
+        // The button and the keyboard's action both fire for one press.
+        f.coordinator.send("hello")
+        f.coordinator.send("hello")
+        gate.complete(Unit)
+        f.settle()
+
+        // Two frames with two request ids are two messages to the host: one runs and
+        // answers, the other is left with no turn and is drawn as 未完成 for ever.
+        assertEquals("one press is one prompt, not two", 1, f.server.prompts.size)
+    }
+
+    @Test
+    fun `a second message typed after the frame went out is a second prompt`() = runBlocking {
+        val f = Fixture()
+        val gate = CompletableDeferred<Unit>()
+        f.server.gate = gate
+
+        f.coordinator.send("first")
+        gate.complete(Unit)
+        f.settle()
+        f.coordinator.send("second")
+        f.settle()
+
+        // The guard is released when the frame is away, not when the log catches up:
+        // two messages typed quickly are two prompts.
+        assertEquals(2, f.server.prompts.size)
+    }
+
+    @Test
+    fun `nothing is sent when the composer is empty`() {        val f = Fixture()
 
         f.coordinator.send("   ")
         f.settle()

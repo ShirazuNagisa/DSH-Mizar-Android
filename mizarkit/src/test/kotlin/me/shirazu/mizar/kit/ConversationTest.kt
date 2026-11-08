@@ -241,6 +241,71 @@ class ConversationTest {
     }
 
     /** The `(role, text)` of every message in a page, which is what several tests assert on. */
+    @Test
+    fun `a prompt written twice is one bubble, even when the copy carries no turn`() {
+        // The host writes the operator's message twice: once with the turn it starts,
+        // once as an inbox splice without one. `items` already drops the adjacent
+        // duplicate; `turns` did not, so the second copy fell through to `pending` and
+        // became a turn-less group of its own -- drawn as 未完成 for ever, and keeping
+        // the session looking busy so the lock-screen card never came down.
+        val turns = turnsOf(
+            """
+            {"sessionId":"s","asOfSeq":6,"records":[
+              {"type":"event","event":{"type":"turn/start","seq":2,"time":1000,"data":{"turn":1}}},
+              {"type":"event","event":{"type":"user/message","seq":3,"time":1100,
+                "data":{"turn":1,"content":[{"type":"text","text":"做测试"}],
+                        "source":{"kind":"user"},"role":"user","id":"u1"}}},
+              {"type":"event","event":{"type":"assistant/message","seq":4,"time":1200,
+                "data":{"turn":1,"content":[{"type":"text","text":"好"}],
+                        "role":"assistant","id":"a1"}}},
+              {"type":"event","event":{"type":"turn/end","seq":5,"time":1300,
+                "data":{"turn":1,"reason":{"kind":"done"}}}},
+              {"type":"event","event":{"type":"user/message","seq":6,"time":1400,
+                "data":{"content":[{"type":"text","text":"做测试"}],
+                        "source":{"kind":"user"},"role":"user","id":"u2"},"surfaceOp":"append"}}
+            ]}
+            """.trimIndent(),
+        )
+
+        assertEquals(1, turns.size, "the copy must not become a group of its own")
+        assertEquals(1, turns.single().prompts.size)
+    }
+
+    @Test
+    fun `a prompt the host has since numbered is not also drawn on its own`() {
+        // The reconnect path: the transcript was first read while the prompt had no
+        // turn yet, so it formed an unnumbered group. The next page has the turn that
+        // owns it. `mergeTurns` is additive, so without this rule both survive and the
+        // copy -- no turn, no end, no steps -- reports as pending for ever.
+        val early = turnsOf(
+            """
+            {"sessionId":"s","asOfSeq":3,"records":[
+              {"type":"event","event":{"type":"user/message","seq":3,"time":1100,
+                "data":{"content":[{"type":"text","text":"做测试"}],
+                        "source":{"kind":"user"},"role":"user","id":"u1"},"surfaceOp":"append"}}
+            ]}
+            """.trimIndent(),
+        )
+        val later = turnsOf(
+            """
+            {"sessionId":"s","asOfSeq":5,"records":[
+              {"type":"event","event":{"type":"turn/start","seq":2,"time":1000,"data":{"turn":1}}},
+              {"type":"event","event":{"type":"user/message","seq":3,"time":1100,
+                "data":{"turn":1,"content":[{"type":"text","text":"做测试"}],
+                        "source":{"kind":"user"},"role":"user","id":"u1"}}},
+              {"type":"event","event":{"type":"turn/end","seq":5,"time":1300,
+                "data":{"turn":1,"reason":{"kind":"done"}}}}
+            ]}
+            """.trimIndent(),
+        )
+
+        val merged = mergeTurns(early, later)
+
+        assertEquals(1, merged.size, "the prompt's own group must be retired: ${merged.map { it.id }}")
+        assertEquals(1, merged.single().prompts.size)
+        assertEquals(1, merged.single().turn)
+    }
+
     private fun rendered(items: List<ConversationItem>): List<String> = items.mapNotNull { item ->
         (item as? ConversationItem.Message)?.let { "${roleName(it.role)}:${it.text}" }
     }

@@ -31,27 +31,91 @@ discovered while verifying the new UI.
 
 ## KI-3 — a send at the bottom does not follow when the previous item is taller than the viewport
 
-- At the bottom of a transcript with long replies, sending does not follow the new turn; the list
-  stays in place and shows "N new".
-- Reproduced identically on the pre-refactor baseline APK, so it predates the branch.
-- **Cause confirmed by reading `SessionScreen.kt` (the effect at `state.conversation.size`,
-  `itemCount`).** `atBottom` is `!list.canScrollForward`, which is a *layout* fact. Appending an
-  item makes `canScrollForward` true, so by the time the effect runs the list reports "there is
-  more below" even though the operator never moved. The effect then takes the `added > 0` branch,
-  sets `following = false` and counts the item as new. Whether it loses that race depends on
-  whether the new item was laid out before the effect ran, which is why a short previous item
-  usually follows and a tall one does not.
-- **The fix is not a different comparison — it is a different signal.** No layout-derived value can
-  tell "the operator scrolled away" from "the content grew", because growth changes every one of
-  them. `following` has to be driven by user intent: set it false on a drag that leaves the end,
-  true on a drag that reaches it, and never let an append change it. `list.interactionSource`
-  exposes exactly those drag events.
-- The sharper form of the same problem: **`following` is set only inside this effect** — there is
-  no scroll listener anywhere in the screen. So the app does not know the operator scrolled away
-  until the next item arrives, and the "N new" count is therefore one item late even in the cases
-  that look like they work.
-- Not done yet: it changes scroll behaviour in the transcript, so it wants a device pass with a
-  long reply (the reproduction above) before it lands, not just a green suite.
+**Fixed.** Reproduced on the phone at 0.10.6, fixed and re-checked on the same session.
+
+- Symptom: at the bottom of a transcript with a long reply, sending left the list in place and
+  showed "1 new message" instead of following the turn just sent.
+- Cause: `atBottom` is `!list.canScrollForward`, a *layout* fact. Appending an item makes
+  `canScrollForward` true by itself, so by the time the follow effect ran the list reported "there
+  is more below" even though the operator never moved. Whether that landed before or after the new
+  item was measured is why a short previous item usually followed and a tall one did not. Opening
+  the keyboard produced the same result by shrinking the viewport.
+- The sharper form: `following` was set **only** inside that effect, so the app did not know the
+  operator had scrolled away until the next item arrived — the count was one item late even where
+  it looked like it worked.
+- Fix: `following` is now set when a scroll ends (`snapshotFlow { list.isScrollInProgress }`), never
+  after an append: a scroll that ends at the end means follow, anywhere else means don't. The
+  "back to latest" pill also sets it, so asking for the end is asking to follow again. `atBottom`
+  stays where it belongs — deciding whether the pill is visible.
+
+## KI-4 — a finished turn shows "深度求索中~" while the next one starts
+
+- Seen on the phone at 0.10.6 while sending a prompt from the bottom of a transcript: the turn
+  before it had already ended, yet it was drawn as running until the new turn landed. It corrected
+  itself on its own, so this is a transient mis-attribution, not a stuck state.
+- `SessionScreen.kt` decides it like this:
+
+  ```kotlin
+  val inFlight = lastTurn != null && (lastTurn.isRunning || lastTurn.isPending) && (sessionRunning || recent)
+  val runningTurnId = lastTurn?.takeIf { inFlight || it.isRunning }?.id
+  ```
+
+  "This turn is running" is therefore derived from the *session-level* `running` flag and hung on
+  whatever the last turn happens to be. In the window between "the session says running" and "the
+  new turn appears in `state.turns`", the last turn is still the previous one, so the previous one
+  wears the marker.
+- Same shape as KI-3: a coarse signal answering a fine-grained question, so the answer lands on
+  the wrong item. The difference is that this one is visible for a second and then fixes itself,
+  which is why it went unnoticed until a send was watched closely.
+- Not fixed. The rule that would fix it is "a turn is running only if the host says *that turn* is
+  running, or it is the newest and has no end"; the second half is what `isPending` already means,
+  so the work is deciding what to do while the new turn is still only optimistic — which is the
+  same question KI-3 answered for scrolling, and it deserves the same treatment rather than a
+  quick comparison change.
+
+## KI-5 — the live card stays on "电脑正在处理…" while the app is in the background
+
+**Measured, not guessed.** With the app backgrounded for 70 s: the process is alive and not
+frozen (`fg-service-act`, `isFrozen=false`), the `ConnectionService` is running, and yet the app
+wrote **zero** log lines (13 in 30 s in the foreground) and held **zero TCP connections**. The
+socket is gone in the background.
+
+That explains all three symptoms at once. `turn.settled` never arrives, so `LiveTurnCoordinator
+.forget` is never called and the card keeps counting; the session list is never re-read, so `sync`
+never sees the row idle; and the completion notification is posted by the settle path, so it waits
+until the app comes back.
+
+`ConnectionService` is only a notification and a keep-alive: it owns no socket. The connection
+lives in the activity's view model, so "backgrounded" and "connected" are mutually exclusive by
+construction. `setPresence` even says so — "the socket paused in the background".
+
+So this is not a bug in the notification code, and no amount of hiding the card sooner will fix
+it. The fix is to give the connection an owner that outlives the screen: the service opens the
+socket, runs the monitor and the settle path, and the view model observes it. That is a real piece
+of work, not a patch, and it should be scoped on its own. The plan is in
+`foreground-service.md` under 「待办：把连接下沉到服务」.
+
+## Open verification items
+
+## KI-6 — one prompt is drawn twice after a reconnect
+
+Seen on the phone at 0.10.6 in a fresh session: one send, one turn that answered, and a second
+copy of the same prompt below it with no turn at all — drawn as 未完成, or as 深度求索中 while
+anything else runs. The log shows the app reconnecting and loading a full page (12 records) right
+before the copy appears, and only one prompt was ever typed.
+
+So this is a merge artefact, not a double send. `mergeTurns` dedupes by `ConversationTurn.id`, and
+that id is `turn?.toString() ?: "unopened-${orderSeq ?: "head"}"`. The same prompt can therefore be
+"turn 7" in one copy and `unopened-head` in the other — two ids, both kept, one of them a turn-less
+group with no end and no steps, which `isPending` reports as still running for ever.
+
+That ghost is what keeps the lock-screen card up (KI-5) and delays the completion notification.
+
+Next step: the `applyPage` note already prints the shape (`t=<turn> ... p=<prompts>`), so a
+reconnect with that line in logcat names the two ids directly. The fix belongs where the groups are
+built or merged — dedupe by the prompt record's own id across groups, not by the group's synthetic
+id. `submitting` in `SendCoordinator` guards a real hazard (button and IME both firing) but does not
+address this one.
 
 ## Open verification items
 
