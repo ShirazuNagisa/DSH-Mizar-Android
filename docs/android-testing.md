@@ -474,3 +474,24 @@ Current state (2026-11-14): all five native libraries are `0x4000`-aligned and
 the archive passes; QuickJS (`libmizarquickjs.so`) is compiled by the module's
 CMake build in this repo, the rest come from AndroidX/ML Kit. A real 16 KB
 device is still the only way to prove runtime behaviour.
+### Runtime check on a 16 KB kernel (2026-11-14)
+
+The static check can be answered for real with Google's 16 KB page-size system image:
+
+```powershell
+$env:JAVA_HOME='C:\Users\84494\AppData\Local\Programs\AndroidDev\jdk-17'
+& "$env:LOCALAPPDATA\Android\Sdk\cmdline-tools\latest\bin\sdkmanager.bat" `
+  "system-images;android-35;google_apis_ps16k;x86_64"   # ~3.8 GB
+cd Android
+.\scripts\emulator\emu.ps1 create -Avd mizar16k -Port 5560 `
+  -Image 'system-images;android-35;google_apis_ps16k;x86_64' -Device pixel_6
+.\scripts\emulator\emu.ps1 boot -Avd mizar16k -Port 5560
+adb -s emulator-5560 shell getconf PAGE_SIZE            # 16384
+```
+
+Measured on `mizar16k` (2026-11-14): `getconf PAGE_SIZE` = 16384, the QuickJS local-agent
+instrumentation passes 4/4, and the whole app suite behaves exactly as on API 35 — 65 tests,
+0 failed, 3 skipped. The evidence capture is `docs/evidence/android-16k-runtime-2026-11-14.png`
+(workspace root). A real phone with a vendor kernel is still the last unknown; the emulator image
+proves the APK's own native libraries and the ByteCode/Compose stack, not every vendor's SELinux
+policy.
