@@ -26,6 +26,16 @@ class FixturesTest {
     private data class Fixture(val name: String, val raw: String)
 
     /**
+     * Fixtures in this directory that are data tables rather than host frames.
+     *
+     * `session-state.json` is the generated state table (codes, wording, transport
+     * kinds) shared with the Rust and Swift suites. It lives beside the frames
+     * because it is the same kind of artefact -- a committed truth two sides decode
+     * -- but it is not a `ServerFrame`, so the frame assertions skip it by name.
+     */
+    private val dataFixtures = setOf("session-state")
+
+    /**
      * Every captured fixture.
      *
      * `fixturesDirectory()` walks up from the module directory and fails loudly when
@@ -36,8 +46,9 @@ class FixturesTest {
         val directory = fixturesDirectory()
         return (directory.listFiles() ?: emptyArray<File>())
             .filter { it.isFile && it.name.endsWith(".json") }
-            .sortedBy { it.name }
             .map { Fixture(name = it.name.removeSuffix(".json"), raw = it.readText()) }
+            .filter { it.name !in dataFixtures }
+            .sortedBy { it.name }
     }
 
     /** One named fixture, or a failed test — Swift's `#require(…first { … })`. */

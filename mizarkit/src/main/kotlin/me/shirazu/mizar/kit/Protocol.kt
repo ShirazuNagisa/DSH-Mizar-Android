@@ -89,5 +89,14 @@ class MizarError(
     val requiresRepairing: Boolean
         get() = known == MizarErrorCode.UNAUTHENTICATED || known == MizarErrorCode.DEVICE_REVOKED
 
+    /**
+     * Whether the host does not implement the method.
+     *
+     * This is the one error that means "the computer is older than this feature",
+     * and the only one a caller is expected to turn into a fallback instead of a
+     * failure.
+     */
+    val isNotImplemented: Boolean get() = known == MizarErrorCode.NOT_IMPLEMENTED
+
     override fun toString(): String = "MizarError($code, $message, retryable=$retryable)"
 }

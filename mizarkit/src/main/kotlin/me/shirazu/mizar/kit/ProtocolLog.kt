@@ -84,6 +84,17 @@ class ProtocolLog(private val capacity: Int = DEFAULT_CAPACITY) {
         add(Entry(atMillis, Direction.IN, "event:$name", outcome = "event", bytes = bytes))
     }
 
+    /**
+     * A frame this build could not read and therefore dropped.
+     *
+     * The state channel is additive: a newer host may grow a second binary dialect,
+     * and the right behaviour is to ignore it and keep the socket. Recording it
+     * means "the app ignored something" stays observable instead of invisible.
+     */
+    fun ignored(name: String, bytes: Int?, atMillis: Long = System.currentTimeMillis()) {
+        add(Entry(atMillis, Direction.IN, name, outcome = "ignored", bytes = bytes))
+    }
+
     /** Everything remembered, oldest first. */
     fun snapshot(): List<Entry> = synchronized(lock) { entries.toList() }
 

@@ -49,7 +49,7 @@ class AccountClient(
     private val baseUrl: String = DEFAULT_BASE_URL,
     private val transport: HttpTransport = OkHttpHttpTransport(),
     private val appVersion: String? = null,
-) : AccountApi {
+) : AccountApi, AccountSurveysApi, AccountAnnouncementsApi {
 
     /**
      * Create an account.
@@ -185,6 +185,57 @@ class AccountClient(
         send("GET", "/me", token = token, extraHeaders = mapOf(CLIENT_ID_HEADER to deviceId)),
         UserEnvelope.serializer(),
     ).user
+
+    // ── surveys ─────────────────────────────────────────────────────────────
+
+    /**
+     * The questionnaires this account may fill in.
+     *
+     * The relay owns the definitions and the payout; the phone only draws and
+     * submits. Each survey already says whether this account finished it, so there is
+     * no second "did I answer this" call.
+     */
+    override suspend fun surveys(token: String): List<Survey> = decode(
+        send("GET", "/surveys", token = token),
+        SurveyListEnvelope.serializer(),
+    ).surveys
+
+    /**
+     * Submit one filled-in questionnaire.
+     *
+     * The answer carries the updated profile (the reward is already applied to
+     * `plan` / `paidUntil`) and the number of days granted. The relay is the
+     * authority on both: a phone that computed the new expiry itself would disagree
+     * with the server the moment two rewards stack.
+     */
+    override suspend fun submitSurvey(
+        token: String,
+        surveyId: String,
+        answers: List<SurveyAnswer>,
+    ): SurveySubmission = decode(
+        send(
+            "POST", "/surveys/submit", token = token,
+            body = WIRE_JSON.encodeToString(
+                SurveySubmitBody.serializer(),
+                SurveySubmitBody(surveyId, answers),
+            ),
+        ),
+        SurveySubmission.serializer(),
+    )
+
+    // ── announcements ───────────────────────────────────────────────────────
+
+    /**
+     * The banners live right now.
+     *
+     * The polling fallback for a phone that cannot hold the announcement socket. Also
+     * the read a foreground refresh makes once, so a banner created while the app was
+     * suspended is not missed.
+     */
+    override suspend fun announcements(token: String): List<Announcement> = decode(
+        send("GET", "/announcements", token = token),
+        AnnouncementListEnvelope.serializer(),
+    ).announcements
 
     override suspend fun logout(token: String) {
         send("POST", "/logout", token = token, body = null)

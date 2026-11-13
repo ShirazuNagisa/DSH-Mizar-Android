@@ -114,5 +114,8 @@ fun jsonInt(value: Int): JsonElement = JsonPrimitive(value)
 /** A JSON number from a long. */
 fun jsonLong(value: Long): JsonElement = JsonPrimitive(value)
 
+/** A JSON number from a double, for the timestamps the host sends as plain numbers. */
+fun jsonDouble(value: Double): JsonElement = JsonPrimitive(value)
+
 /** A JSON boolean. */
 fun jsonBool(value: Boolean): JsonElement = JsonPrimitive(value)

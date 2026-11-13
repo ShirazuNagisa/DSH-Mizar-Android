@@ -8,8 +8,33 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import okio.ByteString
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+
+/**
+ * One frame off the socket, before anything has interpreted it.
+ *
+ * Text and binary are distinct on purpose: the API is JSON, the state channel is
+ * binary, and a read loop that collapsed them into a `String?` could not tell a
+ * state frame from a decode failure -- or from a close. The first byte tells them
+ * apart on the wire (`{` for JSON, `0x53` for a state frame), but the transport is
+ * the only layer that knows which kind of WebSocket message arrived.
+ */
+sealed interface Incoming {
+    /** A JSON API frame. */
+    data class Text(val text: String) : Incoming
+
+    /** A binary message: the state channel, and anything a newer host adds. */
+    class Binary(val bytes: ByteArray) : Incoming {
+        override fun equals(other: Any?): Boolean =
+            other is Binary && bytes.contentEquals(other.bytes)
+
+        override fun hashCode(): Int = bytes.contentHashCode()
+
+        override fun toString(): String = "Binary(${bytes.size} bytes)"
+    }
+}
 
 /**
  * A socket, behind an interface.
@@ -25,8 +50,22 @@ interface WebSocketTransport {
     /** Send one text frame, or throw `SOCKET_CLOSED`. */
     suspend fun send(text: String)
 
-    /** The next text frame, or `null` once the peer has gone. */
+    /**
+     * The next text frame, or `null` once the peer has gone.
+     *
+     * Kept for transports (and scripted doubles) that only ever see JSON. A consumer
+     * that must see the state channel uses [receiveMessage] instead.
+     */
     suspend fun receive(): String?
+
+    /**
+     * The next frame, text or binary, or `null` once the peer has gone.
+     *
+     * The default reads through [receive], so a text-only transport -- including
+     * every scripted test double written before the state channel -- keeps working
+     * unchanged. A real transport overrides this and answers both kinds.
+     */
+    suspend fun receiveMessage(): Incoming? = receive()?.let { Incoming.Text(it) }
 
     /** Close, without waiting to be polite about it. */
     suspend fun close()
@@ -62,7 +101,7 @@ class OkHttpWebSocketTransport(
 ) : WebSocketTransport {
 
     private var socket: WebSocket? = null
-    private var inbox = Channel<String?>(Channel.UNLIMITED)
+    private var inbox = Channel<Incoming?>(Channel.UNLIMITED)
 
     override suspend fun connect(url: String, headers: Map<String, String>) {
         inbox = Channel(Channel.UNLIMITED)
@@ -80,7 +119,12 @@ class OkHttpWebSocketTransport(
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                inbox.trySend(text)
+                inbox.trySend(Incoming.Text(text))
+            }
+
+            // The state channel: one small binary frame per session-state change.
+            override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+                inbox.trySend(Incoming.Binary(bytes.toByteArray()))
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
@@ -120,7 +164,18 @@ class OkHttpWebSocketTransport(
         }
     }
 
-    override suspend fun receive(): String? = inbox.receiveCatching().getOrNull()
+    override suspend fun receiveMessage(): Incoming? = inbox.receiveCatching().getOrNull()
+
+    /** The next text frame, skipping binary ones: this transport speaks both kinds. */
+    override suspend fun receive(): String? {
+        while (true) {
+            when (val message = receiveMessage()) {
+                null -> return null
+                is Incoming.Text -> return message.text
+                is Incoming.Binary -> continue
+            }
+        }
+    }
 
     override suspend fun close() {
         val current = socket

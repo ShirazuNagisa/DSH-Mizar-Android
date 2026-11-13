@@ -49,12 +49,19 @@ data class PairedHost(
             }
         }
 
-    /** The connection settings for one endpoint. */
+    /**
+     * The connection settings for one endpoint.
+     *
+     * @param engine the agent this socket is for, when the phone chose one; carried
+     *   into the `hello` frame, because a token from scanning a code has no scope of
+     *   its own. `null` keeps the old connection that sees every agent on the machine.
+     */
     fun configurationFor(
         endpoint: MizarConnection.Endpoint,
         appVersion: String?,
         deviceModel: String?,
         headers: Map<String, String> = emptyMap(),
+        engine: String? = null,
     ) =
         when (endpoint) {
             is MizarConnection.Endpoint.Direct -> MizarConnection.Configuration(
@@ -62,6 +69,7 @@ data class PairedHost(
                 token = deviceToken,
                 appVersion = appVersion,
                 deviceModel = deviceModel,
+                engine = engine,
             )
 
             is MizarConnection.Endpoint.Relay -> MizarConnection.Configuration(
@@ -69,6 +77,7 @@ data class PairedHost(
                 token = deviceToken,
                 appVersion = appVersion,
                 deviceModel = deviceModel,
+                engine = engine,
                 // A relay is reached over TLS and through nginx, so its handshake is
                 // allowed to take longer than a LAN socket's.
                 handshakeTimeoutMillis = 20_000,

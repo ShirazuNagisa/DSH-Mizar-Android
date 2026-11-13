@@ -7,18 +7,27 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.serialization.serializer
 import java.util.UUID
+
+/** How many state frames one connection keeps for a slow collector. */
+private const val STATE_FRAME_BUFFER = 256
 
 /**
  * One authenticated connection to a host.
@@ -59,6 +68,14 @@ class MizarConnection(
         val secure: Boolean = false,
         val appVersion: String? = null,
         val deviceModel: String? = null,
+        /**
+         * The agent this socket is for, when the phone chose one.
+         *
+         * Only a token minted by the relay carries a scope of its own, and that one
+         * wins on the host; this field is how a phone that paired by scanning a code
+         * chooses. `null` keeps the old unlocked-to-everything connection.
+         */
+        val engine: String? = null,
         val requestTimeoutMillis: Long = 60_000,
         val handshakeTimeoutMillis: Long = 20_000,
         /**
@@ -113,6 +130,43 @@ class MizarConnection(
     private var handshake: CompletableDeferred<ServerFrame.Welcome>? = null
     private val subscribers = LinkedHashMap<String, Channel<ServerFrame>>()
 
+    /**
+     * The host's state channels, one per session it talks about.
+     *
+     * A binary state frame names its session in the transport envelope, not in the
+     * frame itself, so the association is made here. Guarded by [stateLock] because
+     * the reader coroutine writes while the UI may read.
+     */
+    private val stateChannels = HashMap<String, StateChannel>()
+    private val stateLock = Any()
+
+    /**
+     * Every state frame this socket delivered, oldest first while a collector keeps up.
+     *
+     * A `SharedFlow` rather than a queue because a screen subscribes once, per
+     * connection: the subscription's lifetime is the socket's. No replay: a frame
+     * that arrived before the screen opened is recovered with `session.stream`, and
+     * replaying it here would apply the same interval twice.
+     *
+     * The buffer is bounded and drops the oldest under pressure: a screen that stops
+     * reading must not grow this without bound. Dropping is safe for the same reason
+     * no replay is kept -- the journal is authoritative for a gap.
+     */
+    private val _stateFrames = MutableSharedFlow<DeliveredStateFrame>(
+        replay = 0,
+        extraBufferCapacity = STATE_FRAME_BUFFER,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    /**
+     * Each binary state frame, with the session it belongs to.
+     *
+     * Envelope: `u8` session-id length, the id, then the 13-byte [StateFrame]. The
+     * host sends the same stream to every phone connection, so the session id is what
+     * lets a screen pick out the conversation it is drawing.
+     */
+    val stateFrames: Flow<DeliveredStateFrame> = _stateFrames.asSharedFlow()
+
     private val _state = MutableStateFlow<State>(State.Idle)
 
     /** Observable, for a UI that wants to draw the connection's state. */
@@ -158,6 +212,11 @@ class MizarConnection(
         } ?: throw failAndReturn("BAD_AUTHORITY", "cannot dial ${endpoint.describe()}")
 
         _state.value = State.Connecting
+        // A new socket is a new epoch of the state channel. The host's interval
+        // counter is per session and can restart with a desktop update or a fresh
+        // state machine; keeping the old channel would make every new frame look
+        // stale and the phone would freeze until the app was killed.
+        clearStateChannels()
         val socket = makeTransport()
         transport = socket
 
@@ -182,6 +241,7 @@ class MizarConnection(
                     token = configuration.token,
                     appVersion = configuration.appVersion,
                     deviceModel = configuration.deviceModel,
+                    engine = configuration.engine,
                 ),
             )
         } catch (error: Throwable) {
@@ -299,34 +359,220 @@ class MizarConnection(
         closeSocket("disconnected")
     }
 
+    // ── Additive methods ────────────────────────────────────────────────────
+    //
+    // Every method below is a later addition to the host's method table. A host that
+    // predates one answers `NOT_IMPLEMENTED`; `null` is that answer, and the caller
+    // keeps the behaviour it had before the method existed. Any *other* failure is
+    // thrown: "the computer is too old" and "the request timed out" are different
+    // answers, and flattening them hides a real fault.
+
+    /**
+     * `session.sync` — several conversation pages in one frame.
+     *
+     * @returns [SessionSyncOutcome.Answered] with the batch, or
+     *   [SessionSyncOutcome.Unsupported] when the host predates the method (read one
+     *   `session.messages` per session instead).
+     */
+    suspend fun syncSessions(
+        sessions: List<SessionSyncRequest>,
+        /** A byte ceiling for the whole answer; the host clamps it to 16 KiB..800 KiB. */
+        maxBytes: Int? = null,
+        /** How many items the answer may carry; the host clamps it to 1..64. */
+        maxItems: Int? = null,
+    ): SessionSyncOutcome {
+        if (sessions.isEmpty()) return SessionSyncOutcome.Answered(SessionSyncResult())
+        val payload = buildJsonObject {
+            put("items", JsonArray(sessions.map { it.toPayload() }))
+            maxBytes?.let { put("maxBytes", jsonInt(it)) }
+            maxItems?.let { put("maxItems", jsonInt(it)) }
+        }
+        return try {
+            SessionSyncOutcome.Answered(call("session.sync", payload))
+        } catch (error: MizarError) {
+            if (error.isNotImplemented) SessionSyncOutcome.Unsupported else throw error
+        }
+    }
+
+    /**
+     * `session.stream` — the host's journal for the turn that is (or was) running.
+     *
+     * @returns the replay, or `null` when the host predates the method. A host new
+     *   enough to answer but with no journal answers an empty entry list, which is a
+     *   normal answer rather than a failure.
+     */
+    suspend fun streamSession(sessionId: String): SessionStreamResult? =
+        optionalCall("session.stream", buildJsonObject { put("sessionId", sessionId) })
+
+    /**
+     * `session.compact` — run the engine's own context-compaction mechanism.
+     *
+     * @returns the host's acknowledgement, or `null` when the host predates the method.
+     */
+    suspend fun compactSession(sessionId: String): CompactResult? =
+        optionalCall("session.compact", buildJsonObject { put("sessionId", sessionId) })
+
+    /**
+     * `session.fork` — branch the conversation at one completed turn boundary.
+     *
+     * @param atSeq the selected turn's true inclusive `turn/end.seq`, never a summary
+     *   seq or a turn number: the host validates the boundary exists and is complete.
+     * @returns the new session's id, or `null` when the host predates the method.
+     */
+    suspend fun forkSession(sessionId: String, atSeq: Int): ForkResult? =
+        optionalCall(
+            "session.fork",
+            buildJsonObject {
+                put("sessionId", sessionId)
+                put("atSeq", jsonInt(atSeq))
+            },
+        )
+
+    /** `usage.overview` — the home page's per-day work history, or `null` on an older host. */
+    suspend fun usageOverview(): UsageOverview? = optionalCall("usage.overview", null)
+
+    /**
+     * `file.stat` — what a path is, in the session's working directory.
+     *
+     * @returns the file's facts, or `null` when the host predates the method (no
+     *   in-conversation preview can be drawn then).
+     */
+    suspend fun fileStat(sessionId: String, path: String): FileStat? =
+        optionalCall(
+            "file.stat",
+            buildJsonObject {
+                put("sessionId", sessionId)
+                put("path", path)
+            },
+        )
+
+    /**
+     * `file.read` — one slice of a delivered file.
+     *
+     * Slicing is not a preference: the listener refuses a frame over 512 KiB and
+     * base64 costs a third on top, so [FileSlice.MAX_SLICE_BYTES] of bytes is the
+     * largest piece that fits with room for the envelope. A caller loops until
+     * [FileSlice.eof].
+     */
+    suspend fun readFileSlice(
+        sessionId: String,
+        path: String,
+        offset: Long = 0,
+        length: Int = FileSlice.MAX_SLICE_BYTES,
+    ): FileSlice = call(
+        "file.read",
+        buildJsonObject {
+            put("sessionId", sessionId)
+            put("path", path)
+            put("offset", jsonLong(offset))
+            put("length", jsonInt(length))
+        },
+    )
+
+    /**
+     * One additive method, with `NOT_IMPLEMENTED` mapped to `null`.
+     *
+     * The single place the "older host" rule lives, so every new method answers the
+     * same way instead of each re-deciding whether it is allowed to throw.
+     */
+    private suspend inline fun <reified T> optionalCall(
+        method: String,
+        payload: JsonElement?,
+    ): T? = try {
+        call<T>(method, payload)
+    } catch (error: MizarError) {
+        if (error.isNotImplemented) null else throw error
+    }
+
     private fun startReading(socket: WebSocketTransport) {
         readJob = scope.launch {
             try {
                 while (true) {
-                    val text = socket.receive() ?: break
-                    when (val decoded = Frames.decodeServer(text)) {
-                        is FrameDecode.Decoded -> route(decoded.frame)
-                        is FrameDecode.VersionMismatch -> {
-                            val seen = decoded.seen
-                            val message = "host speaks protocol version $seen, this build speaks $MIZAR_PROTOCOL_VERSION"
-                            val error = MizarError(MizarErrorCode.PROTOCOL_VERSION_MISMATCH.wire, message)
-                            // The specific error goes to the waiters *before* the socket
-                            // is closed: closing fails everything with the generic
-                            // CONNECTION_CLOSED, which buries the one message that says
-                            // what to do about it.
-                            failAll(error)
-                            closeSocket(message)
-                            return@launch
+                    when (val message = socket.receiveMessage()) {
+                        null -> break
+                        is Incoming.Text -> {
+                            when (val decoded = Frames.decodeServer(message.text)) {
+                                is FrameDecode.Decoded -> route(decoded.frame)
+                                is FrameDecode.VersionMismatch -> {
+                                    val seen = decoded.seen
+                                    val message = "host speaks protocol version $seen, this build speaks $MIZAR_PROTOCOL_VERSION"
+                                    val error = MizarError(MizarErrorCode.PROTOCOL_VERSION_MISMATCH.wire, message)
+                                    // The specific error goes to the waiters *before* the socket
+                                    // is closed: closing fails everything with the generic
+                                    // CONNECTION_CLOSED, which buries the one message that says
+                                    // what to do about it.
+                                    failAll(error)
+                                    closeSocket(message)
+                                    return@launch
+                                }
+
+                                FrameDecode.Malformed -> continue
+                            }
                         }
 
-                        FrameDecode.Malformed -> continue
+                        is Incoming.Binary -> handleStateMessage(message.bytes)
                     }
                 }
                 closeSocket("the host closed the connection")
+            } catch (cancelled: CancellationException) {
+                // Deliberate close: `closeSocket` cancels this job and is already
+                // tearing the socket down. Closing again from here would race a
+                // reconnect that has already started on a new socket -- the stale
+                // read loop used to complete the new handshake with
+                // CONNECTION_CLOSED.
+                throw cancelled
             } catch (error: Throwable) {
                 closeSocket(describe(error))
             }
         }
+    }
+
+    /**
+     * Apply one binary state message.
+     *
+     * A binary message that is not a state frame is **ignored, not fatal**: the
+     * channel is additive, and a newer host may grow a second binary dialect. The
+     * only evidence left is the diagnostics log, which is exactly where "the app
+     * ignored something" belongs.
+     */
+    private fun handleStateMessage(bytes: ByteArray) {
+        val delivered = StateFrameEnvelope.decode(bytes).getOrElse {
+            traffic?.ignored("state-frame", bytes.size)
+            return
+        }
+        val now = System.currentTimeMillis()
+        synchronized(stateLock) {
+            val channel = stateChannels.getOrPut(delivered.sessionId) { StateChannel() }
+            channel.apply(delivered.frame, now)
+        }
+        _stateFrames.tryEmit(delivered)
+    }
+
+    /**
+     * What the host says one session is doing, when it says anything.
+     *
+     * `null` until the host opens the channel: an older host never does, and the UI
+     * must fall back to what it can infer from the conversation.
+     */
+    fun sessionState(sessionId: String): SessionState? = synchronized(stateLock) {
+        stateChannels[sessionId]?.state
+    }
+
+    /** The body text streamed for a session in its current state interval. */
+    fun streamedText(sessionId: String): String = synchronized(stateLock) {
+        stateChannels[sessionId]?.text.orEmpty()
+    }
+
+    /** Whether the host has gone quiet while promising heartbeats. */
+    fun isStateStale(
+        sessionId: String,
+        nowMillis: Long = System.currentTimeMillis(),
+    ): Boolean = synchronized(stateLock) {
+        stateChannels[sessionId]?.isStale(nowMillis) ?: false
+    }
+
+    private fun clearStateChannels() {
+        synchronized(stateLock) { stateChannels.clear() }
     }
 
     private fun route(frame: ServerFrame) {

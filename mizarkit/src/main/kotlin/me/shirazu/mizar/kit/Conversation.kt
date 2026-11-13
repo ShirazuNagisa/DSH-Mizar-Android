@@ -2,6 +2,10 @@ package me.shirazu.mizar.kit
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * `session.messages`.
@@ -32,6 +36,109 @@ data class SessionMessagesResult(
      */
     val context: ContextPressure? = null,
 )
+
+/**
+ * What the phone claims to hold when it asks for a page of `session.messages`.
+ *
+ * The three states are not interchangeable, and the host treats them differently:
+ * [Unstated] lets it answer from what it remembers delivering to this device,
+ * [Empty] says the phone lost its cache and needs a full page, and [After] says
+ * everything through that log position is already on disk.
+ */
+sealed interface SessionMessagesCursor {
+    /** No claim: leave the field off the wire. */
+    data object Unstated : SessionMessagesCursor
+
+    /** The phone holds nothing: send an explicit `null`, which the host must not override. */
+    data object Empty : SessionMessagesCursor
+
+    /** The phone holds everything through this position. */
+    data class After(val seq: Int) : SessionMessagesCursor
+
+    /** Whether this is a delta read -- "what is new since a position". */
+    val isDelta: Boolean get() = this is After
+}
+
+/**
+ * One session in a `session.sync` batch.
+ *
+ * The fields are the ones `session.messages` accepts, plus [updatedAt]: the instant
+ * the phone's cache actually covers. The host compares *that* against its own row to
+ * decide whether the read can be skipped, so sending the row's own timestamp instead
+ * would ask "is my row newer than my row".
+ */
+data class SessionSyncRequest(
+    val sessionId: String,
+    val cursor: SessionMessagesCursor = SessionMessagesCursor.Unstated,
+    /** The instant the cached page covers, epoch milliseconds. */
+    val updatedAt: Double? = null,
+    /** Only when reading a delegated child's page. */
+    val parentSessionId: String? = null,
+    val maxMessages: Int? = null,
+) {
+    /** The item object this request contributes to the batch's `items` array. */
+    fun toPayload(): JsonObject = buildJsonObject {
+        put("sessionId", sessionId)
+        when (cursor) {
+            SessionMessagesCursor.Unstated -> Unit
+            // Explicit null is a claim ("I hold nothing"), not an absent field.
+            SessionMessagesCursor.Empty -> put("afterSeq", JsonNull)
+            is SessionMessagesCursor.After -> put("afterSeq", jsonInt(cursor.seq))
+        }
+        updatedAt?.let { put("updatedAt", jsonDouble(it)) }
+        parentSessionId?.let { put("parentSessionId", it) }
+        maxMessages?.let { put("maxMessages", jsonInt(it)) }
+    }
+}
+
+/** The answer to a `session.sync` batch: several conversation pages in one frame. */
+@Serializable
+data class SessionSyncResult(
+    /** The sessions this frame answers, in the order they were asked. */
+    val items: List<SessionSyncItem> = emptyList(),
+    /**
+     * Sessions the host did not have room for, in the order they were asked.
+     *
+     * Absent means "nothing left" rather than "the host does not support this": a
+     * host that did not understand the request would have failed the call.
+     */
+    val remaining: List<String> = emptyList(),
+)
+
+/** One session's entry in a `session.sync` answer. */
+@Serializable
+data class SessionSyncItem(
+    val sessionId: String,
+    /** The host skipped the read: its row has not moved since `updatedAt`. */
+    val unchanged: Boolean? = null,
+    /** The page, when the host read one. */
+    val messages: SessionMessagesResult? = null,
+    /** Why this item failed, when it did. The other items are unaffected. */
+    val error: SessionSyncError? = null,
+)
+
+/** One failed item in a `session.sync` answer. */
+@Serializable
+data class SessionSyncError(
+    val code: String,
+    val message: String = "",
+)
+
+/**
+ * What one `session.sync` attempt produced, when a fallback must be decided.
+ *
+ * [Unsupported] is the one case the caller must remember: the host predates the
+ * method, and every further batch would be another wasted round trip. Anything else
+ * that went wrong is thrown as a [MizarError], which the surrounding sync pass
+ * already knows how to fail over from.
+ */
+sealed interface SessionSyncOutcome {
+    /** The host answered a batch. */
+    data class Answered(val result: SessionSyncResult) : SessionSyncOutcome
+
+    /** The host predates `session.sync`: read one `session.messages` per session instead. */
+    data object Unsupported : SessionSyncOutcome
+}
 
 /**
  * One record from the session log, with the two shapes it arrives in.
@@ -213,6 +320,15 @@ data class ConversationTurn(
      * row. The start record is the position it always had.
      */
     val startSeq: Int? = null,
+    /**
+     * The log position of the `turn/end` that closed this turn, when it had one.
+     *
+     * `session.fork` takes the position of the turn to branch after; the end record
+     * is that boundary. A turn that is still running has no end, and a page edge can
+     * cut the record off, so this is nullable and a caller that has no boundary must
+     * not guess one.
+     */
+    val endSeq: Int? = null,
     /** The files this turn declared as deliverables, in the order it presented them. */
     val deliverables: List<DeliveredFile> = emptyList(),
 ) {
@@ -313,6 +429,7 @@ data class ConversationTurn(
             startSeq = listOfNotNull(startSeq, next.startSeq).minOrNull(),
             // Whatever either copy knows: a continuation never repeats the list, and
             // dropping it here is how the cards disappeared on every refresh.
+            endSeq = endSeq ?: next.endSeq,
             deliverables = if (deliverables.isNotEmpty()) deliverables else next.deliverables,
         )
     }
@@ -336,6 +453,9 @@ data class ConversationTurn(
         endedAtMillis = if (turn == null && other.turn == null) null else endedAtMillis ?: other.endedAtMillis,
         endedReason = if (turn == null && other.turn == null) null else endedReason ?: other.endedReason,
         startSeq = listOfNotNull(startSeq, other.startSeq).minOrNull(),
+        // The end boundary is what `session.fork` needs; whichever copy carries it
+        // keeps it across a refresh (a page is a window, so one copy may lack it).
+        endSeq = endSeq ?: other.endSeq,
         // Rebuilt with named arguments, so anything not listed here is reset -- and a
         // reset list is how a delivered file vanished between the page that had it
         // and the refresh that did not.
@@ -399,6 +519,7 @@ object Conversation {
         val steps = LinkedHashMap<Int?, MutableList<ConversationItem>>()
         val started = HashMap<Int?, Long?>()
         val openedAtSeq = HashMap<Int?, Int?>()
+        val closedAtSeq = HashMap<Int?, Int?>()
         val ended = HashMap<Int?, Long?>()
         val reason = HashMap<Int?, String?>()
         val delivered = HashMap<Int?, MutableList<DeliveredFile>>()
@@ -433,6 +554,9 @@ object Conversation {
 
                 "turn/end" -> {
                     ended[turn] = at
+                    // The log position of this ending, for `session.fork`: the same
+                    // field `turn/start` reads for its own opening position.
+                    closedAtSeq[turn] = record.payload["seq"].intValue()
                     reason[turn] = record.payload["data"]["reason"]["kind"].stringValue()
                     // The host reads the turn's `present` calls for us; a page carries
                     // summaries, so this is the only place the cards can come from.
@@ -505,6 +629,10 @@ object Conversation {
                 endedAtMillis = if (key == null) null else ended[key],
                 endedReason = if (key == null) null else reason[key],
                 startSeq = if (key == null) null else openedAtSeq[key],
+                // `session.fork` branches after a finished turn, so the position of
+                // the `turn/end` record is the boundary a caller may send. An
+                // unnumbered group has no end record of its own.
+                endSeq = if (key == null) null else closedAtSeq[key],
             )
         }
     }

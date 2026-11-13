@@ -2,6 +2,11 @@ package me.shirazu.mizar.kit
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * What the host reports, typed.
@@ -34,6 +39,75 @@ data class HostInfo(
      * move, and nothing to repair.
      */
     val relay: HostRelay? = null,
+    /**
+     * What the computer is: `{os, client}` display names, e.g. `{"os":"Windows",
+     * "client":"AGI Mizar"}`. Absent on an older host — never guess one from the
+     * pairing record, because a guess is a wrong claim about somebody's machine.
+     */
+    val desktop: HostDesktop? = null,
+    /**
+     * The agents this computer serves, when it serves more than the base protocol.
+     *
+     * Additive: an older host omits the key, and the phone then keeps the merged
+     * behaviour it had before agent switching existed.
+     */
+    val engines: List<HostEngine>? = null,
+    /**
+     * The agent this connection is scoped to, `null` for an unscoped one.
+     *
+     * Absent and `null` read the same: no choice was made, and the phone must not
+     * invent a filter.
+     */
+    val engine: String? = null,
+    /** What this host's plugin can do beyond the base protocol. */
+    val plugin: HostPlugin? = null,
+    /**
+     * The direct path's key, or `null` when this host has none. A phone that sees it
+     * may grow a `.p2p` route; one that sees `null` keeps the routes it had.
+     */
+    val netEndpointId: String? = null,
+) {
+    /** Whether the host offered a capability bit this build understands. */
+    fun supports(capability: String): Boolean = plugin?.capabilities?.contains(capability) == true
+
+    /** Whether the wallet card can be offered: the host serves DSH and says so. */
+    val supportsDeepSeekBalance: Boolean
+        get() = supports(PLUGIN_CAPABILITY_DEEPSEEK_BALANCE)
+
+    companion object {
+        /** The one capability the current plugin advertises (see `server.rs` `host.info`). */
+        const val PLUGIN_CAPABILITY_DEEPSEEK_BALANCE: String = "deepseek.balance.v1"
+    }
+}
+
+/** `host.info.desktop` — display names, not protocol enums. */
+@Serializable
+data class HostDesktop(
+    val os: String = "",
+    val client: String = "",
+)
+
+/**
+ * One agent a computer serves, as `host.info.engines` lists it.
+ *
+ * @property id the wire name `session.create`/`hello.engine` accept.
+ * @property label the display name, already localized by the host.
+ * @property connected whether that engine is running on the computer right now.
+ * @property detail why it is not connected, when the host can say.
+ */
+@Serializable
+data class HostEngine(
+    val id: String,
+    val label: String = "",
+    val connected: Boolean = false,
+    val detail: String? = null,
+)
+
+/** `host.info.plugin` — the plugin's identity and the capabilities it advertises. */
+@Serializable
+data class HostPlugin(
+    val id: String = "",
+    val capabilities: List<String> = emptyList(),
 )
 
 /** `session.list`. */
@@ -423,4 +497,86 @@ data class ActivityEntry(
     val kind: String,
     val title: String,
     val text: String? = null,
+)
+
+/**
+ * How a prompt reaches a host that is already running a turn.
+ *
+ * The wire calls this field `mode`, and the two values are the host's own:
+ * [QUEUE] is the old behaviour -- the host starts the prompt once the current turn
+ * ends -- and [STEER] feeds it to the model inside the turn that is running,
+ * without interrupting anything.
+ *
+ * Omitted rather than spelled out for [QUEUE]: a host older than the field defaults
+ * to it, and a client that always sent the default would put every ordinary send
+ * behind a newer plugin. Known older hosts accept [STEER] and treat it as a queue,
+ * which is a queue rather than an error and the right degradation.
+ */
+enum class PromptMode(val wire: String) {
+    /** Start it when the running turn ends. */
+    QUEUE("queue"),
+
+    /** Hand it to the running turn as guidance. */
+    STEER("steer"),
+    ;
+
+    /** Whether the field has to travel on the wire. */
+    val isExplicitOnTheWire: Boolean get() = this == STEER
+
+    companion object {
+        /** The mode a wire value names, or `null` for one this build does not know. */
+        fun of(wire: String): PromptMode? = entries.firstOrNull { it.wire == wire }
+    }
+}
+
+/**
+ * The `session.prompt` arguments, including the mode field only when it must travel.
+ *
+ * Building the payload in the kit keeps the "queue is the default and stays off the
+ * wire" rule in one place; an app that spelled `mode: queue` itself would make every
+ * ordinary prompt depend on a newer host.
+ */
+fun promptPayload(
+    sessionId: String,
+    text: String? = null,
+    attachmentIds: List<String> = emptyList(),
+    requestId: String? = null,
+    clientTimeZone: String? = null,
+    mode: PromptMode = PromptMode.QUEUE,
+): JsonObject = buildJsonObject {
+    put("sessionId", sessionId)
+    text?.let { put("text", it) }
+    if (attachmentIds.isNotEmpty()) {
+        put("attachmentIds", JsonArray(attachmentIds.map { JsonPrimitive(it) }))
+    }
+    requestId?.let { put("requestId", it) }
+    clientTimeZone?.let { put("clientTimeZone", it) }
+    if (mode.isExplicitOnTheWire) put("mode", mode.wire)
+}
+
+/** `session.compact` — the host ran the engine's own compaction mechanism. */
+@Serializable
+data class CompactResult(val compacted: Boolean = false)
+
+/** `session.fork` — a new conversation branched at one completed turn boundary. */
+@Serializable
+data class ForkResult(val sessionId: String = "") {
+    /** Whether the host named the branch it created. */
+    val hasBranch: Boolean get() = sessionId.isNotBlank()
+}
+
+/**
+ * `session.changed` — the host's live nudge that a session's running flag moved.
+ *
+ * Pushed as `{"event":"session.changed","data":{...}}`: `{sessionId, running}` when
+ * it started or stopped, `{sessionId, removed:true}` when it left the list. It never
+ * carries the transcript; it is a signal to re-read the list.
+ */
+@Serializable
+data class SessionChanged(
+    val sessionId: String,
+    /** Whether the session is running now, when the host said. */
+    val running: Boolean? = null,
+    /** Whether the session was archived or vanished. */
+    val removed: Boolean = false,
 )

@@ -4,6 +4,29 @@ import kotlinx.serialization.Serializable
 import java.util.Base64
 
 /**
+ * A file's facts, as `file.stat` answers them.
+ *
+ * The path is echoed as the request named it; [name] is the file's own name without
+ * its directory. [previewable] is the host's hint, not an instruction: the app decides
+ * again from the extension, because a host and a client can disagree about a new
+ * format without either being wrong.
+ *
+ * @property byteSize size in bytes. Absent/`null` on a stat that could not measure
+ *   the file is a failure, not zero.
+ * @property modifiedAt last modification, epoch milliseconds.
+ * @property mediaType the media type the host associates with the extension.
+ */
+@Serializable
+data class FileStat(
+    val path: String = "",
+    val name: String = "",
+    val byteSize: Long = 0,
+    val modifiedAt: Double = 0.0,
+    val mediaType: String = "",
+    val previewable: Boolean = false,
+)
+
+/**
  * One slice of a file, as `file.read` answers.
  *
  * The host sends the bytes base64-encoded in pages of at most 256 KiB, so a

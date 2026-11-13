@@ -3,6 +3,7 @@ package me.shirazu.mizar.kit
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -44,6 +45,14 @@ sealed interface ServerFrame {
         val protocolVersion: Int,
         val home: String,
         val deviceId: String,
+        /**
+         * The agent this connection ended up scoped to, when the host says.
+         *
+         * Additive and usually absent: the current host answers the scope in
+         * `host.info`, and an older one has no scopes at all. Parsed rather than
+         * ignored so a host that starts sending it does not need a client release.
+         */
+        val engine: String? = null,
     ) : ServerFrame {
         override val correlationId: String? get() = null
     }
@@ -103,7 +112,14 @@ object Frames {
                 val home = frame["home"].stringValue() ?: return FrameDecode.Malformed
                 val deviceId = frame["deviceId"].stringValue() ?: return FrameDecode.Malformed
                 FrameDecode.Decoded(
-                    ServerFrame.Welcome(hostId, hostName, protocolVersion, home, deviceId),
+                    ServerFrame.Welcome(
+                        hostId = hostId,
+                        hostName = hostName,
+                        protocolVersion = protocolVersion,
+                        home = home,
+                        deviceId = deviceId,
+                        engine = frame["engine"].stringValue(),
+                    ),
                 )
             }
 
@@ -143,6 +159,7 @@ object Frames {
         appVersion: String? = null,
         deviceModel: String? = null,
         id: String? = null,
+        engine: String? = null,
     ): String = buildJsonObject {
         put("v", JsonPrimitive(MIZAR_PROTOCOL_VERSION))
         put("type", JsonPrimitive("hello"))
@@ -150,6 +167,11 @@ object Frames {
         put("token", JsonPrimitive(token))
         if (appVersion != null) put("appVersion", JsonPrimitive(appVersion))
         if (deviceModel != null) put("deviceModel", JsonPrimitive(deviceModel))
+        // The agent this socket is for. Only a token minted by the relay carries a
+        // scope of its own, and that one wins on the host; this field is how a
+        // phone that paired by scanning a code chooses. Omitted when unscoped, which
+        // is what every phone before agent switching did.
+        if (engine != null) put("engine", JsonPrimitive(engine))
         put("protocolVersion", JsonPrimitive(MIZAR_PROTOCOL_VERSION))
     }.toString()
 
@@ -171,7 +193,33 @@ data class HelloResponse(
     val protocolVersion: Int,
     val pairingOpen: Boolean,
     val paired: Boolean,
+    /** The agents the host serves, for choosing one right after pairing. */
+    val engines: List<HostEngine>? = null,
 )
+
+/**
+ * Event names the host pushes.
+ *
+ * Event payloads are open (`ServerFrame.Event` keeps the raw JSON), so the names are
+ * constants and the decode helpers are optional conveniences rather than a closed
+ * union.
+ */
+object HostEvents {
+    /** A session's running flag moved, or it left the list: re-read the list. */
+    const val SESSION_CHANGED: String = "session.changed"
+
+    /** The host moved its tunnel to another relay; `data` is `{url, room, baseURL}`. */
+    const val RELAY_CHANGED: String = "relay.changed"
+
+    /** Decode `session.changed`, or `null` when the payload is not one. */
+    fun sessionChanged(data: JsonElement?): SessionChanged? = try {
+        data?.takeUnless { it is JsonNull }?.let {
+            WIRE_JSON.decodeFromJsonElement(SessionChanged.serializer(), it)
+        }
+    } catch (_: Exception) {
+        null
+    }
+}
 
 /**
  * `POST /mizar/v1/pair`.

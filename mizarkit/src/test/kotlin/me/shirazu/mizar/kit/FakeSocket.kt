@@ -28,7 +28,7 @@ class FakeSocket(
     private val answerHello: Boolean = true,
 ) : WebSocketTransport {
 
-    private val inbox = Channel<String?>(Channel.UNLIMITED)
+    private val inbox = Channel<Incoming?>(Channel.UNLIMITED)
     private val outbox = CopyOnWriteArrayList<String>()
 
     /** Thrown by [send], as a socket that is already gone would. */
@@ -79,27 +79,53 @@ class FakeSocket(
         sendFailure?.let { throw it }
         outbox += text
         if (answerHello && text.contains("\"type\":\"hello\"")) {
-            inbox.trySend(welcomeFrame())
+            inbox.trySend(Incoming.Text(welcomeFrame()))
         }
     }
 
-    override suspend fun receive(): String? = inbox.receiveCatching().getOrNull()
+    /**
+     * Frames arrive through the message channel rather than through [receive], so a
+     * test can deliver a binary state message as well as JSON -- the same way the real
+     * socket does.
+     */
+    override suspend fun receiveMessage(): Incoming? = inbox.receiveCatching().getOrNull()
+
+    /** The next text frame, skipping binary ones (the state channel). */
+    override suspend fun receive(): String? {
+        while (true) {
+            when (val message = receiveMessage()) {
+                null -> return null
+                is Incoming.Text -> return message.text
+                is Incoming.Binary -> continue
+            }
+        }
+    }
 
     override suspend fun close() {
         closed = true
         inbox.close()
     }
 
-    /** Push a frame now. */
+    /** Push a text frame now. */
     fun deliver(text: String) {
-        inbox.trySend(text)
+        inbox.trySend(Incoming.Text(text))
+    }
+
+    /**
+     * Push a binary frame now.
+     *
+     * @param bytes the message body: for the state channel, a
+     *   [StateFrameEnvelope]-wrapped [StateFrame].
+     */
+    fun deliverBinary(bytes: ByteArray) {
+        inbox.trySend(Incoming.Binary(bytes))
     }
 
     /** Push a frame later, which is how "out of order" is built. */
     fun deliverAfter(delayMillis: Long, text: String) {
         scope.launch {
             delay(delayMillis)
-            inbox.trySend(text)
+            inbox.trySend(Incoming.Text(text))
         }
     }
 
