@@ -36,10 +36,12 @@ android {
         applicationId = "me.shirazu.dshmizar"
         minSdk = 26
         targetSdk = 36
-        // Kept in step with the iOS target's MARKETING_VERSION/CURRENT_PROJECT_VERSION
-        // (0.8.0 / 15) so a build can be identified from either platform's report.
-        versionCode = 48
-        versionName = "0.10.6"
+        // The two clients carry independent version numbers; do not read one from
+        // the other. 0.11.0 is the parity release: state channel, inline pictures,
+        // announcements/surveys, guide, settings directory, usage, agent picker,
+        // compact/fork, and the local-agent module (not wired into UI yet).
+        versionCode = 49
+        versionName = "0.11.0"
 
         // The account service is one host, like iOS: only the main relay serves
         // it. `-PmizarAccountBase=http://10.0.2.2:8787/account/v1` points a build
