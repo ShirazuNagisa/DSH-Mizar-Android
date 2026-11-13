@@ -69,6 +69,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -94,6 +95,7 @@ import me.shirazu.dshmizar.ui.design.searchPulse
 import me.shirazu.dshmizar.ui.design.glassCard
 import me.shirazu.dshmizar.ui.design.pressable
 import me.shirazu.dshmizar.ui.design.shapedClickable
+import me.shirazu.dshmizar.ui.localagent.toSettingsLocalAgent
 import me.shirazu.dshmizar.ui.settings.HostPickerDialog
 import me.shirazu.dshmizar.ui.settings.NewSessionDialog
 import me.shirazu.dshmizar.ui.settings.SettingsDialog
@@ -351,32 +353,72 @@ fun Sidebar(
             }
         }
 
-        // Which agent this connection drives. Only on a computer that serves more
-        // than one, which is also the only case where the answer can change.
-        if (state.agentCatalog.showsPicker) {
+        // Which agent this connection drives. On a computer that serves more than one,
+        // and always for the local agent: the kernel is a different host, so its row
+        // lives here (last) rather than in the desktop agent catalog.
+        val localStatus = state.localAgentStatus
+        val localEntry = localStatus != null || state.localAgentActive
+        if (state.agentCatalog.showsPicker || localEntry) {
             var showingAgents by remember { mutableStateOf(false) }
+            LaunchedEffect(showingAgents) {
+                if (showingAgents) model.refreshLocalAgentStatus()
+            }
             Box(modifier = Modifier.fillMaxWidth()) {
-                AgentCapsule(
-                    catalog = state.agentCatalog,
-                    onClick = { showingAgents = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = Space.md, vertical = 6.dp),
-                )
+                if (state.agentCatalog.showsPicker) {
+                    AgentCapsule(
+                        catalog = state.agentCatalog,
+                        onClick = { showingAgents = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Space.md, vertical = 6.dp),
+                    )
+                } else {
+                    // The local agent is a host of its own, so the desktop picker has
+                    // nothing to say about it; this row is the way back to it (and out
+                    // of it) when the computer serves a single agent.
+                    Text(
+                        text = if (state.localAgentActive) {
+                            stringResource(R.string.localagent_switch_title)
+                        } else {
+                            stringResource(R.string.shell_agent_which)
+                        },
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Space.md, vertical = 6.dp)
+                            .glassCard()
+                            .clickable { showingAgents = true }
+                            .padding(horizontal = 11.dp, vertical = 8.dp),
+                    )
+                }
                 AnchoredPopover(
                     expanded = showingAgents,
                     onDismiss = { showingAgents = false },
                     width = 280.dp,
-                    maxHeight = 340.dp,
+                    maxHeight = 380.dp,
                 ) {
-                    AgentSwitcher(
-                        catalog = state.agentCatalog,
-                        onPick = { target ->
-                            showingAgents = false
-                            model.chooseAgent(target)
-                        },
-                        onDismiss = { showingAgents = false },
-                    )
+                    Column {
+                        if (state.agentCatalog.showsPicker) {
+                            AgentSwitcher(
+                                catalog = state.agentCatalog,
+                                onPick = { target ->
+                                    showingAgents = false
+                                    model.chooseAgent(target)
+                                },
+                                onDismiss = { showingAgents = false },
+                            )
+                        }
+                        me.shirazu.dshmizar.ui.localagent.LocalAgentSwitcherRow(
+                            status = localStatus,
+                            current = state.localAgentActive,
+                            onPick = {
+                                showingAgents = false
+                                if (state.localAgentActive) model.leaveLocalAgent() else model.useLocalAgent()
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -566,6 +608,9 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
         // Counted once per opening, not per recomposition: the page reports what the
         // phone's own caches hold, and walking them on every frame would be a stall
         // nobody asked for.
+        LaunchedEffect(showingSettings) {
+            if (showingSettings) model.refreshLocalAgentStatus()
+        }
         val fileCache = remember(showingSettings) {
             if (showingSettings) model.fileCacheFacts() else null
         }
@@ -618,6 +663,11 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
                 showingSettings = false
                 model.openSurveys()
             },
+            localAgent = state.localAgentStatus?.toSettingsLocalAgent(),
+            onClearLocalAgentData = { model.clearLocalAgentData() },
+            localAgentActive = state.localAgentActive,
+            onUseLocalAgent = { model.useLocalAgent() },
+            onLeaveLocalAgent = { model.leaveLocalAgent() },
             initialTopic = initialTopic,
         )
     }

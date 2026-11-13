@@ -199,6 +199,9 @@ fun RootScreen(model: AppViewModel, incomingUri: String?, onUriHandled: () -> Un
             val clipboard = LocalClipboardManager.current
             var page by rememberSaveable { mutableIntStateOf(0) }
             var refresh by remember { mutableStateOf(OnboardingRefresh()) }
+            // The local-agent step needs the kernel's own answer; it is read when the
+            // guide opens rather than at launch, because booting it costs a kernel.
+            LaunchedEffect(Unit) { model.refreshLocalAgentStatus() }
             val runRefresh: () -> Unit = {
                 refresh = OnboardingRefresh(OnboardingRefreshState.RUNNING)
                 model.refreshSessionMetadata { sessions, reached ->
@@ -218,6 +221,11 @@ fun RootScreen(model: AppViewModel, incomingUri: String?, onUriHandled: () -> Un
                     isPaid = state.account.isPaid,
                 ),
                 localNetworkFirst = state.localNetworkFirst,
+                // The guide says what this build can honestly do: a PoC kernel that
+                // has not been given a provider is available but unconfigured.
+                wantsLocalAgent = state.localAgentActive,
+                localAgentAvailable = state.localAgentStatus?.available == true,
+                localAgentConfigured = state.localAgentStatus?.configured == true,
                 notificationsEnabled = state.notifyCompleted && state.notifyInterrupted &&
                     state.notifyQuestions && state.notifyApprovals,
                 liveUpdatesSupported = android.os.Build.VERSION.SDK_INT >= 36,

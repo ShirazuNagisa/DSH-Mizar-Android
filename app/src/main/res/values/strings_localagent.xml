@@ -10,4 +10,6 @@
     <string name="localagent_switch_detail">Runs on this phone — no computer needed</string>
     <string name="localagent_switch_unconfigured">No model configured yet</string>
     <string name="localagent_switch_unavailable">The on-device kernel is unavailable</string>
+    <string name="localagent_use_action">Run the agent on this phone</string>
+    <string name="localagent_leave_action">Stop the local agent and go back to the computer</string>
 </resources>

@@ -364,6 +364,10 @@ data class UiState(
     val usageUpdatedAtMillis: Long? = null,
     /** The agents this computer serves, and which one this phone is scoped to. */
     val agentCatalog: AgentCatalog = AgentCatalog(),
+    /** The on-device agent's status, once the picker or settings asked for it. */
+    val localAgentStatus: me.shirazu.dshmizar.localagent.LocalAgentStatus? = null,
+    /** The screen is talking to the phone's own kernel, not to a computer. */
+    val localAgentActive: Boolean = false,
     /** The first-run guide is on screen. */
     val onboardingOpen: Boolean = false,
     /** The guide is replaying because this build is newer than the stored version. */
@@ -879,6 +883,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     private suspend fun connect(host: PairedHost, preferred: PairingRoute? = null, warm: Boolean = false) {
+        // A dial is for a computer. While the phone's own kernel is the host, a
+        // reconnect that was already in flight must not take the screen back to the
+        // computer the operator left; leaving local mode goes through
+        // leaveLocalAgent(), which clears the flag before calling this.
+        if (_state.value.localAgentActive) return
         stopWatchers()
         ownership.current?.disconnect()
         ownership.release()
@@ -1025,6 +1034,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         ownership.adopt(candidate)
         _state.update {
             it.copy(
+                host = host,
                 phase = plan.phase,
                 welcome = welcome,
                 problem = null,
@@ -1167,7 +1177,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     /** Retry a dropped connection; the loop and its rules live in the domain. */
-    private fun beginReconnect(host: PairedHost, reason: String) = reconnect.begin(host, reason)
+    private fun beginReconnect(host: PairedHost, reason: String) {
+        // The local kernel is not redialled: its synthetic host cannot be reached by
+        // an ordinary dial, and the product promise is foreground-only. A reconnect
+        // that slipped through here would also silently swap the screen back to the
+        // computer the operator just left.
+        if (_state.value.localAgentActive) return
+        reconnect.begin(host, reason)
+    }
 
     // ── notifications ───────────────────────────────────────────────────────
     //
@@ -1834,6 +1851,143 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // The scope travels in the hello frame, so a live socket cannot adopt it:
         // the same rule as signing in or out.
         reconnectForIdentity()
+    }
+
+    // ── the local agent ─────────────────────────────────────────────────────
+    //
+    // The on-device kernel is a host like any other: the same MizarConnection, the
+    // same adoption, the same screens. Only the transport differs, and that is one
+    // constructor argument. Nothing is stored as a paired host — the kernel has no
+    // pairing, and clearing the app's data is what forgetting it means.
+
+    private val localAgent: me.shirazu.dshmizar.localagent.LocalAgentHost by lazy {
+        me.shirazu.dshmizar.localagent.LocalAgentHost(getApplication(), appVersion, deviceModel)
+    }
+
+    private var localInteractions: Job? = null
+
+    /** Read the on-device agent's status for the picker, the settings page and the guide. */
+    fun refreshLocalAgentStatus() {
+        viewModelScope.launch {
+            val status = runCatching { localAgent.status() }.getOrNull()
+            _state.update { it.copy(localAgentStatus = status) }
+        }
+    }
+
+    /** Run conversations on this phone instead of on a computer. */
+    fun useLocalAgent() {
+        if (_state.value.localAgentActive) return
+        reconnect.cancel()
+        viewModelScope.launch {
+            _state.update { it.copy(phase = Phase.CONNECTING, problem = null, pairingStage = null) }
+            val report = runCatching { localAgent.ensureBooted() }.getOrNull()
+            if (report?.ready != true) {
+                _state.update {
+                    it.copy(
+                        phase = Phase.UNPAIRED,
+                        problem = report?.bootError
+                            ?: getApplication<Application>().getString(R.string.localagent_switch_unavailable),
+                    )
+                }
+                return@launch
+            }
+            val host = PairedHost(
+                hostId = LOCAL_HOST_ID,
+                // The kernel's own host name is the emulator's model string; the row
+                // above the sessions should say what the operator chose, not the
+                // hardware id.
+                hostName = getApplication<Application>().getString(R.string.localagent_switch_title),
+                authority = me.shirazu.dshmizar.localagent.LocalAgentHost.AUTHORITY,
+                deviceId = LOCAL_HOST_ID,
+                deviceToken = me.shirazu.dshmizar.localagent.LocalAgentHost.LOCAL_TOKEN,
+            )
+            stopWatchers()
+            ownership.current?.disconnect()
+            ownership.release()
+            val socket = MizarConnection(
+                localAgent.configuration(),
+                traffic,
+                makeTransport = { localAgent.openTransport() },
+            )
+            try {
+                val welcome = socket.connect()
+                adoptConnection(
+                    host,
+                    MizarConnection.Endpoint.Direct(me.shirazu.dshmizar.localagent.LocalAgentHost.AUTHORITY),
+                    socket,
+                    welcome,
+                    warm = false,
+                )
+                localInteractions?.cancel()
+                localInteractions = me.shirazu.dshmizar.localagent.LocalInteractions.launch(
+                    viewModelScope,
+                    socket,
+                    me.shirazu.dshmizar.localagent.LocalInteractionPolicy.AUTO_DENY,
+                )
+                // A reconnect that was arming while the kernel booted would dial the
+                // old computer a moment from now; stop it once the local socket owns
+                // the screen.
+                reconnect.cancel()
+                _state.update { it.copy(localAgentActive = true) }
+                note("local agent connected")
+            } catch (error: Throwable) {
+                socket.disconnect()
+                _state.update {
+                    it.copy(
+                        phase = Phase.FAILED,
+                        problem = messageOf(
+                            error,
+                            me.shirazu.dshmizar.localagent.LocalAgentHost.AUTHORITY,
+                        ),
+                    )
+                }
+            }
+            refreshLocalAgentStatus()
+        }
+    }
+
+    /** Leave the phone's kernel and go back to the computer this phone is paired with. */
+    fun leaveLocalAgent() {
+        if (!_state.value.localAgentActive) return
+        localInteractions?.cancel()
+        localInteractions = null
+        localAgent.close()
+        reconnect.cancel()
+        val host = _state.value.host
+            ?.takeIf { it.deviceToken != me.shirazu.dshmizar.localagent.LocalAgentHost.LOCAL_TOKEN }
+            ?: _state.value.hosts.lastOrNull()
+        viewModelScope.launch {
+            stopWatchers()
+            ownership.current?.disconnect()
+            ownership.release()
+            _state.update {
+                it.copy(
+                    localAgentActive = false,
+                    selectedSessionId = null,
+                    sessions = emptyList(),
+                    groups = emptyList(),
+                    conversation = emptyList(),
+                    turns = emptyList(),
+                    stats = null,
+                    phase = Phase.CONNECTING,
+                )
+            }
+            if (host != null) {
+                connect(host)
+            } else {
+                _state.update { it.copy(phase = Phase.UNPAIRED) }
+            }
+        }
+    }
+
+    /** Forget what the on-device kernel stored, then report the new size. */
+    fun clearLocalAgentData(onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            runCatching { localAgent.clearData() }
+            val status = runCatching { localAgent.status() }.getOrNull()
+            _state.update { it.copy(localAgentStatus = status) }
+            withContext(Dispatchers.Main) { onDone() }
+        }
     }
 
     // ── the first-run guide ─────────────────────────────────────────────────
@@ -2933,6 +3087,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     internal val surveysCoordinator: SurveyCoordinator get() = surveys
 
     private companion object {
+        /** The synthetic host id the on-device agent reports as. */
+        const val LOCAL_HOST_ID = "local-agent"
+
         /** The five names that all mean "the pending set changed": refresh it. */
         val INTERACTION_EVENTS = setOf(
             "interactions.changed",

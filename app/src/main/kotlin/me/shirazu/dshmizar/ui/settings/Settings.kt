@@ -117,6 +117,9 @@ fun SettingsDialog(
     localAgent: SettingsLocalAgent? = null,
     onOpenLocalAgentModels: (() -> Unit)? = null,
     onClearLocalAgentData: (() -> Unit)? = null,
+    localAgentActive: Boolean = false,
+    onUseLocalAgent: (() -> Unit)? = null,
+    onLeaveLocalAgent: (() -> Unit)? = null,
     // A shelf to open as the window appears, when something outside asked for one
     // (an announcement banner's button, a deep link). `null` lands on the directory,
     // which is what the gear means.
@@ -187,6 +190,9 @@ fun SettingsDialog(
                     localAgent = localAgent,
                     onOpenModels = onOpenLocalAgentModels,
                     onClearData = onClearLocalAgentData,
+                    localAgentActive = localAgentActive,
+                    onUseLocalAgent = onUseLocalAgent,
+                    onLeaveLocalAgent = onLeaveLocalAgent,
                     onBack = onBack,
                     onDone = onDismiss,
                 )

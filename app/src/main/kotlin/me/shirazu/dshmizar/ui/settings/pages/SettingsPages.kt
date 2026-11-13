@@ -255,6 +255,9 @@ internal fun LocalAgentSettingsPage(
     localAgent: SettingsLocalAgent?,
     onOpenModels: (() -> Unit)?,
     onClearData: (() -> Unit)?,
+    localAgentActive: Boolean = false,
+    onUseLocalAgent: (() -> Unit)? = null,
+    onLeaveLocalAgent: (() -> Unit)? = null,
     onBack: () -> Unit,
     onDone: () -> Unit,
 ) {
@@ -265,6 +268,16 @@ internal fun LocalAgentSettingsPage(
             SettingsNote(stringResource(R.string.shell_settings_local_agent_unavailable))
             return@Column
         }
+        SettingsActionRow(
+            icon = Icons.Default.Memory,
+            title = stringResource(
+                if (localAgentActive) R.string.localagent_leave_action else R.string.localagent_use_action,
+            ),
+            subtitle = stringResource(R.string.localagent_switch_detail),
+            onClick = {
+                if (localAgentActive) onLeaveLocalAgent?.invoke() else onUseLocalAgent?.invoke()
+            },
+        )
         SettingsNavRow(
             icon = Icons.Default.Memory,
             title = stringResource(R.string.shell_settings_local_agent_models),
