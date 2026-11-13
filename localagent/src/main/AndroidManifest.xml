@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The local agent module. It owns no components of its own: the kernel is a JS
+  engine, the host bridge is plain Kotlin, and the app decides what UI to put in
+  front of it. The namespace lives in build.gradle.kts.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

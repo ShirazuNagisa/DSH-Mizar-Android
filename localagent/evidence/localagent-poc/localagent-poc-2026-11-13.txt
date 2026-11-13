@@ -1,0 +1,13 @@
+Mizar local agent — Android PoC (2026-11-13)
+Device: sdk_gphone64_x86_64 • API 36 • x86_64 • page 4096 B
+Engine: quickjs-ng 0.10.1 + localagent JNI bridge (16 KB pages)
+Kernel bundle: 56505 B (same bytes as iOS dist/mizar-kernel.js)
+Boot: ready=true in 126 ms (bundle eval 8 ms)
+Promise jobs drained on evaluate: true
+Sandbox root: /data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent
+Probes: 1+2=3, ?./??=7, MizarKernel=object, private fields=5
+Handshake: welcome deviceId=15ebf101-50c1-4a6b-b1e5-4b0c7f0ee4fe hostId=d735ceb4-b106-4a38-812a-bd0420533c5a
+kernel.status (1 ms): {"v":1,"type":"ok","id":"android-1","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}}
+kernel.config.get (2 ms): {"v":1,"type":"ok","id":"android-2","result":{"config":{"providers":[{"id":"deepseek-official","name":"DeepSeek","baseUrl":"https://api.deepseek.com","path":"/chat/completions","usage":true,"models":[{"id":"deepseek-chat","name":"DeepSeek Chat","efforts":[{"id":"off","name":"Off","description":"No reasoning phase."}],"defaultEffort":"off"},{"id":"deepseek-reasoner","name":"DeepSeek Reasoner","description":"Reasoning-first model for hard problems.","efforts":[{"id":"off","name":"Off","description":"The reasoner reasons by default."}],"defaultEffort":"off"}]}],"defaultModel":{"provider":"deepseek-official","model":"deepseek-chat","reasoningEffort":"off"},"contextWindow":128000,"systemPromptAddendum":"","defaultPreset":"workspace-write"}}}
+Latency kernel.status x50: min=0 ms, p50=1 ms, avg=0.9 ms, max=3 ms
+Memory: native heap 5.8 MB, java heap 4.2 MB, PSS 30579 kB

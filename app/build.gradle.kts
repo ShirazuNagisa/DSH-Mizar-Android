@@ -98,6 +98,10 @@ kotlin {
 
 dependencies {
     implementation(project(":mizarkit"))
+    // The local agent (experimental): the iOS local kernel's JS bundle on
+    // QuickJS. The app gains the module's classes, assets and native libraries;
+    // no UI is wired to it yet.
+    implementation(project(":localagent"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

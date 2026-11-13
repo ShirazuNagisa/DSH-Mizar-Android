@@ -1,0 +1,56 @@
+{
+  "generatedAt": "2026-11-13T06:55:05.650739Z",
+  "generatedAtLocal": "2026-11-13 06:55:05.653",
+  "device": {
+    "model": "sdk_gphone64_x86_64",
+    "device": "emu64xa",
+    "sdkInt": 36,
+    "release": "16",
+    "abis": "x86_64,arm64-v8a",
+    "pageSizeBytes": 4096,
+    "testApkPackage": "me.shirazu.dshmizar.localagent.test",
+    "kernelRoot": "\/data\/user\/0\/me.shirazu.dshmizar.localagent.test\/files\/LocalAgent"
+  },
+  "engine": "quickjs-ng 0.10.1 + localagent JNI bridge (16 KB pages)",
+  "kernelBundleBytes": 56505,
+  "boot": {
+    "ready": true,
+    "bootError": null,
+    "durationMs": 126,
+    "bundleEvalMs": 8,
+    "microtasksDrainedOnEvaluate": true,
+    "deviceId": "15ebf101-50c1-4a6b-b1e5-4b0c7f0ee4fe",
+    "hostId": "d735ceb4-b106-4a38-812a-bd0420533c5a",
+    "welcomeFrame": "{\"v\":1,\"type\":\"welcome\",\"hostId\":\"d735ceb4-b106-4a38-812a-bd0420533c5a\",\"hostName\":\"sdk_gphone64_x86_64\",\"protocolVersion\":1,\"home\":\"\/data\/user\/0\/me.shirazu.dshmizar.localagent.test\/files\/LocalAgent\",\"deviceId\":\"15ebf101-50c1-4a6b-b1e5-4b0c7f0ee4fe\"}"
+  },
+  "probes": {
+    "arithmetic": "3",
+    "optionalChaining": "7",
+    "mizarKernelType": "object",
+    "mizarKernelExports": "DEFAULT_CONFIG,ERROR_CODES,InteractionsBroker,OpenAICompatEngine,PROTOCOL_VERSION,SessionStore,TurnRunner,builtinTools,createKernel,utf8ByteLength",
+    "privateClassFields": "5"
+  },
+  "kernelStatus": {
+    "ok": true,
+    "durationMs": 1,
+    "frame": "{\"v\":1,\"type\":\"ok\",\"id\":\"android-1\",\"result\":{\"kernelVersion\":\"0.1.0\",\"protocolVersion\":1,\"engine\":\"openai-compat\",\"hostId\":\"d735ceb4-b106-4a38-812a-bd0420533c5a\",\"home\":\"\/data\/user\/0\/me.shirazu.dshmizar.localagent.test\/files\/LocalAgent\",\"sessions\":0}}"
+  },
+  "kernelConfigGet": {
+    "ok": true,
+    "durationMs": 2,
+    "frame": "{\"v\":1,\"type\":\"ok\",\"id\":\"android-2\",\"result\":{\"config\":{\"providers\":[{\"id\":\"deepseek-official\",\"name\":\"DeepSeek\",\"baseUrl\":\"https:\/\/api.deepseek.com\",\"path\":\"\/chat\/completions\",\"usage\":true,\"models\":[{\"id\":\"deepseek-chat\",\"name\":\"DeepSeek Chat\",\"efforts\":[{\"id\":\"off\",\"name\":\"Off\",\"description\":\"No reasoning phase.\"}],\"defaultEffort\":\"off\"},{\"id\":\"deepseek-reasoner\",\"name\":\"DeepSeek Reasoner\",\"description\":\"Reasoning-first model for hard problems.\",\"efforts\":[{\"id\":\"off\",\"name\":\"Off\",\"description\":\"The reasoner reasons by default.\"}],\"defaultEffort\":\"off\"}]}],\"defaultModel\":{\"provider\":\"deepseek-official\",\"model\":\"deepseek-chat\",\"reasoningEffort\":\"off\"},\"contextWindow\":128000,\"systemPromptAddendum\":\"\",\"defaultPreset\":\"workspace-write\"}}}"
+  },
+  "latency": {
+    "samples": 50,
+    "minMs": 0,
+    "p50Ms": 1,
+    "maxMs": 3,
+    "avgMs": "0.9"
+  },
+  "memory": {
+    "nativeHeapAllocatedBytes": 6101072,
+    "nativeHeapTotalBytes": 13320192,
+    "javaHeapUsedBytes": 4441808,
+    "pssKb": 30571
+  }
+}

@@ -1,0 +1,1042 @@
+--------- beginning of main
+11-13 06:55:03.944  1515  1690 I AiAiEcho: Predicting[0]:  [CONTEXT sampling_count=5 ]
+11-13 06:55:03.944  1515  1690 I AiAiEcho: EchoTargets: 
+11-13 06:55:03.944  1515  1690 I AiAiEcho: Filtered by AiAi flag check: 
+11-13 06:55:03.944  1515  1690 I AiAiEcho: [CONTEXT ratelimit_period="10 SECONDS" ]
+11-13 06:55:03.946  1515  1690 I AiAiEcho: #remoteViewsTwiddler: feature disabled.
+11-13 06:55:03.946  1515  1690 I AiAiEcho: Predicting[0]:  [CONTEXT sampling_count=5 ]
+11-13 06:55:03.946  1515  1690 I AiAiEcho: EchoTargets: 
+11-13 06:55:03.946  1515  1690 I AiAiEcho: Filtered by AiAi flag check: 
+11-13 06:55:03.946  1515  1690 I AiAiEcho: [CONTEXT ratelimit_period="10 SECONDS" ]
+11-13 06:55:03.946  1515  1690 I AiAiEcho: #remoteViewsTwiddler: feature disabled.
+11-13 06:55:03.947   697  2415 I system_server: AssetManager2(0x7db917437ef8) locale list changing from [] to [en-US]
+11-13 06:55:03.954   697  2415 W SignedPackage: Cannot get ApplicationInfo for package: com.google.android.devicelockcontroller
+11-13 06:55:03.966   697   845 I system_server: AssetManager2(0x7db91742df98) locale list changing from [] to [en-US]
+11-13 06:55:03.974  1127  1311 I SatelliteAppTracker: onPackageAdded : me.shirazu.dshmizar.localagent.test
+11-13 06:55:03.976  1127  1127 D CarrierSvcBindHelper: onPackageAdded: me.shirazu.dshmizar.localagent.test
+11-13 06:55:03.985  1127  1127 D CarrierSvcBindHelper: No carrier app for: 0
+11-13 06:55:03.989   987   987 D ControlsListingControllerImpl: ServiceConfig reloaded, count: 0
+11-13 06:55:03.989  1515  1690 I AiAiEcho: [pnb-agg] Reload pnb aggregation on events deleted
+11-13 06:55:03.990  1515  1690 I AiAiEcho: [pnb-agg] pnb aggregation disabled.
+11-13 06:55:03.988  1679  1679 D BoundBrokerSvc: onBind: Intent { act=com.google.android.gms.feedback.internal.IFeedbackService dat=chimera-action:/... xflg=0x4 cmp=com.google.android.gms/.chimera.GmsBoundBrokerService }
+11-13 06:55:03.993  1679  1679 D BoundBrokerSvc: Loading bound service for intent: Intent { act=com.google.android.gms.feedback.internal.IFeedbackService dat=chimera-action:/... xflg=0x4 cmp=com.google.android.gms/.chimera.GmsBoundBrokerService }
+11-13 06:55:04.001   552   552 D NativePermissionController: updatePackagesForUid, UidPackageState{uid: 10219, packageNames: [me.shirazu.dshmizar.localagent.test]}
+11-13 06:55:04.002  1515  1690 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface home with targets# 0 (types=[])
+11-13 06:55:04.007  1515  1690 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface lockscreen with targets# 0 (types=[])
+11-13 06:55:04.013  1137  1137 D SsBaseTemplateCard: No text view can be set up
+11-13 06:55:04.013  1137  1137 D SsBaseTemplateCard: Passed-in item info is null
+11-13 06:55:04.013  1137  1137 D SsBaseTemplateCard: Passed-in item info is null
+11-13 06:55:04.013  1137  1137 D SsBaseTemplateCard: Passed-in item info is null
+11-13 06:55:04.013  1137  1137 I SsBaseTemplateCard: Secondary card pane is null
+11-13 06:55:04.014  1386  1386 I SafetyLabelChangedBroadcastReceiver: received broadcast packageName: me.shirazu.dshmizar.localagent.test, current user: UserHandle{0}, packageChangeEvent: NEW_INSTALL, intent user: UserHandle{0}
+11-13 06:55:04.042   987   987 W PageIndicator: Total number of pages invalid: 0. Assuming 1 page.
+11-13 06:55:04.053  1127  1127 E SmsApplication: com.google.android.apps.messaging lost android:read_cell_broadcasts:  (fixing)
+11-13 06:55:04.062   697   936 I SdkSandboxManager: No SDKs used. Skipping SDK data reconcilation for CallingInfo{mUid=10219, mPackageName='me.shirazu.dshmizar.localagent.test, mAppProcessToken='null'}
+--------- beginning of system
+11-13 06:55:04.063   697   910 I AppWidgetServiceImpl: Received broadcast: android.intent.action.PACKAGE_ADDED on user 0
+11-13 06:55:04.064   697   929 D ShortcutService: received package broadcast intent: Intent { act=android.intent.action.PACKAGE_ADDED dat=package: flg=0x4000010 (has extras) }
+11-13 06:55:04.064   697   929 D ShortcutService: adding package: me.shirazu.dshmizar.localagent.test userId=0
+11-13 06:55:04.070   697   736 I system_server: Background concurrent mark compact GC freed 17MB AllocSpace bytes, 105(2292KB) LOS objects, 41% free, 33MB/57MB, paused 16.755ms,6.806ms total 966.529ms
+11-13 06:55:04.073   697  1908 W AppOpService: Ignored setUidMode call for runtime permission app op: uid = 10146, code = READ_CELL_BROADCASTS, mode = allow, callingUid = 1001, oldMode = allow
+--------- beginning of kernel
+11-13 06:55:04.047     0     0 I init    : ... started service 'virtualizationservice' has pid 4360
+11-13 06:55:04.047     0     0 I init    : Control message: Processed ctl.interface_start for 'aidl/android.system.virtualizationmaintenance' from pid: 238 (/system/bin/servicemanager)
+11-13 06:55:04.076   697   842 I system_server: AssetManager2(0x7db91742c9b8) locale list changing from [] to [en-US]
+11-13 06:55:04.077   697   697 D AppSearchAppsIndexerManagerS: userid in package receiver: 10219
+11-13 06:55:04.078   697   749 I system_server: AssetManager2(0x7db91742b3d8) locale list changing from [] to [en-US]
+11-13 06:55:04.082   697   755 D ActivityManager: sync unfroze 2992 com.google.android.packageinstaller for 3
+11-13 06:55:04.084   697   697 D TransparencyService: Not an update. Skipping...
+11-13 06:55:04.103   697   697 D BackupManagerConstants: getFullBackupIntervalMilliseconds(...) returns 86400000
+11-13 06:55:04.104   697   697 D BackupManagerConstants: getFullBackupRequiredNetworkType(...) returns 2
+11-13 06:55:04.104   697   697 D BackupManagerConstants: getFullBackupRequireCharging(...) returns true
+11-13 06:55:04.111   697   746 W Looper  : Slow dispatch took 113ms android.fg app=system_server main=false group=FOREGROUND h=android.os.Handler c=com.android.server.om.OverlayManagerService$$ExternalSyntheticLambda1@dc9c591 m=0
+11-13 06:55:04.114   697   842 I system_server: AssetManager2(0x7db91742fbb8) locale list changing from [] to [en-US]
+11-13 06:55:04.120   697   931 D BackgroundInstallControlService: Package event received: 0
+11-13 06:55:04.122  4360  4360 I VirtualizationService: virtualizationservice::maintenance: Failed to find a Secretkeeper instance; skipping secret management
+11-13 06:55:04.123  4360  4360 I AidlLazyServiceRegistrar: Registering service android.system.virtualizationservice
+11-13 06:55:04.126  4360  4360 I VirtualizationService: virtualizationservice: Registered Binder service android.system.virtualizationservice.
+11-13 06:55:04.129   697   931 D BackgroundInstallControlService: Package event received: 0
+11-13 06:55:04.097     0     0 I servicemanager: Caller(pid=4360,uid=1000,sid=u:r:virtualizationservice:s0) Could not find android.hardware.security.secretkeeper.ISecretkeeper/default in the VINTF manifest. No alternative instances declared in VINTF.
+11-13 06:55:04.112     0     0 I servicemanager: Caller(pid=4360,uid=1000,sid=u:r:virtualizationservice:s0) Could not find android.hardware.security.keymint.IRemotelyProvisionedComponent/avf in the VINTF manifest. VINTF declared instances: default.
+11-13 06:55:04.135  4360  4360 I AidlLazyServiceRegistrar: Registering service android.system.virtualizationmaintenance
+11-13 06:55:04.138   697   955 W Looper  : Slow dispatch took 138ms android.perm app=system_server main=false group=FOREGROUND h=android.os.Handler c=com.android.internal.infra.ServiceConnector$Impl$$ExternalSyntheticLambda2@52deb4b m=0
+11-13 06:55:04.140  1386  4329 I PermissionControllerServiceImpl: Updating user sensitive for uid 10219
+11-13 06:55:04.142  4360  4360 I VirtualizationService: virtualizationservice: Registered Binder service android.system.virtualizationmaintenance.
+11-13 06:55:04.142  4360  4365 I AidlLazyServiceRegistrar: Process has 1 (of 2 available) client(s) in use after notification android.system.virtualizationmaintenance has clients: 1
+11-13 06:55:04.142   697  1908 W AppOpService: Ignored setUidMode call for runtime permission app op: uid = 1001, code = READ_SMS, mode = allow, callingUid = 1001, oldMode = allow
+11-13 06:55:04.143  4360  4365 I VirtualizationService: virtualizationservice::aidl: ignoring packageRemoved(user_id=0, app_id=10218)
+11-13 06:55:04.121     0     0 I servicemanager: Notifying android.system.virtualizationmaintenance they do (previously: don't) have clients when service is guaranteed to be in use
+11-13 06:55:04.123     0     0 I BpBinder: onLastStrongRef automatically unlinking death recipients:
+11-13 06:55:04.145   697   754 D LauncherAppsService: onPackageAdded: triggering onPackageAdded for user=UserHandle{0}, packageName=me.shirazu.dshmizar.localagent.test
+11-13 06:55:04.150   697   931 D BackgroundInstallControlService: Package event received: 0
+11-13 06:55:04.153   697   697 I AppsFilter: interaction: PackageSetting{6f3bfd4 com.android.microdroid.empty_payload/10199} -> PackageSetting{c33757d me.shirazu.dshmizar.localagent.test/10219} BLOCKED
+11-13 06:55:04.156   697  1925 W AppOpService: Ignored setUidMode call for runtime permission app op: uid = 1001, code = RECEIVE_SMS, mode = allow, callingUid = 1001, oldMode = allow
+11-13 06:55:04.161   697  1940 E AppOps  : attributionTag VCN not declared in manifest of android
+11-13 06:55:04.162  1137  1181 D LauncherAppsCallbackImpl: onPackageAdded triggered for packageName=me.shirazu.dshmizar.localagent.test, user=UserHandle{0}
+11-13 06:55:04.163  1137  1181 D PackageUpdatedTask: Package updated: mOp=ADD packages=[me.shirazu.dshmizar.localagent.test], user=UserHandle{0}
+11-13 06:55:04.164   697  1908 W AppOpService: Ignored setUidMode call for runtime permission app op: uid = 1001, code = RECEIVE_WAP_PUSH, mode = allow, callingUid = 1001, oldMode = allow
+11-13 06:55:04.165  4367  4367 W libprocessgroup: A JoinCgroup action in the SystemMemoryProcess profile is used for controller memory in the cgroup v2 hierarchy and will be ignored
+11-13 06:55:04.165  4367  4367 W libprocessgroup: SetCgroup::ExecuteForTask: failed to open /dev/cpuctl/top-app/tasks: Permission denied
+11-13 06:55:04.165   697  1908 W AppOpService: Ignored setUidMode call for runtime permission app op: uid = 1001, code = SEND_SMS, mode = allow, callingUid = 1001, oldMode = allow
+11-13 06:55:04.166   697   910 I AppWidgetServiceImpl: Received broadcast: android.intent.action.PACKAGE_CHANGED on user 0
+11-13 06:55:04.166  4367  4367 W libprocessgroup: SetCgroup::ExecuteForTask: failed to open /dev/blkio/tasks: Permission denied
+11-13 06:55:04.166  4367  4367 E libprocessgroup: set_timerslack_ns write failed: Operation not permitted
+11-13 06:55:04.167   697  1940 W AppOpService: Ignored setUidMode call for runtime permission app op: uid = 1001, code = READ_CELL_BROADCASTS, mode = allow, callingUid = 1001, oldMode = allow
+11-13 06:55:04.167   697   929 D ShortcutService: received package broadcast intent: Intent { act=android.intent.action.PACKAGE_CHANGED dat=package: flg=0x5000010 (has extras) }
+11-13 06:55:04.168   697   929 D ShortcutService: changing package: me.shirazu.dshmizar.localagent.test userId=0
+11-13 06:55:04.173  1127  1311 I SatelliteAppTracker: onPackageModified : me.shirazu.dshmizar.localagent.test
+11-13 06:55:04.174   697  1925 I AppWidgetServiceImpl: getInstalledProvidersForProfiles() 0
+11-13 06:55:04.178   987   987 D ControlsListingControllerImpl: ServiceConfig reloaded, count: 0
+11-13 06:55:04.180   697   754 D LauncherAppsService: onPackageAdded: Skipping - package filtered for user=UserHandle{0}, packageName=me.shirazu.dshmizar.localagent.test
+11-13 06:55:04.195  1386  4329 I PermissionControllerServiceImpl: Updating user sensitive for uid 10219
+11-13 06:55:04.203   697   697 D AppSearchAppsIndexerManagerS: userid in package receiver: 10219
+11-13 06:55:04.204  1137  1181 W HWUI    : Image decoding logging dropped!
+11-13 06:55:04.207  1137  1181 D BaseIconCache: Default icon returned for me.shirazu.dshmizar.localagent.test
+11-13 06:55:04.212  1127  1307 D ImsResolver: maybeAddedImsService, packageName: me.shirazu.dshmizar.localagent.test
+11-13 06:55:04.213  1127  1307 V ImsResolver: searchForImsServices: package=me.shirazu.dshmizar.localagent.test, users=[UserHandle{0}]
+11-13 06:55:04.226  1127  1307 V ImsResolver: searchForImsServices: package=me.shirazu.dshmizar.localagent.test, users=[UserHandle{0}]
+11-13 06:55:04.235   697   845 I system_server: AssetManager2(0x7db91742b6f8) locale list changing from [] to [en-US]
+11-13 06:55:04.239  1127  1127 W VvmPkgInstalledRcvr: carrierVvmPkgAdded: carrier vvm packages doesn't contain me.shirazu.dshmizar.localagent.test
+11-13 06:55:04.252  1127  1127 D CarrierSvcBindHelper: onPackageModified: me.shirazu.dshmizar.localagent.test
+11-13 06:55:04.253  1137  1181 D AlphabeticIndexCompat: computeSectionName: cs: Settings sectionName: S
+11-13 06:55:04.253  1127  1127 D CarrierSvcBindHelper: No carrier app for: 0
+11-13 06:55:04.254  1137  1181 D AlphabeticIndexCompat: computeSectionName: cs: Photos sectionName: P
+11-13 06:55:04.254  1137  1181 D AlphabeticIndexCompat: computeSectionName: cs: Battery sectionName: B
+11-13 06:55:04.256  1137  1181 D AlphabeticIndexCompat: computeSectionName: cs: Chrome sectionName: C
+11-13 06:55:04.256  1137  1181 D AlphabeticIndexCompat: computeSectionName: cs: Gmail sectionName: G
+11-13 06:55:04.257  1137  1181 D AlphabeticIndexCompat: computeSectionName: cs: Drive sectionName: D
+11-13 06:55:04.258  1137  1181 D AlphabeticIndexCompat: computeSectionName: cs: Clock sectionName: C
+11-13 06:55:04.259  1137  1181 D AlphabeticIndexCompat: computeSectionName: cs: Contacts sectionName: C
+11-13 06:55:04.259  1137  1181 D AlphabeticIndexCompat: computeSectionName: cs: Calendar sectionName: C
+11-13 06:55:04.260  1137  1181 D AlphabeticIndexCompat: computeSectionName: cs: Maps sectionName: M
+11-13 06:55:04.260  1137  1181 D AlphabeticIndexCompat: computeSectionName: cs: YouTube Music sectionName: Y
+11-13 06:55:04.260  1137  1181 D AlphabeticIndexCompat: computeSectionName: cs: YouTube sectionName: Y
+11-13 06:55:04.261  1137  1181 D AlphabeticIndexCompat: computeSectionName: cs: Google sectionName: G
+11-13 06:55:04.262   697   825 I RoleService: Granting default roles...
+11-13 06:55:04.262  1137  1181 D AlphabeticIndexCompat: computeSectionName: cs: Digital Wellbeing sectionName: D
+11-13 06:55:04.262  1137  1181 D AlphabeticIndexCompat: computeSectionName: cs: Conversations sectionName: C
+11-13 06:55:04.265  1679  1904 I Icing   : IndexChimeraService.getServiceInterface callingPackage=com.google.android.gms componentName=null serviceId=30
+11-13 06:55:04.277  1313  4334 I Fitness : OnPackageChangedOperation got intent: Intent { act=android.intent.action.PACKAGE_CHANGED dat=package: flg=0x5000010 xflg=0x4 pkg=com.google.android.gms cmp=com.google.android.gms/.chimera.PersistentIntentOperationService (has extras) } [CONTEXT service_id=17 ]
+11-13 06:55:04.286  1127  1127 E SmsApplication: com.google.android.apps.messaging lost android:read_cell_broadcasts:  (fixing)
+11-13 06:55:04.287   697  1948 W AppOpService: Ignored setUidMode call for runtime permission app op: uid = 10146, code = READ_CELL_BROADCASTS, mode = allow, callingUid = 1001, oldMode = allow
+11-13 06:55:04.295   697  1665 W AppOpService: Ignored setUidMode call for runtime permission app op: uid = 1001, code = READ_SMS, mode = allow, callingUid = 1001, oldMode = allow
+11-13 06:55:04.298   697  1665 W AppOpService: Ignored setUidMode call for runtime permission app op: uid = 1001, code = RECEIVE_SMS, mode = allow, callingUid = 1001, oldMode = allow
+11-13 06:55:04.298   697  1950 W AppOpService: Ignored setUidMode call for runtime permission app op: uid = 1001, code = RECEIVE_WAP_PUSH, mode = allow, callingUid = 1001, oldMode = allow
+11-13 06:55:04.299   697   754 D LauncherAppsService: onPackageAdded: triggering onPackageAdded for user=UserHandle{0}, packageName=me.shirazu.dshmizar.localagent.test
+11-13 06:55:04.299   697   754 D LauncherAppsService: onPackageAdded: triggering onPackageAdded for user=UserHandle{0}, packageName=me.shirazu.dshmizar.localagent.test
+11-13 06:55:04.300  1679  3824 I Icing   : Usage reports ok 0, Failed Usage reports 0, indexed 0, rejected 0
+11-13 06:55:04.300   697  1950 W AppOpService: Ignored setUidMode call for runtime permission app op: uid = 1001, code = SEND_SMS, mode = allow, callingUid = 1001, oldMode = allow
+11-13 06:55:04.305   697  1950 W AppOpService: Ignored setUidMode call for runtime permission app op: uid = 1001, code = READ_CELL_BROADCASTS, mode = allow, callingUid = 1001, oldMode = allow
+11-13 06:55:04.306  1515  1515 I AiAiEcho: AppFetcherImplV2 updateApps package:[me.shirazu.dshmizar.localagent.test], userId:[0], reason:[package is added.].
+11-13 06:55:04.308   697   754 W PackageManager: Failed registering loading progress callback. Package is fully loaded.
+11-13 06:55:04.318  1313  4334 I Fitness : FitCleanupIntentOperation received Intent android.intent.action.PACKAGE_CHANGED [CONTEXT service_id=17 ]
+11-13 06:55:04.320  1127  1307 D ImsResolver: maybeAddedImsService, packageName: me.shirazu.dshmizar.localagent.test
+11-13 06:55:04.320  1127  1307 V ImsResolver: searchForImsServices: package=me.shirazu.dshmizar.localagent.test, users=[UserHandle{0}]
+11-13 06:55:04.321  1127  1307 V ImsResolver: searchForImsServices: package=me.shirazu.dshmizar.localagent.test, users=[UserHandle{0}]
+11-13 06:55:04.325  1313  4334 I FontLog : Package me.shirazu.dshmizar.localagent.test has no metadata [CONTEXT service_id=132 ]
+11-13 06:55:04.331  1313  4337 W GCM     : Unexpected forwarded intent: Intent { act=android.intent.action.PACKAGE_ADDED dat=package: flg=0x4000010 pkg=com.google.android.gms cmp=com.google.android.gms/.chimera.PersistentIntentOperationService (has extras) }
+11-13 06:55:04.333  1313  4334 W NetworkScheduler: Unexpected forwarded intent: Intent { act=android.intent.action.PACKAGE_ADDED dat=package: flg=0x4000010 pkg=com.google.android.gms cmp=com.google.android.gms/.chimera.PersistentIntentOperationService (has extras) }
+11-13 06:55:04.335  1679  4350 I Auth    : [SupervisedAccountIntentOperationV2] onHandleIntent: android.intent.action.PACKAGE_ADDED [CONTEXT service_id=42 ]
+11-13 06:55:04.338  1679  4350 W Dck     : Disable DCK module - Android debug build without fullaccess [CONTEXT service_id=289 ]
+11-13 06:55:04.342  1127  1127 D SatelliteController: packageStateChanged: package:me.shirazu.dshmizar.localagent.test DefaultSmsPackageName:com.google.android.apps.messaging
+11-13 06:55:04.343  1127  1127 V SatelliteController: Neither SMS or SatelliteGateway package
+11-13 06:55:04.344  1679  4350 W Dck     : Dck module not eligible for asynchronous downloading [CONTEXT service_id=289 ]
+11-13 06:55:04.345  1313  4337 I Fitness : OnPackageChangedOperation got intent: Intent { act=android.intent.action.PACKAGE_CHANGED dat=package: flg=0x5000010 xflg=0x4 pkg=com.google.android.gms cmp=com.google.android.gms/.chimera.PersistentIntentOperationService (has extras) } [CONTEXT service_id=17 ]
+11-13 06:55:04.348  1679  3824 I Icing   : Usage reports ok 0, Failed Usage reports 0, indexed 0, rejected 0
+11-13 06:55:04.352  1679  4373 I Blockstore: [DataStoreImpl] Clearing Blockstore Data for package me.shirazu.dshmizar.localagent.test [CONTEXT service_id=258 ]
+11-13 06:55:04.353  1679  4373 I Blockstore: [DataStoreImpl] Keyless data not found or its IsLastInstallationData = false. [CONTEXT service_id=258 ]
+11-13 06:55:04.358  1127  1127 E SmsApplication: com.google.android.apps.messaging lost android:read_cell_broadcasts:  (fixing)
+11-13 06:55:04.358   697  1950 W AppOpService: Ignored setUidMode call for runtime permission app op: uid = 10146, code = READ_CELL_BROADCASTS, mode = allow, callingUid = 1001, oldMode = allow
+11-13 06:55:04.369   697  1950 W AppOpService: Ignored setUidMode call for runtime permission app op: uid = 1001, code = READ_SMS, mode = allow, callingUid = 1001, oldMode = allow
+11-13 06:55:04.384   697  1240 W AppOpService: Ignored setUidMode call for runtime permission app op: uid = 1001, code = RECEIVE_SMS, mode = allow, callingUid = 1001, oldMode = allow
+11-13 06:55:04.385   697  1240 W AppOpService: Ignored setUidMode call for runtime permission app op: uid = 1001, code = RECEIVE_WAP_PUSH, mode = allow, callingUid = 1001, oldMode = allow
+11-13 06:55:04.385   697  1240 W AppOpService: Ignored setUidMode call for runtime permission app op: uid = 1001, code = SEND_SMS, mode = allow, callingUid = 1001, oldMode = allow
+11-13 06:55:04.387   697   792 W AppOpService: Ignored setUidMode call for runtime permission app op: uid = 1001, code = READ_CELL_BROADCASTS, mode = allow, callingUid = 1001, oldMode = allow
+11-13 06:55:04.387  1127  1127 D SatelliteAccessController: Current default SMS app:ComponentInfo{com.google.android.apps.messaging/com.google.android.apps.messaging.shared.receiver.SmsDeliverReceiver}
+11-13 06:55:04.388  1127  1127 D SatelliteController: getSelectedSatelliteSubId: subId=-1
+11-13 06:55:04.391  1127  1127 D SatelliteAccessController: supportedMsgApps:com.google.android.apps.messaging
+11-13 06:55:04.399   697   792 W BestClock: java.time.DateTimeException: No network time available
+11-13 06:55:04.399   697   792 W BestClock: java.time.DateTimeException: No network time available
+11-13 06:55:04.402  1313  4372 I Fitness : FitCleanupIntentOperation received Intent android.intent.action.PACKAGE_CHANGED [CONTEXT service_id=17 ]
+11-13 06:55:04.409   697  1240 W BestClock: java.time.DateTimeException: No network time available
+11-13 06:55:04.412   697   813 I system_server: AssetManager2(0x7db9174207f8) locale list changing from [] to [en-US]
+11-13 06:55:04.424   697   845 I system_server: AssetManager2(0x7db9174184b8) locale list changing from [] to [en-US]
+11-13 06:55:04.441  1530  1530 I faht    : (REDACTED) O received %s
+11-13 06:55:04.446   697   931 D BackgroundInstallControlService: Package event received: 0
+11-13 06:55:04.450   697  2415 W SignedPackage: Package doesn't have required signing certificate: com.google.android.retaildemo
+11-13 06:55:04.464   697  2415 E RoleControllerServiceImpl: Default/fallback role holder package doesn't qualify for the role, package: com.google.android.gms.supervision, role: android.app.role.SYSTEM_SUPERVISION
+11-13 06:55:04.469  4362  4362 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+11-13 06:55:04.472   697  1892 I AppWidgetServiceImpl: getInstalledProvidersForProfiles() 0
+11-13 06:55:04.473   697   754 I system_server: AssetManager2(0x7db917425f78) locale list changing from [] to [en-US]
+11-13 06:55:04.475   697  1924 W ParceledListSlice: Element #26 is 19556 bytes.
+11-13 06:55:04.476  4362  4362 I AndroidRuntime: Using default boot image
+11-13 06:55:04.476  4362  4362 I AndroidRuntime: Leaving lock profiling enabled
+11-13 06:55:04.476   697  1924 W ParceledListSlice: Element #27 is 19592 bytes.
+11-13 06:55:04.477   697  2415 W SignedPackage: Package doesn't have required signing certificate: com.google.android.apps.work.clouddpc
+11-13 06:55:04.481  4362  4362 I app_process: Core platform API reporting enabled, enforcing=false
+11-13 06:55:04.482   697  1892 W ParceledListSlice: Element #28 is 19432 bytes.
+11-13 06:55:04.483   697  1892 W ParceledListSlice: Element #29 is 19520 bytes.
+11-13 06:55:04.485  4362  4362 I app_process: Using CollectorTypeCMC GC.
+11-13 06:55:04.485   697  1892 W ParceledListSlice: Element #30 is 19456 bytes.
+11-13 06:55:04.503  1515  1967 I ogle.android.as: AssetManager2(0x7db917434cf8) locale list changing from [] to [en-US]
+11-13 06:55:04.503   697   845 I system_server: AssetManager2(0x7db9174346b8) locale list changing from [] to [en-US]
+11-13 06:55:04.504   697   845 V AccessibilityManagerService: onUserStateChangedLocked for userId: 0, forceUpdate: false
+11-13 06:55:04.505  1515  1967 I ogle.android.as: AssetManager2(0x7db91743ef78) locale list changing from [] to [en-US]
+11-13 06:55:04.508  1515  1967 I ogle.android.as: AssetManager2(0x7db91743c9f8) locale list changing from [] to [en-US]
+11-13 06:55:04.508   697   754 I system_server: AssetManager2(0x7db917432db8) locale list changing from [] to [en-US]
+11-13 06:55:04.510   697   754 I system_server: AssetManager2(0x7db917438e98) locale list changing from [] to [en-US]
+11-13 06:55:04.520   697   845 W MagnificationConnectionManager: requestConnection duplicated request: connect=false, mConnectionState=DISCONNECTED
+11-13 06:55:04.520  1515  1967 I ogle.android.as: AssetManager2(0x7db917428818) locale list changing from [] to [en-US]
+11-13 06:55:04.527   697   845 V AccessibilityManagerService: onUserStateChangedLocked for userId: 0, forceUpdate: false
+11-13 06:55:04.529   697   845 W MagnificationConnectionManager: requestConnection duplicated request: connect=false, mConnectionState=DISCONNECTED
+11-13 06:55:04.529   697   697 W IPCThreadState: Sending oneway calls to frozen process.
+11-13 06:55:04.530   697   697 W IPCThreadState: Sending oneway calls to frozen process.
+11-13 06:55:04.531   697   697 W IPCThreadState: Sending oneway calls to frozen process.
+11-13 06:55:04.531   697   697 W IPCThreadState: Sending oneway calls to frozen process.
+11-13 06:55:04.540  1515  1967 I ogle.android.as: AssetManager2(0x7db91743f5b8) locale list changing from [] to [en-US]
+11-13 06:55:04.541  1137  1181 D PackageUpdatedTask: Package updated: mOp=UPDATE packages=[me.shirazu.dshmizar.localagent.test], user=UserHandle{0}
+11-13 06:55:04.543   697  2415 E RoleControllerServiceImpl: Default/fallback role holder package doesn't qualify for the role, package: com.google.android.gms, role: android.app.role.WALLET
+11-13 06:55:04.548  1515  4370 I AiAiEcho: AppIndexer Package:[me.shirazu.dshmizar.localagent.test] UserProfile:[0] Enabled:[true].
+11-13 06:55:04.549  1515  4370 I AiAiEcho: AppFetcherImplV2 updateApps package:[me.shirazu.dshmizar.localagent.test], userId:[0], reason:[package is updated.].
+11-13 06:55:04.554  1515  1967 I ogle.android.as: AssetManager2(0x7db917440558) locale list changing from [] to [en-US]
+11-13 06:55:04.555  1515  1967 I ogle.android.as: AssetManager2(0x7db91743dcb8) locale list changing from [] to [en-US]
+11-13 06:55:04.559  1137  1181 W AllAppsList: updatePackage: no Activities matched updated package, removing any AppInfo with package=me.shirazu.dshmizar.localagent.test, user=UserHandle{0}
+11-13 06:55:04.561   697  2415 W SignedPackage: Cannot get ApplicationInfo for package: com.google.android.devicelockcontroller
+11-13 06:55:04.561  1515  1967 I ogle.android.as: AssetManager2(0x7db91743d998) locale list changing from [] to [en-US]
+11-13 06:55:04.574  1515  1967 I ogle.android.as: AssetManager2(0x7db917423d18) locale list changing from [] to [en-US]
+11-13 06:55:04.582  1515  1967 I ogle.android.as: AssetManager2(0x7db91742b0b8) locale list changing from [] to [en-US]
+11-13 06:55:04.588  1515  1967 I ogle.android.as: AssetManager2(0x7db917432458) locale list changing from [] to [en-US]
+11-13 06:55:04.590  1515  1967 I ogle.android.as: AssetManager2(0x7db9174330d8) locale list changing from [] to [en-US]
+11-13 06:55:04.595  1515  1967 I AiAiEcho: EchoSearch: WidgetFetcherImpl is initialized with [34] widgets [reason=package added for userId: 0]
+11-13 06:55:04.732  4362  4362 D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+11-13 06:55:04.758  4362  4362 D nativeloader: Load libicu_jni.so using APEX ns com_android_art for caller /apex/com.android.art/javalib/core-oj.jar: ok
+11-13 06:55:04.759  4362  4362 D app_process: u_setTimeZoneFilesDirectory("/apex/com.android.tzdata/etc/tz/versioned/9/icu") succeeded. 
+11-13 06:55:04.759  4362  4362 D app_process: I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt76l.dat
+11-13 06:55:04.761  4362  4362 D nativeloader: Load libjavacore.so using APEX ns com_android_art for caller /apex/com.android.art/javalib/core-oj.jar: ok
+11-13 06:55:04.764  4362  4362 D nativeloader: Load libopenjdk.so using APEX ns com_android_art for caller /apex/com.android.art/javalib/core-oj.jar: ok
+11-13 06:55:04.767  4362  4362 W app_process: Unexpected CPU variant for x86: x86_64.
+11-13 06:55:04.767  4362  4362 W app_process: Known variants: atom, sandybridge, silvermont, goldmont, goldmont-plus, goldmont-without-sha-xsaves, tremont, kabylake, alderlake, default
+11-13 06:55:04.797  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917422738) locale list changing from [] to [en-US]
+11-13 06:55:04.799  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917423098) locale list changing from [] to [en-US]
+11-13 06:55:04.805  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917426298) locale list changing from [] to [en-US]
+11-13 06:55:04.809  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917424998) locale list changing from [] to [en-US]
+11-13 06:55:04.810  4362  4362 D nativeloader: Load libframework-connectivity-tiramisu-jni.so using APEX ns com_android_tethering for caller /apex/com.android.tethering/javalib/framework-connectivity-t.jar: ok
+11-13 06:55:04.811  4362  4362 D AndroidRuntime: Calling main entry com.android.commands.am.Am
+11-13 06:55:04.816   987   987 D TileServices: Couldn't find tile for ComponentInfo{com.google.android.apps.wellbeing/com.google.android.apps.wellbeing.focusmode.quicksettings.FocusModeTileService}(0)
+11-13 06:55:04.816  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917429178) locale list changing from [] to [en-US]
+11-13 06:55:04.817  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917425618) locale list changing from [] to [en-US]
+11-13 06:55:04.817  4362  4362 I AconfigPackage: android.media.swcodec.flags is mapped to com.android.media.swcodec
+11-13 06:55:04.818  4362  4362 I AconfigPackage: com.google.android.settings.simplemode.flags is mapped to system_ext
+11-13 06:55:04.818  4362  4362 I AconfigPackage: com.google.android.systemui is mapped to system_ext
+11-13 06:55:04.818  4362  4362 I AconfigPackage: com.google.android.apps.nexuslauncher is mapped to system_ext
+11-13 06:55:04.818  4362  4362 I AconfigPackage: com.android.settings.accessibility is mapped to system_ext
+11-13 06:55:04.818  4362  4362 I AconfigPackage: com.android.settings.flags is mapped to system_ext
+11-13 06:55:04.818  4362  4362 I AconfigPackage: com.google.android.apps.miphone.aiai.matchmaker.overview.ui is mapped to system_ext
+11-13 06:55:04.818  4362  4362 I AconfigPackage: com.google.android.settings.flags is mapped to system_ext
+11-13 06:55:04.818  4362  4362 I AconfigPackage: com.android.launcher3 is mapped to system_ext
+11-13 06:55:04.818  4362  4362 I AconfigPackage: com.android.wallpaper is mapped to system_ext
+11-13 06:55:04.819  4362  4362 I AconfigPackage: com.android.settings.media_drm is mapped to system_ext
+11-13 06:55:04.820  4362  4362 I AconfigPackage: com.android.systemui.accessibility.accessibilitymenu is mapped to system_ext
+11-13 06:55:04.820  4362  4362 I AconfigPackage: com.android.settings.keyboard is mapped to system_ext
+11-13 06:55:04.820  4362  4362 I AconfigPackage: com.android.server.policy.feature.flags is mapped to system_ext
+11-13 06:55:04.820  4362  4362 I AconfigPackage: com.android.settings.factory_reset is mapped to system_ext
+11-13 06:55:04.820  4362  4362 I AconfigPackage: com.google.android.haptics.flags is mapped to system_ext
+11-13 06:55:04.821  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917426f18) locale list changing from [] to [en-US]
+11-13 06:55:04.823  4362  4362 I AconfigPackage: com.android.permission.flags is mapped to com.android.permission
+11-13 06:55:04.824  4362  4362 I AconfigPackage: com.android.icu is mapped to com.android.i18n
+11-13 06:55:04.824  4362  4362 I AconfigPackage: com.android.appsearch.flags is mapped to com.android.appsearch
+11-13 06:55:04.824  4362  4362 I AconfigPackage: android.uprobestats.mainline.flags is mapped to com.android.uprobestats
+11-13 06:55:04.825  4362  4362 I AconfigPackage: android.provider.flags is mapped to com.android.configinfrastructure
+11-13 06:55:04.825  4362  4362 I AconfigPackage: com.android.server.deviceconfig is mapped to com.android.configinfrastructure
+11-13 06:55:04.826  4362  4362 I AconfigPackage: com.android.nfc.flags is mapped to system
+11-13 06:55:04.826  4362  4362 I AconfigPackage: android.app.admin.flags is mapped to system
+11-13 06:55:04.826  4362  4362 I AconfigPackage: android.database.sqlite is mapped to system
+11-13 06:55:04.826  4362  4362 I AconfigPackage: com.android.providers.calendar is mapped to system
+11-13 06:55:04.826  4362  4362 I AconfigPackage: com.android.server.power.feature.flags is mapped to system
+11-13 06:55:04.827  4362  4362 I AconfigPackage: com.android.media.performance.flags is mapped to system
+11-13 06:55:04.827  4362  4362 I AconfigPackage: android.app.contextualsearch.flags is mapped to system
+11-13 06:55:04.827  4362  4362 I AconfigPackage: android.app.ondeviceintelligence.flags is mapped to system
+11-13 06:55:04.827  4362  4362 I AconfigPackage: com.android.media.projection.flags is mapped to system
+11-13 06:55:04.827  4362  4362 I AconfigPackage: android.companion is mapped to system
+11-13 06:55:04.827  4362  4362 I AconfigPackage: android.service.controls.flags is mapped to system
+11-13 06:55:04.827  4362  4362 I AconfigPackage: com.android.text.flags is mapped to system
+11-13 06:55:04.828  4362  4362 I AconfigPackage: com.android.providers.contactkeys.flags is mapped to system
+11-13 06:55:04.828  4362  4362 I AconfigPackage: com.android.intentresolver is mapped to system
+11-13 06:55:04.828  4362  4362 I AconfigPackage: android.companion.virtualdevice.flags is mapped to system
+11-13 06:55:04.828  4362  4362 I AconfigPackage: android.uprobestats.flags is mapped to system
+11-13 06:55:04.828  4362  4362 I AconfigPackage: com.android.net.thread.platform.flags is mapped to system
+11-13 06:55:04.828  4362  4362 I AconfigPackage: android.view.contentprotection.flags is mapped to system
+11-13 06:55:04.828  4362  4362 I AconfigPackage: com.android.server.dreams is mapped to system
+11-13 06:55:04.828  4362  4362 I AconfigPackage: com.android.graphics.surfaceflinger.flags is mapped to system
+11-13 06:55:04.828  4362  4362 I AconfigPackage: com.android.hardware.input is mapped to system
+11-13 06:55:04.828  4362  4362 I AconfigPackage: android.sdk is mapped to system
+11-13 06:55:04.828  4362  4362 I AconfigPackage: com.android.input.flags is mapped to system
+11-13 06:55:04.828  4362  4362 I AconfigPackage: android.tracing is mapped to system
+11-13 06:55:04.829  4362  4362 I AconfigPackage: com.android.server.biometrics is mapped to system
+11-13 06:55:04.829  4362  4362 I AconfigPackage: android.view.contentcapture.flags is mapped to system
+11-13 06:55:04.829  4362  4362 I AconfigPackage: android.app.job is mapped to system
+11-13 06:55:04.829  4362  4362 I AconfigPackage: android.content.res is mapped to system
+11-13 06:55:04.829  4362  4362 I AconfigPackage: android.net.platform.flags is mapped to system
+11-13 06:55:04.829  4362  4362 I AconfigPackage: com.android.aconfig.flags is mapped to system
+11-13 06:55:04.829  4362  4362 I AconfigPackage: com.android.graphics.flags is mapped to system
+11-13 06:55:04.829  4362  4362 I AconfigPackage: android.server.app is mapped to system
+11-13 06:55:04.829  4362  4362 I AconfigPackage: android.speech.flags is mapped to system
+11-13 06:55:04.829  4362  4362 I AconfigPackage: com.android.server.stats is mapped to system
+11-13 06:55:04.829  4362  4362 I AconfigPackage: android.hardware.biometrics is mapped to system
+11-13 06:55:04.830  4362  4362 I AconfigPackage: android.car.feature is mapped to system
+11-13 06:55:04.830  4362  4362 I AconfigPackage: android.adpf is mapped to system
+11-13 06:55:04.830  4362  4362 I AconfigPackage: android.location.flags is mapped to system
+11-13 06:55:04.830  4362  4362 I AconfigPackage: com.android.settingslib.flags is mapped to system
+11-13 06:55:04.830  4362  4362 I AconfigPackage: com.android.managedprovisioning.flags is mapped to system
+11-13 06:55:04.830  4362  4362 I AconfigPackage: android.app.assist.flags is mapped to system
+11-13 06:55:04.830  4362  4362 I AconfigPackage: com.android.server.net is mapped to system
+11-13 06:55:04.830  4362  4362 I AconfigPackage: com.android.settingslib.widget.flags is mapped to system
+11-13 06:55:04.830  4362  4362 I AconfigPackage: com.android.internal.camera.flags is mapped to system
+11-13 06:55:04.830  4362  4362 I AconfigPackage: com.android.hardware.libsensor.flags is mapped to system
+11-13 06:55:04.830  4362  4362 I AconfigPackage: com.android.internal.jank is mapped to system
+11-13 06:55:04.831  4362  4362 I AconfigPackage: com.android.providers.settings is mapped to system
+11-13 06:55:04.831  4362  4362 I AconfigPackage: android.multiuser is mapped to system
+11-13 06:55:04.831  4362  4362 I AconfigPackage: com.android.server.power.optimization is mapped to system
+11-13 06:55:04.831  4362  4362 I AconfigPackage: com.android.calllogbackup is mapped to system
+11-13 06:55:04.832  4362  4362 I AconfigPackage: com.android.media.flags is mapped to system
+11-13 06:55:04.832  4362  4362 I AconfigPackage: com.android.server.flags is mapped to system
+11-13 06:55:04.832  4362  4362 I AconfigPackage: com.android.graphics.libvulkan.flags is mapped to system
+11-13 06:55:04.832  4362  4362 I AconfigPackage: android.app.appfunctions.flags is mapped to system
+11-13 06:55:04.832  4362  4362 I AconfigPackage: android.app.smartspace.flags is mapped to system
+11-13 06:55:04.832  4362  4362 I AconfigPackage: com.android.providers.contacts.flags is mapped to system
+11-13 06:55:04.832  4362  4362 I AconfigPackage: com.android.shell.flags is mapped to system
+11-13 06:55:04.832  4362  4362 I AconfigPackage: com.android.media.aaudio is mapped to system
+11-13 06:55:04.832  4362  4362 I AconfigPackage: android.hardware.radio is mapped to system
+11-13 06:55:04.832  4362  4362 I AconfigPackage: com.google.wear.services.infra.flags is mapped to system
+11-13 06:55:04.832  4362  4362 I AconfigPackage: suspend_service.flags is mapped to system
+11-13 06:55:04.832  4362  4362 I AconfigPackage: android.media.midi is mapped to system
+11-13 06:55:04.833  4362  4362 I AconfigPackage: com.android.libcore.readonly is mapped to system
+11-13 06:55:04.833  4362  4362 I AconfigPackage: com.android.settingslib.widget.selectorwithwidgetpreference.flags is mapped to system
+11-13 06:55:04.833  4362  4362 I AconfigPackage: android.service.notification is mapped to system
+11-13 06:55:04.833  4362  4362 I AconfigPackage: com.android.systemui.shared is mapped to system
+11-13 06:55:04.833  4362  4362 I AconfigPackage: android.app.jank is mapped to system
+11-13 06:55:04.833  4362  4362 I AconfigPackage: android.app.wearable is mapped to system
+11-13 06:55:04.833  4362  4362 I AconfigPackage: com.android.media.audio is mapped to system
+11-13 06:55:04.833  4362  4362 I AconfigPackage: android.service.chooser is mapped to system
+11-13 06:55:04.833  4362  4362 I AconfigPackage: com.android.server.compat is mapped to system
+11-13 06:55:04.833  4362  4362 I AconfigPackage: com.android.server.alarm is mapped to system
+11-13 06:55:04.833  4362  4362 I AconfigPackage: com.android.apex.flags is mapped to system
+11-13 06:55:04.833  4362  4362 I AconfigPackage: android.service.quickaccesswallet is mapped to system
+11-13 06:55:04.834  4362  4362 I AconfigPackage: android.app.usage is mapped to system
+11-13 06:55:04.834  4362  4362 I AconfigPackage: com.android.server.accessibility is mapped to system
+11-13 06:55:04.834  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91740d5b8) locale list changing from [] to [en-US]
+11-13 06:55:04.834  4362  4362 I AconfigPackage: android.app.supervision.flags is mapped to system
+11-13 06:55:04.834  4362  4362 I AconfigPackage: com.android.server.utils is mapped to system
+11-13 06:55:04.834  4362  4362 I AconfigPackage: android.chre.flags is mapped to system
+11-13 06:55:04.834  4362  4362 I AconfigPackage: android.content.flags is mapped to system
+11-13 06:55:04.834  4362  4362 I AconfigPackage: android.media.codec is mapped to system
+11-13 06:55:04.834  4362  4362 I AconfigPackage: com.android.internal.os is mapped to system
+11-13 06:55:04.834  4362  4362 I AconfigPackage: com.android.nfc.nci.flags is mapped to system
+11-13 06:55:04.834  4362  4362 I AconfigPackage: android.app is mapped to system
+11-13 06:55:04.834  4362  4362 I AconfigPackage: android.security.keystore2 is mapped to system
+11-13 06:55:04.834  4362  4362 I AconfigPackage: android.crashrecovery.flags is mapped to system
+11-13 06:55:04.834  4362  4362 I AconfigPackage: com.android.tradeinmode.flags is mapped to system
+11-13 06:55:04.834  4362  4362 I AconfigPackage: android.hardware.flags is mapped to system
+11-13 06:55:04.834  4362  4362 I AconfigPackage: com.android.server.telecom.flags is mapped to system
+11-13 06:55:04.834  4362  4362 I AconfigPackage: com.android.settingslib.media.flags is mapped to system
+11-13 06:55:04.834  4362  4362 I AconfigPackage: com.android.server.policy is mapped to system
+11-13 06:55:04.835  4362  4362 I AconfigPackage: android.media.audiopolicy is mapped to system
+11-13 06:55:04.835  4362  4362 I AconfigPackage: com.android.egg.flags is mapped to system
+11-13 06:55:04.835  4362  4362 I AconfigPackage: com.android.internal.compat.flags is mapped to system
+11-13 06:55:04.835  4362  4362 I AconfigPackage: android.security is mapped to system
+11-13 06:55:04.835  4362  4362 I AconfigPackage: android.service.autofill is mapped to system
+11-13 06:55:04.835  4362  4362 I AconfigPackage: com.example.android.aconfig.demo.flags is mapped to system
+11-13 06:55:04.835  4362  4362 I AconfigPackage: android.view.flags is mapped to system
+11-13 06:55:04.835  4362  4362 I AconfigPackage: android.companion.virtual.flags is mapped to system
+11-13 06:55:04.836  4362  4362 I AconfigPackage: com.android.aconfig_new_storage is mapped to system
+11-13 06:55:04.836  4362  4362 I AconfigPackage: com.android.server.feature.flags is mapped to system
+11-13 06:55:04.836  4362  4362 I AconfigPackage: com.android.systemui is mapped to system
+11-13 06:55:04.836  4362  4362 I AconfigPackage: com.android.server.power.batterysaver is mapped to system
+11-13 06:55:04.836  4362  4362 I AconfigPackage: android.widget.flags is mapped to system
+11-13 06:55:04.836  4362  4362 I AconfigPackage: com.android.media.editing.flags is mapped to system
+11-13 06:55:04.836  4362  4362 I AconfigPackage: com.android.media.codec.flags is mapped to system
+11-13 06:55:04.836  4362  4362 I AconfigPackage: com.android.server.powerstats is mapped to system
+11-13 06:55:04.836  4362  4362 I AconfigPackage: com.android.graphics.egl.flags is mapped to system
+11-13 06:55:04.836  4362  4362 I AconfigPackage: com.android.media.audioserver is mapped to system
+11-13 06:55:04.836  4362  4362 I AconfigPackage: com.android.server.deviceidle is mapped to system
+11-13 06:55:04.836  4362  4362 I AconfigPackage: android.nfc is mapped to system
+11-13 06:55:04.836  4362  4362 I AconfigPackage: android.permission.flags is mapped to system
+11-13 06:55:04.836  4362  4362 I AconfigPackage: android.service.voice.flags is mapped to system
+11-13 06:55:04.836  4362  4362 I AconfigPackage: android.content.pm is mapped to system
+11-13 06:55:04.836  4362  4362 I AconfigPackage: com.android.server.power.hint is mapped to system
+11-13 06:55:04.837  4362  4362 I AconfigPackage: android.os is mapped to system
+11-13 06:55:04.837  4362  4362 I AconfigPackage: android.service.dreams is mapped to system
+11-13 06:55:04.837  4362  4362 I AconfigPackage: com.android.graphics.libgui.flags is mapped to system
+11-13 06:55:04.837  4362  4362 I AconfigPackage: android.hardware.usb.flags is mapped to system
+11-13 06:55:04.837  4362  4362 I AconfigPackage: android.provider is mapped to system
+11-13 06:55:04.837  4362  4362 I AconfigPackage: com.android.server.job is mapped to system
+11-13 06:55:04.837  4362  4362 I AconfigPackage: com.android.internal.foldables.flags is mapped to system
+11-13 06:55:04.837  4362  4362 I AconfigPackage: com.android.internal.telephony.flags is mapped to system
+11-13 06:55:04.838  4362  4362 I AconfigPackage: android.webkit is mapped to system
+11-13 06:55:04.838  4362  4362 I AconfigPackage: android.credentials.flags is mapped to system
+11-13 06:55:04.838  4362  4362 I AconfigPackage: com.android.server.display.feature.flags is mapped to system
+11-13 06:55:04.838  4362  4362 I AconfigPackage: com.android.server.notification is mapped to system
+11-13 06:55:04.838  4362  4362 I AconfigPackage: android.appwidget.flags is mapped to system
+11-13 06:55:04.838  4362  4362 I AconfigPackage: com.android.frameworks.sensorservice.flags is mapped to system
+11-13 06:55:04.838  4362  4362 I AconfigPackage: com.android.printspooler.flags is mapped to system
+11-13 06:55:04.838  4362  4362 I AconfigPackage: com.android.window.flags is mapped to system
+11-13 06:55:04.838  4362  4362 I AconfigPackage: android.adaptiveauth is mapped to system
+11-13 06:55:04.838  4362  4362 I AconfigPackage: android.net.wifi.flags is mapped to system
+11-13 06:55:04.838  4362  4362 I AconfigPackage: android.media.tv.flags is mapped to system
+11-13 06:55:04.838  4362  4362 I AconfigPackage: com.android.server.usb.flags is mapped to system
+11-13 06:55:04.839  4362  4362 I AconfigPackage: android.os.vibrator is mapped to system
+11-13 06:55:04.839  4362  4362 I AconfigPackage: android.hardware.devicestate.feature.flags is mapped to system
+11-13 06:55:04.839  4362  4362 I AconfigPackage: com.android.server.usage is mapped to system
+11-13 06:55:04.839  4362  4362 I AconfigPackage: android.server is mapped to system
+11-13 06:55:04.839  4362  4362 I AconfigPackage: com.android.wm.shell is mapped to system
+11-13 06:55:04.839  4362  4362 I AconfigPackage: android.view.inputmethod is mapped to system
+11-13 06:55:04.839  4362  4362 I AconfigPackage: com.android.graphics.hwui.flags is mapped to system
+11-13 06:55:04.839  4362  4362 I AconfigPackage: com.android.server.backup is mapped to system
+11-13 06:55:04.840  4362  4362 I AconfigPackage: com.android.internal.pm.pkg.component.flags is mapped to system
+11-13 06:55:04.840  4362  4362 I AconfigPackage: android.view.accessibility is mapped to system
+11-13 06:55:04.840  4362  4362 I AconfigPackage: com.google.wear.sdk is mapped to system
+11-13 06:55:04.840  4362  4362 I AconfigPackage: android.media.audio is mapped to system
+11-13 06:55:04.840  4362  4362 I AconfigPackage: com.android.server.am is mapped to system
+11-13 06:55:04.840  4362  4362 I AconfigPackage: com.android.media.playback.flags is mapped to system
+11-13 06:55:04.841  4362  4362 I AconfigPackage: com.android.art.flags is mapped to com.android.art
+11-13 06:55:04.841  4362  4362 I AconfigPackage: com.android.libcore is mapped to com.android.art
+11-13 06:55:04.841  4362  4362 I AconfigPackage: com.android.media.extractor.flags is mapped to com.android.media
+11-13 06:55:04.842  4362  4362 I AconfigPackage: com.android.media.mainline.flags is mapped to com.android.media
+11-13 06:55:04.842  4362  4362 I AconfigPackage: com.android.wifi.flags is mapped to com.android.wifi
+11-13 06:55:04.842  4362  4362 I AconfigPackage: com.android.org.conscrypt.flags is mapped to com.android.conscrypt
+11-13 06:55:04.843  4362  4362 I AconfigPackage: com.android.healthfitness.flags is mapped to com.android.healthfitness
+11-13 06:55:04.844  4362  4362 I AconfigPackage: com.google.android.input.twoshay.flags is mapped to vendor
+11-13 06:55:04.844  4362  4362 I AconfigPackage: libgooglecamerahal.flags is mapped to vendor
+11-13 06:55:04.844  4362  4362 I AconfigPackage: com.android.ipsec.flags is mapped to com.android.ipsec
+11-13 06:55:04.845  4362  4362 I AconfigPackage: com.android.nfc.module.flags is mapped to com.android.nfcservices
+11-13 06:55:04.845  4362  4362 I AconfigPackage: com.android.adservices.ondevicepersonalization.flags is mapped to com.android.ondevicepersonalization
+11-13 06:55:04.845  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917412d38) locale list changing from [] to [en-US]
+11-13 06:55:04.845  4362  4362 I AconfigPackage: com.android.bluetooth.flags is mapped to com.android.bt
+11-13 06:55:04.846  4362  4362 I AconfigPackage: com.android.devicelock.flags is mapped to com.android.devicelock
+11-13 06:55:04.846  4362  4362 I AconfigPackage: android.os.profiling is mapped to com.android.profiling
+11-13 06:55:04.846  4362  4362 I AconfigPackage: com.android.os.statsd.flags is mapped to com.android.os.statsd
+11-13 06:55:04.847  4362  4362 I AconfigPackage: com.android.cellbroadcastreceiver.flags is mapped to com.android.cellbroadcast
+11-13 06:55:04.848  4362  4362 I AconfigPackage: com.android.adservices.flags is mapped to com.android.adservices
+11-13 06:55:04.848  4362  4362 I AconfigPackage: com.android.sdksandbox.flags is mapped to com.android.adservices
+11-13 06:55:04.848  4362  4362 I AconfigPackage: com.android.uwb.flags is mapped to com.android.uwb
+11-13 06:55:04.848  4362  4362 I AconfigPackage: com.android.ranging.flags is mapped to com.android.uwb
+11-13 06:55:04.849  4362  4362 I AconfigPackage: android.graphics.pdf.flags is mapped to com.android.mediaprovider
+11-13 06:55:04.849  4362  4362 I AconfigPackage: com.android.providers.media.flags is mapped to com.android.mediaprovider
+11-13 06:55:04.849  4362  4362 I AconfigPackage: android.graphics.pdf.flags.readonly is mapped to com.android.mediaprovider
+11-13 06:55:04.849  4362  4362 I AconfigPackage: com.android.net.ct.flags is mapped to com.android.tethering
+11-13 06:55:04.849  4362  4362 I AconfigPackage: com.android.net.flags is mapped to com.android.tethering
+11-13 06:55:04.849  4362  4362 I AconfigPackage: android.net.vcn is mapped to com.android.tethering
+11-13 06:55:04.849  4362  4362 I AconfigPackage: com.android.nearby.flags is mapped to com.android.tethering
+11-13 06:55:04.850  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917417518) locale list changing from [] to [en-US]
+11-13 06:55:04.850  4362  4362 I AconfigPackage: android.net.http is mapped to com.android.tethering
+11-13 06:55:04.850  4362  4362 I AconfigPackage: com.android.net.thread.flags is mapped to com.android.tethering
+11-13 06:55:04.850  4362  4362 I AconfigPackage: com.android.system.virtualmachine.flags is mapped to com.android.virt
+11-13 06:55:04.850  4362  4362 E FeatureFlagsImplExport: android.os.flagging.AconfigStorageReadException: ERROR_PACKAGE_NOT_FOUND: package android.xr cannot be found on the device
+11-13 06:55:04.857  4362  4362 D UiAutomationConnection: Created on user UserHandle{0}
+11-13 06:55:04.858   697  1908 I ActivityManager: Force stopping me.shirazu.dshmizar.localagent.test appid=10219 user=0: start instr
+11-13 06:55:04.864   697  1908 V GrammaticalInflectionUtils: AttributionSource: AttributionSource { uid = 10219, packageName = null, attributionTag = null, token = android.os.Binder@cd5592c, deviceId = 0, next = null } does not have READ_SYSTEM_GRAMMATICAL_GENDER permission.
+11-13 06:55:04.865  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917426f18) locale list changing from [] to [en-US]
+11-13 06:55:04.866   697  1908 I AppsFilter: interaction: PackageSetting{6f3bfd4 com.android.microdroid.empty_payload/10199} -> PackageSetting{df1be6e me.shirazu.dshmizar.localagent.test/10219} BLOCKED
+11-13 06:55:04.867   697   931 D BackgroundInstallControlService: Package event received: 0
+11-13 06:55:04.867   697   931 D BackgroundInstallControlService: Package event received: 0
+11-13 06:55:04.868   697   931 D BackgroundInstallControlService: Package event received: 0
+11-13 06:55:04.868  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917429178) locale list changing from [] to [en-US]
+11-13 06:55:04.873   697   910 I AppWidgetServiceImpl: Received broadcast: android.intent.action.PACKAGE_UNSTOPPED on user 0
+11-13 06:55:04.873   697   910 I AppWidgetServiceImpl: Updating package stopped masked state for uid 10219 package me.shirazu.dshmizar.localagent.test isStopped false
+11-13 06:55:04.880   480   530 I netd    : tetherGetStats() -> {[]} <0.45ms>
+11-13 06:55:04.882  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917424998) locale list changing from [] to [en-US]
+11-13 06:55:04.886  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917425938) locale list changing from [] to [en-US]
+11-13 06:55:04.903  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917426298) locale list changing from [] to [en-US]
+11-13 06:55:04.908  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917423098) locale list changing from [] to [en-US]
+11-13 06:55:04.920  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917425618) locale list changing from [] to [en-US]
+11-13 06:55:04.923   483   483 D Zygote  : Forked child process 4392
+11-13 06:55:04.924   697   756 W ActivityManager: Slow operation: 56ms so far, now at startProcess: returned from zygote!
+11-13 06:55:04.924   697   756 W ActivityManager: Slow operation: 57ms so far, now at startProcess: done updating battery stats
+11-13 06:55:04.924   697   756 W ActivityManager: Slow operation: 57ms so far, now at startProcess: building log message
+11-13 06:55:04.924   697   756 I ActivityManager: Start proc 4392:me.shirazu.dshmizar.localagent.test/u0a219 for added application me.shirazu.dshmizar.localagent.test
+11-13 06:55:04.924   697   756 W ActivityManager: Slow operation: 57ms so far, now at startProcess: starting to update pids map
+11-13 06:55:04.925   697   756 I ActivityManager: ProcessObserver broadcast disabled
+11-13 06:55:04.925   697   756 W ActivityManager: Slow operation: 57ms so far, now at startProcess: done updating pids map
+11-13 06:55:04.940  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91741c018) locale list changing from [] to [en-US]
+11-13 06:55:04.943  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917418af8) locale list changing from [] to [en-US]
+11-13 06:55:04.946  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174158f8) locale list changing from [] to [en-US]
+11-13 06:55:04.949  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917413378) locale list changing from [] to [en-US]
+11-13 06:55:04.951  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917414318) locale list changing from [] to [en-US]
+11-13 06:55:04.960  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91740b038) locale list changing from [] to [en-US]
+11-13 06:55:04.962  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917414f98) locale list changing from [] to [en-US]
+11-13 06:55:04.965  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917416ed8) locale list changing from [] to [en-US]
+11-13 06:55:04.967  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174187d8) locale list changing from [] to [en-US]
+11-13 06:55:04.971  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917416578) locale list changing from [] to [en-US]
+11-13 06:55:04.973  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917414958) locale list changing from [] to [en-US]
+11-13 06:55:04.975  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917419138) locale list changing from [] to [en-US]
+11-13 06:55:04.980  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91741cfb8) locale list changing from [] to [en-US]
+11-13 06:55:04.985  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91741d2d8) locale list changing from [] to [en-US]
+11-13 06:55:04.990  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174204d8) locale list changing from [] to [en-US]
+11-13 06:55:04.995  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174152b8) locale list changing from [] to [en-US]
+11-13 06:55:04.999  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91741bcf8) locale list changing from [] to [en-US]
+11-13 06:55:05.001  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917420e38) locale list changing from [] to [en-US]
+11-13 06:55:05.005  4392  4392 I localagent.test: Late-enabling -Xcheck:jni
+11-13 06:55:05.008  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917418198) locale list changing from [] to [en-US]
+11-13 06:55:05.011  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91741b9d8) locale list changing from [] to [en-US]
+11-13 06:55:05.028  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917432138) locale list changing from [] to [en-US]
+11-13 06:55:05.041  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917435978) locale list changing from [] to [en-US]
+11-13 06:55:05.045  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174362d8) locale list changing from [] to [en-US]
+11-13 06:55:05.048  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174349d8) locale list changing from [] to [en-US]
+11-13 06:55:05.053  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917437278) locale list changing from [] to [en-US]
+11-13 06:55:05.055  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917423d18) locale list changing from [] to [en-US]
+11-13 06:55:05.060  4392  4392 I localagent.test: Using CollectorTypeCMC GC.
+11-13 06:55:05.062  4392  4392 W localagent.test: Unexpected CPU variant for x86: x86_64.
+11-13 06:55:05.062  4392  4392 W localagent.test: Known variants: atom, sandybridge, silvermont, goldmont, goldmont-plus, goldmont-without-sha-xsaves, tremont, kabylake, alderlake, default
+11-13 06:55:05.065  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917432458) locale list changing from [] to [en-US]
+11-13 06:55:05.069  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917438538) locale list changing from [] to [en-US]
+11-13 06:55:05.073   565   586 I adbd    : jdwp connection from 4392
+11-13 06:55:05.091  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91741c978) locale list changing from [] to [en-US]
+11-13 06:55:05.091  4392  4392 D nativeloader: Load libframework-connectivity-tiramisu-jni.so using APEX ns com_android_tethering for caller /apex/com.android.tethering/javalib/framework-connectivity-t.jar: ok
+11-13 06:55:05.094  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91741b078) locale list changing from [] to [en-US]
+11-13 06:55:05.098  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917425c58) locale list changing from [] to [en-US]
+11-13 06:55:05.112  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917434078) locale list changing from [] to [en-US]
+11-13 06:55:05.119  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742e8f8) locale list changing from [] to [en-US]
+11-13 06:55:05.121  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917421798) locale list changing from [] to [en-US]
+11-13 06:55:05.122  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742c698) locale list changing from [] to [en-US]
+11-13 06:55:05.122  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174297b8) locale list changing from [] to [en-US]
+11-13 06:55:05.125  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174139b8) locale list changing from [] to [en-US]
+11-13 06:55:05.130  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742dc78) locale list changing from [] to [en-US]
+11-13 06:55:05.133  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742bd38) locale list changing from [] to [en-US]
+11-13 06:55:05.135  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742aa78) locale list changing from [] to [en-US]
+11-13 06:55:05.136  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91741a3f8) locale list changing from [] to [en-US]
+11-13 06:55:05.140  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91741c338) locale list changing from [] to [en-US]
+11-13 06:55:05.143  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742ad98) locale list changing from [] to [en-US]
+11-13 06:55:05.146  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917421dd8) locale list changing from [] to [en-US]
+11-13 06:55:05.148  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917416bb8) locale list changing from [] to [en-US]
+11-13 06:55:05.151  4392  4392 D ApplicationLoaders: Returning zygote-cached class loader: /system/framework/android.test.base.jar
+11-13 06:55:05.152  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91741aa38) locale list changing from [] to [en-US]
+11-13 06:55:05.158  4392  4392 D nativeloader: Configuring clns-9 for other apk /system/framework/android.test.mock.jar. target_sdk_version=36, uses_libraries=ALL, library_path=/data/app/~~014Tm6FUMB0ZdmJm9te1Ig==/me.shirazu.dshmizar.localagent.test-F51C9crSse1gVQUPCF-fdA==/lib/x86_64:/data/app/~~014Tm6FUMB0ZdmJm9te1Ig==/me.shirazu.dshmizar.localagent.test-F51C9crSse1gVQUPCF-fdA==/base.apk!/lib/x86_64, permitted_path=/data:/mnt/expand:/data/user/0/me.shirazu.dshmizar.localagent.test
+11-13 06:55:05.159  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917413ff8) locale list changing from [] to [en-US]
+11-13 06:55:05.162  4392  4392 D ApplicationLoaders: Returning zygote-cached class loader: /system/framework/android.test.base.jar
+11-13 06:55:05.165  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917422d78) locale list changing from [] to [en-US]
+11-13 06:55:05.167  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174239f8) locale list changing from [] to [en-US]
+11-13 06:55:05.167  4392  4392 D nativeloader: Configuring clns-10 for other apk /system/framework/android.test.runner.jar. target_sdk_version=36, uses_libraries=ALL, library_path=/data/app/~~014Tm6FUMB0ZdmJm9te1Ig==/me.shirazu.dshmizar.localagent.test-F51C9crSse1gVQUPCF-fdA==/lib/x86_64:/data/app/~~014Tm6FUMB0ZdmJm9te1Ig==/me.shirazu.dshmizar.localagent.test-F51C9crSse1gVQUPCF-fdA==/base.apk!/lib/x86_64, permitted_path=/data:/mnt/expand:/data/user/0/me.shirazu.dshmizar.localagent.test
+11-13 06:55:05.168  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742d638) locale list changing from [] to [en-US]
+11-13 06:55:05.169  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91741a0d8) locale list changing from [] to [en-US]
+11-13 06:55:05.170  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742f578) locale list changing from [] to [en-US]
+11-13 06:55:05.171  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917420b18) locale list changing from [] to [en-US]
+11-13 06:55:05.174  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174184b8) locale list changing from [] to [en-US]
+11-13 06:55:05.177  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91741df58) locale list changing from [] to [en-US]
+11-13 06:55:05.180  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91741f538) locale list changing from [] to [en-US]
+11-13 06:55:05.181  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917421478) locale list changing from [] to [en-US]
+11-13 06:55:05.183  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742ccd8) locale list changing from [] to [en-US]
+11-13 06:55:05.184  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91741fb78) locale list changing from [] to [en-US]
+11-13 06:55:05.187  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91741e598) locale list changing from [] to [en-US]
+11-13 06:55:05.189  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91741b398) locale list changing from [] to [en-US]
+11-13 06:55:05.191  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174220f8) locale list changing from [] to [en-US]
+11-13 06:55:05.192  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917427238) locale list changing from [] to [en-US]
+11-13 06:55:05.192  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917428818) locale list changing from [] to [en-US]
+11-13 06:55:05.194  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174233b8) locale list changing from [] to [en-US]
+11-13 06:55:05.198  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174391b8) locale list changing from [] to [en-US]
+11-13 06:55:05.200  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174333f8) locale list changing from [] to [en-US]
+11-13 06:55:05.203  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917422418) locale list changing from [] to [en-US]
+11-13 06:55:05.205  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91741d5f8) locale list changing from [] to [en-US]
+11-13 06:55:05.208  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742b0b8) locale list changing from [] to [en-US]
+11-13 06:55:05.211  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917431198) locale list changing from [] to [en-US]
+11-13 06:55:05.216  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917419db8) locale list changing from [] to [en-US]
+11-13 06:55:05.224  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742c058) locale list changing from [] to [en-US]
+11-13 06:55:05.226  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174281d8) locale list changing from [] to [en-US]
+11-13 06:55:05.228  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742e5d8) locale list changing from [] to [en-US]
+11-13 06:55:05.236  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917430b58) locale list changing from [] to [en-US]
+11-13 06:55:05.239  4392  4392 D nativeloader: Configuring clns-11 for other apk /data/app/~~014Tm6FUMB0ZdmJm9te1Ig==/me.shirazu.dshmizar.localagent.test-F51C9crSse1gVQUPCF-fdA==/base.apk. target_sdk_version=36, uses_libraries=, library_path=/data/app/~~014Tm6FUMB0ZdmJm9te1Ig==/me.shirazu.dshmizar.localagent.test-F51C9crSse1gVQUPCF-fdA==/lib/x86_64:/data/app/~~014Tm6FUMB0ZdmJm9te1Ig==/me.shirazu.dshmizar.localagent.test-F51C9crSse1gVQUPCF-fdA==/base.apk!/lib/x86_64, permitted_path=/data:/mnt/expand:/data/user/0/me.shirazu.dshmizar.localagent.test
+11-13 06:55:05.241  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742ec18) locale list changing from [] to [en-US]
+11-13 06:55:05.244  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174252f8) locale list changing from [] to [en-US]
+11-13 06:55:05.246  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917425f78) locale list changing from [] to [en-US]
+11-13 06:55:05.248  4392  4392 I localagent.test: AssetManager2(0x7db9174126f8) locale list changing from [] to [en-US]
+11-13 06:55:05.252  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917424358) locale list changing from [] to [en-US]
+11-13 06:55:05.253  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742b6f8) locale list changing from [] to [en-US]
+11-13 06:55:05.261  4392  4392 V GraphicsEnvironment: Currently set values for:
+11-13 06:55:05.261  4392  4392 V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+11-13 06:55:05.261  4392  4392 V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+11-13 06:55:05.261  4392  4392 V GraphicsEnvironment: me.shirazu.dshmizar.localagent.test is not listed in per-application setting
+11-13 06:55:05.262  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917428b38) locale list changing from [] to [en-US]
+11-13 06:55:05.262  4392  4392 V GraphicsEnvironment: ANGLE allowlist from config: com.dreamgames.royalmatch com.dts.freefiremax com.dxx.firenow com.gramgames.mergedragons com.ludo.king com.mojang.minecraftpe com.my.defense com.nintendo.zaka com.os.airforce com.playrix.fishdomdd.gplay io.teslatech.callbreak jp.konami.prospia net.peakgames.toonblast
+11-13 06:55:05.262  4392  4392 V GraphicsEnvironment: me.shirazu.dshmizar.localagent.test is not listed in ANGLE allowlist or settings, returning default
+11-13 06:55:05.263  4392  4392 V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+11-13 06:55:05.264  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742d958) locale list changing from [] to [en-US]
+11-13 06:55:05.278  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742f258) locale list changing from [] to [en-US]
+11-13 06:55:05.289  4392  4392 I AndroidJUnitRunner: newApplication android.app.Application
+11-13 06:55:05.289  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174107b8) locale list changing from [] to [en-US]
+11-13 06:55:05.292  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917436918) locale list changing from [] to [en-US]
+11-13 06:55:05.294  4392  4392 I AndroidJUnitRunner: onCreate Bundle[mParcelledData.dataSize=152]
+11-13 06:55:05.296  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917437bd8) locale list changing from [] to [en-US]
+11-13 06:55:05.298  4392  4392 D AndroidJUnitRunner: Use the raw file system for managing file I/O.
+11-13 06:55:05.303  1679  3902 I Icing   : Indexing com.google.android.gms-apps from com.google.android.gms
+11-13 06:55:05.304  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917431af8) locale list changing from [] to [en-US]
+11-13 06:55:05.305  1679  3902 I Icing   : Indexing done com.google.android.gms-apps
+11-13 06:55:05.311  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742fed8) locale list changing from [] to [en-US]
+11-13 06:55:05.314  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174301f8) locale list changing from [] to [en-US]
+11-13 06:55:05.320  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917435fb8) locale list changing from [] to [en-US]
+11-13 06:55:05.322  4392  4392 V TestEventClient: No service name argument was given (testDiscoveryService, testRunEventService or orchestratorService)
+11-13 06:55:05.323  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917435338) locale list changing from [] to [en-US]
+11-13 06:55:05.323  4392  4407 D AndroidJUnitRunner: onStart is called.
+11-13 06:55:05.328  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174365f8) locale list changing from [] to [en-US]
+11-13 06:55:05.330  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917433d58) locale list changing from [] to [en-US]
+11-13 06:55:05.341  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917439b18) locale list changing from [] to [en-US]
+11-13 06:55:05.342  4392  4407 I InstrConnection: Could not send broadcast or register receiver (isolatedProcess?)
+11-13 06:55:05.348  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917437ef8) locale list changing from [] to [en-US]
+11-13 06:55:05.349  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917438b78) locale list changing from [] to [en-US]
+11-13 06:55:05.354  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917434398) locale list changing from [] to [en-US]
+11-13 06:55:05.365  1679  3902 I Icing   : Indexing com.google.android.gms-apps from com.google.android.gms
+11-13 06:55:05.366  1679  3902 I Icing   : Indexing done com.google.android.gms-apps
+11-13 06:55:05.367  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917430518) locale list changing from [] to [en-US]
+11-13 06:55:05.372  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917424038) locale list changing from [] to [en-US]
+11-13 06:55:05.377  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742a438) locale list changing from [] to [en-US]
+11-13 06:55:05.390  4392  4407 I TestRunner: run started: 1 tests
+11-13 06:55:05.393  4392  4407 I TestRunner: started: runsTheIosKernelOnQuickJsAndAnswersKernelMethods(me.shirazu.dshmizar.localagent.LocalKernelPoCInstrumentedTest)
+11-13 06:55:05.410  1462  1650 I .apps.wellbeing: AssetManager2(0x7db9174394d8) locale list changing from [] to [en-US]
+11-13 06:55:05.412   697   792 W BestClock: java.time.DateTimeException: No network time available
+11-13 06:55:05.413   697   792 W BestClock: java.time.DateTimeException: No network time available
+11-13 06:55:05.414   697  1908 W BestClock: java.time.DateTimeException: No network time available
+11-13 06:55:05.416  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742a758) locale list changing from [] to [en-US]
+11-13 06:55:05.420  1462  1650 I .apps.wellbeing: AssetManager2(0x7db91742df98) locale list changing from [] to [en-US]
+11-13 06:55:05.423  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917430838) locale list changing from [] to [en-US]
+11-13 06:55:05.425  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917433a38) locale list changing from [] to [en-US]
+11-13 06:55:05.436  4392  4410 D nativeloader: Load /data/app/~~014Tm6FUMB0ZdmJm9te1Ig==/me.shirazu.dshmizar.localagent.test-F51C9crSse1gVQUPCF-fdA==/base.apk!/lib/x86_64/libmizarquickjs.so using class loader ns clns-11 (caller=/data/app/~~014Tm6FUMB0ZdmJm9te1Ig==/me.shirazu.dshmizar.localagent.test-F51C9crSse1gVQUPCF-fdA==/base.apk!classes2.dex): ok
+11-13 06:55:05.437  1462  1650 I .apps.wellbeing: AssetManager2(0x7db917435658) locale list changing from [] to [en-US]
+11-13 06:55:05.440  4392  4410 I LocalAgentJni: quickjs-ng context created
+11-13 06:55:05.479  1679  3902 I Icing   : Indexing com.google.android.gms-apps from com.google.android.gms
+11-13 06:55:05.480  1679  3902 I Icing   : Indexing done com.google.android.gms-apps
+11-13 06:55:05.504  1679  3902 I Icing   : Indexing com.google.android.gms-apps from com.google.android.gms
+11-13 06:55:05.505  1679  3902 I Icing   : Indexing done com.google.android.gms-apps
+11-13 06:55:05.550  4392  4410 I LocalAgentPoC: [kernel] created the default workspace: 默认工作区
+11-13 06:55:05.553  4392  4410 I LocalAgentPoC: [kernel] kernel booted: d735ceb4-b106-4a38-812a-bd0420533c5a, 0 sessions
+11-13 06:55:05.553  4392  4410 I LocalAgentPoC: [kernel] kernel connection opened: 829d710d-8edb-4ace-9aa0-749d4768b0b2
+11-13 06:55:05.557  4392  4410 I LocalAgentPoC: boot: ready=true microtasksDrained=true deviceId=15ebf101-50c1-4a6b-b1e5-4b0c7f0ee4fe bundle=56505B eval=8ms total=126ms root=/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent
+11-13 06:55:05.561  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-1","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-1)
+11-13 06:55:05.564  4392  4410 I LocalAgentPoC: call kernel.config.get -> {"v":1,"type":"ok","id":"android-2","result":{"config":{"providers":[{"id":"deepseek-official","name":"DeepSeek","baseUrl":"https://api.deepseek.com","path":"/chat/completions","usage":true,"models":[{"id":"deepseek-chat","name":"DeepSeek Chat","efforts":[{"id":"off","name":"Off","description":"No reasoning phase."}],"defaultEffort":"off"},{"id":"deepseek-reasoner","name":"DeepSeek Reasoner","description":"Reasoning-first model for hard problems.","efforts":[{"id":"off","name":"Off","description":"The reasoner reasons by default."}],"defaultEffort":"off"}]}],"defaultModel":{"provider":"deepseek-official","model":"deepseek-chat","reasoningEffort":"off"},"contextWindow":128000,"systemPromptAddendum":"","defaultPreset":"workspace-write"}}} (2ms, id=android-2)
+11-13 06:55:05.568  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-3","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (0ms, id=android-3)
+11-13 06:55:05.569  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-4","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-4)
+11-13 06:55:05.571  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-5","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-5)
+11-13 06:55:05.572  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-6","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-6)
+11-13 06:55:05.573  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-7","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-7)
+11-13 06:55:05.573  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-8","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (0ms, id=android-8)
+11-13 06:55:05.575  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-9","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-9)
+11-13 06:55:05.576  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-10","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-10)
+11-13 06:55:05.578  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-11","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-11)
+11-13 06:55:05.579  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-12","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-12)
+11-13 06:55:05.581  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-13","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-13)
+11-13 06:55:05.583  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-14","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-14)
+11-13 06:55:05.585  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-15","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-15)
+11-13 06:55:05.586  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-16","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-16)
+11-13 06:55:05.588  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-17","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-17)
+11-13 06:55:05.589  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-18","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-18)
+11-13 06:55:05.591  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-19","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (0ms, id=android-19)
+11-13 06:55:05.592  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-20","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-20)
+11-13 06:55:05.593  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-21","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-21)
+11-13 06:55:05.596  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-22","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (3ms, id=android-22)
+11-13 06:55:05.598  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-23","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-23)
+11-13 06:55:05.599  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-24","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-24)
+11-13 06:55:05.600  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-25","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-25)
+11-13 06:55:05.602  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-26","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (0ms, id=android-26)
+11-13 06:55:05.602  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-27","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (0ms, id=android-27)
+11-13 06:55:05.603  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-28","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (0ms, id=android-28)
+11-13 06:55:05.604  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-29","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-29)
+11-13 06:55:05.606  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-30","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-30)
+11-13 06:55:05.608  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-31","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-31)
+11-13 06:55:05.609  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-32","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-32)
+11-13 06:55:05.611  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-33","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (0ms, id=android-33)
+11-13 06:55:05.613  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-34","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (2ms, id=android-34)
+11-13 06:55:05.615  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-35","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-35)
+11-13 06:55:05.616  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-36","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-36)
+11-13 06:55:05.617  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-37","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-37)
+11-13 06:55:05.620  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-38","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-38)
+11-13 06:55:05.621  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-39","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-39)
+11-13 06:55:05.622  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-40","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-40)
+11-13 06:55:05.623  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-41","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-41)
+11-13 06:55:05.625  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-42","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-42)
+11-13 06:55:05.627  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-43","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (0ms, id=android-43)
+11-13 06:55:05.628  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-44","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-44)
+11-13 06:55:05.629  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-45","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-45)
+11-13 06:55:05.631  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-46","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-46)
+11-13 06:55:05.633  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-47","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (0ms, id=android-47)
+11-13 06:55:05.634  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-48","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-48)
+11-13 06:55:05.635  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-49","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-49)
+11-13 06:55:05.636  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-50","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-50)
+11-13 06:55:05.640  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-51","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (2ms, id=android-51)
+11-13 06:55:05.641  4392  4410 I LocalAgentPoC: call kernel.status -> {"v":1,"type":"ok","id":"android-52","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}} (1ms, id=android-52)
+11-13 06:55:05.643  4392  4407 I localagent.test: Using smaps_rollup for pss collection
+11-13 06:55:05.671  4392  4407 I LocalAgentPoC: evidence: Mizar local agent — Android PoC (2026-11-13)
+11-13 06:55:05.671  4392  4407 I LocalAgentPoC: evidence: Device: sdk_gphone64_x86_64 • API 36 • x86_64 • page 4096 B
+11-13 06:55:05.672  4392  4407 I LocalAgentPoC: evidence: Engine: quickjs-ng 0.10.1 + localagent JNI bridge (16 KB pages)
+11-13 06:55:05.672  4392  4407 I LocalAgentPoC: evidence: Kernel bundle: 56505 B (same bytes as iOS dist/mizar-kernel.js)
+11-13 06:55:05.672  4392  4407 I LocalAgentPoC: evidence: Boot: ready=true in 126 ms (bundle eval 8 ms)
+11-13 06:55:05.672  4392  4407 I LocalAgentPoC: evidence: Promise jobs drained on evaluate: true
+11-13 06:55:05.672  4392  4407 I LocalAgentPoC: evidence: Sandbox root: /data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent
+11-13 06:55:05.672  4392  4407 I LocalAgentPoC: evidence: Probes: 1+2=3, ?./??=7, MizarKernel=object, private fields=5
+11-13 06:55:05.672  4392  4407 I LocalAgentPoC: evidence: Handshake: welcome deviceId=15ebf101-50c1-4a6b-b1e5-4b0c7f0ee4fe hostId=d735ceb4-b106-4a38-812a-bd0420533c5a
+11-13 06:55:05.672  4392  4407 I LocalAgentPoC: evidence: kernel.status (1 ms): {"v":1,"type":"ok","id":"android-1","result":{"kernelVersion":"0.1.0","protocolVersion":1,"engine":"openai-compat","hostId":"d735ceb4-b106-4a38-812a-bd0420533c5a","home":"/data/user/0/me.shirazu.dshmizar.localagent.test/files/LocalAgent","sessions":0}}
+11-13 06:55:05.672  4392  4407 I LocalAgentPoC: evidence: kernel.config.get (2 ms): {"v":1,"type":"ok","id":"android-2","result":{"config":{"providers":[{"id":"deepseek-official","name":"DeepSeek","baseUrl":"https://api.deepseek.com","path":"/chat/completions","usage":true,"models":[{"id":"deepseek-chat","name":"DeepSeek Chat","efforts":[{"id":"off","name":"Off","description":"No reasoning phase."}],"defaultEffort":"off"},{"id":"deepseek-reasoner","name":"DeepSeek Reasoner","description":"Reasoning-first model for hard problems.","efforts":[{"id":"off","name":"Off","description":"The reasoner reasons by default."}],"defaultEffort":"off"}]}],"defaultModel":{"provider":"deepseek-official","model":"deepseek-chat","reasoningEffort":"off"},"contextWindow":128000,"systemPromptAddendum":"","defaultPreset":"workspace-write"}}}
+11-13 06:55:05.672  4392  4407 I LocalAgentPoC: evidence: Latency kernel.status x50: min=0 ms, p50=1 ms, avg=0.9 ms, max=3 ms
+11-13 06:55:05.672  4392  4407 I LocalAgentPoC: evidence: Memory: native heap 5.8 MB, java heap 4.2 MB, PSS 30579 kB
+11-13 06:55:05.672  4392  4407 I LocalAgentPoC: evidence: Evidence: /storage/emulated/0/Android/data/me.shirazu.dshmizar.localagent.test/files/localagent-poc/localagent-poc-2026-11-13.txt
+11-13 06:55:05.672  4392  4407 I LocalAgentPoC: evidence:           /storage/emulated/0/Android/data/me.shirazu.dshmizar.localagent.test/files/localagent-poc/localagent-poc-2026-11-13.json
+11-13 06:55:05.687   697  1908 I system_server: AssetManager2(0x7db9174349d8) locale list changing from [] to [en-US]
+11-13 06:55:05.687   697  1908 V GrammaticalInflectionUtils: AttributionSource: AttributionSource { uid = 10219, packageName = null, attributionTag = null, token = android.os.Binder@cd5592c, deviceId = 0, next = null } does not have READ_SYSTEM_GRAMMATICAL_GENDER permission.
+11-13 06:55:05.688   697  1908 W OptProp : Cannot read opt property android.window.PROPERTY_COMPAT_ALLOW_USER_ASPECT_RATIO_OVERRIDE
+11-13 06:55:05.689   697  1908 W OptProp : Cannot read opt property android.window.PROPERTY_COMPAT_ALLOW_USER_ASPECT_RATIO_FULLSCREEN_OVERRIDE
+11-13 06:55:05.690   697  1908 W OptProp : Cannot read opt property android.window.PROPERTY_COMPAT_ALLOW_RESIZEABLE_ACTIVITY_OVERRIDES
+11-13 06:55:05.691   697  1908 W OptProp : Cannot read opt property android.window.PROPERTY_COMPAT_ALLOW_MIN_ASPECT_RATIO_OVERRIDE
+11-13 06:55:05.698   697  1908 W OptProp : Cannot read opt property android.window.PROPERTY_COMPAT_ALLOW_ORIENTATION_OVERRIDE
+11-13 06:55:05.700   556   780 I BpBinder: onLastStrongRef automatically unlinking death recipients: 
+11-13 06:55:05.710   987  1067 I ndroid.systemui: AssetManager2(0x7db91744c718) locale list changing from [] to [en-US]
+11-13 06:55:05.711   987  1050 V WindowManagerShell: Transition requested (#13): android.os.BinderProxy@b919c41 TransitionRequestInfo { type = OPEN, triggerTask = TaskInfo{userId=0 taskId=8 effectiveUid=10219 displayId=0 isRunning=true baseIntent=Intent { flg=0x14000000 cmp=me.shirazu.dshmizar.localagent.test/me.shirazu.dshmizar.localagent.poc.PoCResultsActivity } baseActivity=ComponentInfo{me.shirazu.dshmizar.localagent.test/me.shirazu.dshmizar.localagent.poc.PoCResultsActivity} topActivity=ComponentInfo{me.shirazu.dshmizar.localagent.test/me.shirazu.dshmizar.localagent.poc.PoCResultsActivity} origActivity=null realActivity=ComponentInfo{me.shirazu.dshmizar.localagent.test/me.shirazu.dshmizar.localagent.poc.PoCResultsActivity} numActivities=1 lastActiveTime=1557335 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{android.window.IWindowContainerToken$Stub$Proxy@5e185e6} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=Rect(0, 132 - 0, 0) topActivityInfo=ActivityInfo{db64727 me.shirazu.dshmizar.localagent.poc.PoCResultsActivity} launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=false isVisible=false isVisibleRequested=false isTopActivityNoDisplay=false isSleeping=false locusId=null displayAreaFeatureId=1 isTopActivityTransparent=false isActivityStackTransparent=false lastNonFullscreenBounds=Rect(276, 694 - 804, 1774) capturedLink=null capturedLinkTimestamp=0 requestedVisibleTypes=-9 topActivityRequestOpenInBrowserEducationTimestamp=0 appCompatTaskInfo=AppCompatTaskInfo { topActivityInSizeCompat=false eligibleForLetterboxEducation= false isLetterboxEducationEnabled= true isLetterboxDoubleTapEnabled= false eligibleForUserAspectRatioButton= false topActivityBoundsLetterboxed= false isFromLetterboxDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 topActivityAppBounds=Rect(0, 0 - 1080, 2400) isUserFullscreenOverrideEnabled=false isSystemFullscreenOverrideEnabled=false hasMinAspectRatioOverride=false topActivityLetterboxBounds=null cameraCompatTaskInfo=CameraCompatTaskInfo { freeformCameraCompatMode=inactive}} topActivityMainWindowFrame=null}, pipChange = null, remoteTransition = null, displayChange = null, flags = 0, debugId = 13 }
+11-13 06:55:05.712   987  1050 D ShellSplitScreen: logExit: no-op, mLoggerSessionId is null
+11-13 06:55:05.713   697   792 D CompatChangeReporter: Compat change id reported: 377864165; UID 10219; state: ENABLED
+11-13 06:55:05.714   697  1908 I ActivityTaskManager: START u0 {flg=0x14000000 xflg=0x4 cmp=me.shirazu.dshmizar.localagent.test/me.shirazu.dshmizar.localagent.poc.PoCResultsActivity (has extras)} with LAUNCH_MULTIPLE from uid 10219 (BAL_ALLOW_PERMISSION) result code=0
+11-13 06:55:05.724  1137  1137 W SplitSelectStateCtor: Missing session instanceIds
+11-13 06:55:05.724  1137  1137 D StatsLog: LAUNCHER_SPLIT_SELECTION_EXIT_INTERRUPTED
+11-13 06:55:05.724   987  1068 D SplashScreenView: Build android.window.SplashScreenView{f1abb7d V.E...... ......ID 0,0-0,0}
+11-13 06:55:05.724   987  1068 D SplashScreenView: Icon: view: null drawable: null size: 0
+11-13 06:55:05.724   987  1068 D SplashScreenView: Branding: view: android.view.View{3301a72 G.ED..... ......I. 0,0-0,0 #1020541 android:id/splashscreen_branding_view} drawable: null size w: 0 h: 0
+11-13 06:55:05.725   987  1050 D WindowManagerShell: setLauncherKeepClearAreaHeight: visible=false, height=527
+11-13 06:55:05.729   697   792 W OptProp : Cannot read opt property android.window.PROPERTY_COMPAT_ENABLE_FAKE_FOCUS
+11-13 06:55:05.730   697   931 D BackgroundInstallControlService: Package event received: 0
+11-13 06:55:05.736   556   556 I BpBinder: onLastStrongRef automatically unlinking death recipients: 
+11-13 06:55:05.736  4392  4412 I DisplayManager: Choreographer implicitly registered for the refresh rate.
+11-13 06:55:05.744   697   931 D BackgroundInstallControlService: Package event received: 0
+11-13 06:55:05.748  4392  4392 I localagent.test: AssetManager2(0x7db917413cd8) locale list changing from [] to [en-US]
+11-13 06:55:05.762   697   931 D BackgroundInstallControlService: Package event received: 0
+11-13 06:55:05.766  4392  4392 E ashmem  : Pinning is deprecated since Android Q. Please use trim or other methods.
+11-13 06:55:05.771   697   931 D BackgroundInstallControlService: Package event received: 0
+11-13 06:55:05.793  4392  4392 D LifecycleMonitor: Lifecycle status change: me.shirazu.dshmizar.localagent.poc.PoCResultsActivity@a3e2aae in: PRE_ON_CREATE
+11-13 06:55:05.821   987   999 V WindowManagerShell: onTransitionReady(transaction=2993592205992)
+11-13 06:55:05.821   987  1050 V WindowManagerShell: onTransitionReady (#13) android.os.BinderProxy@b919c41: {id=13 t=OPEN f=0x0 trk=0 r=[0@Point(0, 0)] c=[
+11-13 06:55:05.821   987  1050 V WindowManagerShell:         {m=OPEN f=NONE leash=Surface(name=Task=8)/@0xbacb33b sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0 taskParent=-1},
+11-13 06:55:05.821   987  1050 V WindowManagerShell:         {m=TO_BACK f=SHOW_WALLPAPER leash=Surface(name=Task=1)/@0x1c67a58 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0 taskParent=-1},
+11-13 06:55:05.821   987  1050 V WindowManagerShell:         {m=TO_BACK f=IS_WALLPAPER leash=Surface(name=WallpaperWindowToken{6d3464d showWhenLocked=false})/@0x2d917b1 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0}
+11-13 06:55:05.821   987  1050 V WindowManagerShell:     ]}
+11-13 06:55:05.822   987  1050 V WindowManagerShell: Playing animation for (#13) android.os.BinderProxy@b919c41@0
+11-13 06:55:05.822   987  1050 V ShellRecents: RecentsTransitionHandler.startAnimation: no controller found
+11-13 06:55:05.822   987  1050 V WindowManagerShell: Transition doesn't have explicit remote, search filters for match for {id=13 t=OPEN f=0x0 trk=0 r=[0@Point(0, 0)] c=[{m=OPEN f=NONE leash=Surface(name=Task=8)/@0xbacb33b sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0 taskParent=-1},{m=TO_BACK f=SHOW_WALLPAPER leash=Surface(name=Task=1)/@0x1c67a58 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0 taskParent=-1},{m=TO_BACK f=IS_WALLPAPER leash=Surface(name=WallpaperWindowToken{6d3464d showWhenLocked=false})/@0x2d917b1 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0}]}
+11-13 06:55:05.823   987  1050 V WindowManagerShell:  Checking filter Pair{{types=[] flags=0x0] notFlags=0x0 checks=[{atype=undefined independent=true modes=[CLOSE,TO_BACK] flags=IN_TASK_WITH_EMBEDDED_ACTIVITY mustBeTask=false order=ANY topActivity=null launchCookie=null taskFragmentToken=android.os.BinderProxy@49767a8 windowingMode=undefined}]} RemoteTransition { remoteTransition = android.window.IRemoteTransition$Stub$Proxy@9fc82c1, appThread = android.app.IApplicationThread$Stub$Proxy@2a0aa66, debugName = overlayBackTransition }}
+11-13 06:55:05.823   987  1050 V WindowManagerShell:  Checking filter Pair{{types=[] flags=0x0] notFlags=0x0 checks=[{atype=dream independent=true modes=[OPEN,TO_FRONT] flags=NONE mustBeTask=false order=ANY topActivity=null launchCookie=null windowingMode=undefined},{atype=home independent=true modes=[CLOSE,TO_BACK] flags=NONE mustBeTask=false order=ANY topActivity=null launchCookie=null windowingMode=undefined}]} RemoteTransition { remoteTransition = android.window.IRemoteTransition$Stub$Proxy@337d1a7, appThread = android.app.IApplicationThread$Stub$Proxy@ecf5654, debugName = LauncherToDream }}
+11-13 06:55:05.823   987  1050 V WindowManagerShell:  Checking filter Pair{{types=[] flags=0x0] notFlags=0x100 checks=[{atype=home independent=true modes=[OPEN,TO_FRONT] flags=NONE mustBeTask=false order=TOP topActivity=ComponentInfo{com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity} launchCookie=null windowingMode=undefined},{atype=standard independent=true modes=[CLOSE,TO_BACK] flags=NONE mustBeTask=false order=ANY topActivity=null launchCookie=null windowingMode=undefined},{NOT atype=undefined independent=true modes=[] flags=NONE mustBeTask=true order=ANY topActivity=null launchCookie=null customAnim=true windowingMode=undefined}]} RemoteTransition { remoteTransition = android.window.IRemoteTransition$Stub$Proxy@38d89fd, appThread = android.app.IApplicationThread$Stub$Proxy@9fd06f2, debugName = QuickstepLaunchHome }}
+11-13 06:55:05.823   987  1050 V WindowManagerShell:  Delegate animation for (#13) to null
+11-13 06:55:05.823   987  1050 V WindowManagerShell: start default transition animation, info = {id=13 t=OPEN f=0x0 trk=0 r=[0@Point(0, 0)] c=[{m=OPEN f=NONE leash=Surface(name=Task=8)/@0xbacb33b sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0 taskParent=-1},{m=TO_BACK f=SHOW_WALLPAPER leash=Surface(name=Task=1)/@0x1c67a58 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0 taskParent=-1},{m=TO_BACK f=IS_WALLPAPER leash=Surface(name=WallpaperWindowToken{6d3464d showWhenLocked=false})/@0x2d917b1 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0}]}
+11-13 06:55:05.824   987  1050 V WindowManagerShell: loadAnimation: anim=android.view.animation.AnimationSet@7294817 animAttr=0x13 type=OPEN isEntrance=false
+11-13 06:55:05.825   987  1050 V WindowManagerShell: loadAnimation: anim=android.view.animation.AnimationSet@954e404 animAttr=0x12 type=OPEN isEntrance=true
+11-13 06:55:05.825   697   746 V WindowManager: Sent Transition (#13) createdAt=11-13 06:55:05.692 via request=TransitionRequestInfo { type = OPEN, triggerTask = TaskInfo{userId=0 taskId=8 effectiveUid=10219 displayId=0 isRunning=true baseIntent=Intent { flg=0x14000000 cmp=me.shirazu.dshmizar.localagent.test/me.shirazu.dshmizar.localagent.poc.PoCResultsActivity } baseActivity=ComponentInfo{me.shirazu.dshmizar.localagent.test/me.shirazu.dshmizar.localagent.poc.PoCResultsActivity} topActivity=ComponentInfo{me.shirazu.dshmizar.localagent.test/me.shirazu.dshmizar.localagent.poc.PoCResultsActivity} origActivity=null realActivity=ComponentInfo{me.shirazu.dshmizar.localagent.test/me.shirazu.dshmizar.localagent.poc.PoCResultsActivity} numActivities=1 lastActiveTime=1557335 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{RemoteToken{affdcf5 Task{fa10bce #8 type=standard A=10219:me.shirazu.dshmizar.localagent.test}}} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=Rect(0, 132 - 0, 0) topActivityInfo=ActivityInfo{ec1ea8a me.shirazu.dshmizar.localagent.poc.PoCResultsActivity} launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=false isVisible=false isVisibleRequested=false isTopActivityNoDisplay=false isSleeping=false locusId=null displayAreaFeatureId=1 isTopActivityTransparent=false isActivityStackTransparent=false lastNonFullscreenBounds=Rect(276, 694 - 804, 1774) capturedLink=null capturedLinkTimestamp=0 requestedVisibleTypes=-9 topActivityRequestOpenInBrowserEducationTimestamp=0 appCompatTaskInfo=AppCompatTaskInfo { topActivityInSizeCompat=false eligibleForLetterboxEducation= false isLetterboxEducationEnabled= true isLetterboxDoubleTapEnabled= false eligibleForUserAspectRatioButton= false topActivityBoundsLetterboxed= false isFromLetterboxDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 topActivityAppBounds=Rect(0, 0 - 1080, 2400) isUserFullscreenOverrideEnabled=false isSystemFullscreenOverrideEnabled=false hasMinAspectRatioOverride=false topActivityLetterboxBounds=null cameraCompatTaskInfo=CameraCompatTaskInfo { freeformCameraCompatMode=inactive}} topActivityMainWindowFrame=null}, pipChange = null, remoteTransition = null, displayChange = null, flags = 0, debugId = 13 }
+11-13 06:55:05.826   697   746 V WindowManager:     startWCT=WindowContainerTransaction { changes= {} hops= [] errorCallbackToken=null taskFragmentOrganizer=null }
+11-13 06:55:05.826   697   746 V WindowManager:     info={id=13 t=OPEN f=0x0 trk=0 r=[0@Point(0, 0)] c=[
+11-13 06:55:05.826   697   746 V WindowManager:         {WCT{RemoteToken{affdcf5 Task{fa10bce #8 type=standard A=10219:me.shirazu.dshmizar.localagent.test}}} m=OPEN f=NONE leash=Surface(name=Task=8)/@0xe0a7ddf sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0 taskParent=-1},
+11-13 06:55:05.826   697   746 V WindowManager:         {WCT{RemoteToken{c320de4 Task{e6c1286 #1 type=home}}} m=TO_BACK f=SHOW_WALLPAPER leash=Surface(name=Task=1)/@0xed331f0 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0 taskParent=-1},
+11-13 06:55:05.826   697   746 V WindowManager:         {m=TO_BACK f=IS_WALLPAPER leash=Surface(name=WallpaperWindowToken{6d3464d showWhenLocked=false})/@0xf55429b sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0}
+11-13 06:55:05.826   697   746 V WindowManager:     ]}
+11-13 06:55:05.827   987  1050 V WindowManagerShell:  animated by com.android.wm.shell.transition.DefaultTransitionHandler@4c6d059
+11-13 06:55:05.838  4392  4412 I EGL_emulation: Opening libGLESv1_CM_emulation.so
+11-13 06:55:05.840  4392  4412 I EGL_emulation: Opening libGLESv2_emulation.so
+11-13 06:55:05.908   987  1061 W Looper  : Slow dispatch took 62ms wmshell.anim app=com.android.systemui main=false group=TOP_APP h=android.view.Choreographer$FrameHandler c=android.view.Choreographer$FrameDisplayEventReceiver@23e3c70 m=0
+11-13 06:55:05.910   987  1061 W Looper  : Slow delivery took 57ms wmshell.anim app=com.android.systemui main=false group=TOP_APP h=android.view.Choreographer$FrameHandler c=android.view.Choreographer$FrameDisplayEventReceiver@23e3c70 m=0
+11-13 06:55:05.912  4392  4392 D CompatChangeReporter: Compat change id reported: 377864165; UID 10219; state: ENABLED
+11-13 06:55:05.913  4392  4392 D DesktopModeFlags: Toggle override initialized to: OVERRIDE_UNSET
+11-13 06:55:05.920  4392  4392 D LifecycleMonitor: Lifecycle status change: me.shirazu.dshmizar.localagent.poc.PoCResultsActivity@a3e2aae in: CREATED
+11-13 06:55:05.920  4392  4392 D LifecycleMonitor: Lifecycle status change: me.shirazu.dshmizar.localagent.poc.PoCResultsActivity@a3e2aae in: STARTED
+11-13 06:55:05.923   987  1061 W Looper  : Drained
+11-13 06:55:05.924  4392  4392 D LifecycleMonitor: Lifecycle status change: me.shirazu.dshmizar.localagent.poc.PoCResultsActivity@a3e2aae in: RESUMED
+11-13 06:55:05.931  4392  4412 W HWUI    : Failed to choose config with EGL_SWAP_BEHAVIOR_PRESERVED, retrying without...
+11-13 06:55:05.932  4392  4412 W HWUI    : Failed to initialize 101010-2 format, error = EGL_SUCCESS
+11-13 06:55:05.940  4392  4392 W HWUI    : Unknown dataspace 0
+11-13 06:55:05.918     0     0 I servicemanager: Caller(pid=4392,uid=10219,sid=u:r:untrusted_app:s0:c219,c256,c512,c768) Found android.hardware.graphics.allocator.IAllocator/default in device VINTF manifest.
+11-13 06:55:05.928     0     0 I servicemanager: Caller(pid=4392,uid=10219,sid=u:r:untrusted_app:s0:c219,c256,c512,c768) Found android.hardware.graphics.allocator.IAllocator/default in device VINTF manifest.
+11-13 06:55:05.930     0     0 I servicemanager: Caller(pid=4392,uid=10219,sid=u:r:untrusted_app:s0:c219,c256,c512,c768) Found mapper/ranchu in device VINTF manifest.
+11-13 06:55:06.007   697  1240 D CoreBackPreview: Window{cb5ac73 u0 me.shirazu.dshmizar.localagent.test/me.shirazu.dshmizar.localagent.poc.PoCResultsActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@ae2ffa9, mPriority=-1, mIsAnimationCallback=false, mOverrideBehavior=0}
+11-13 06:55:06.036   556   573 W ServiceManagerCppClient: Permission failure: android.permission.ACCESS_SURFACE_FLINGER from uid=10219 pid=0
+11-13 06:55:06.036   556   780 W ServiceManagerCppClient: Permission failure: android.permission.ACCESS_SURFACE_FLINGER from uid=10219 pid=4392
+11-13 06:55:06.036   556   780 D PermissionCache: checking android.permission.ACCESS_SURFACE_FLINGER for uid=10219 => denied (285 us)
+11-13 06:55:06.036   556   573 D PermissionCache: checking android.permission.ACCESS_SURFACE_FLINGER for uid=10219 => denied (691 us)
+11-13 06:55:06.036   556   573 W ServiceManagerCppClient: Permission failure: android.permission.ROTATE_SURFACE_FLINGER from uid=10219 pid=0
+11-13 06:55:06.036   556   780 W ServiceManagerCppClient: Permission failure: android.permission.ROTATE_SURFACE_FLINGER from uid=10219 pid=4392
+11-13 06:55:06.036   556   573 D PermissionCache: checking android.permission.ROTATE_SURFACE_FLINGER for uid=10219 => denied (283 us)
+11-13 06:55:06.037   556   780 D PermissionCache: checking android.permission.ROTATE_SURFACE_FLINGER for uid=10219 => denied (378 us)
+11-13 06:55:06.037   556   780 W ServiceManagerCppClient: Permission failure: android.permission.INTERNAL_SYSTEM_WINDOW from uid=10219 pid=4392
+11-13 06:55:06.037   556   573 W ServiceManagerCppClient: Permission failure: android.permission.INTERNAL_SYSTEM_WINDOW from uid=10219 pid=0
+11-13 06:55:06.037   556   780 D PermissionCache: checking android.permission.INTERNAL_SYSTEM_WINDOW for uid=10219 => denied (473 us)
+11-13 06:55:06.037   556   573 D PermissionCache: checking android.permission.INTERNAL_SYSTEM_WINDOW for uid=10219 => denied (500 us)
+11-13 06:55:06.117   697   792 W ServiceManagerCppClient: Permission failure: android.permission.ACCESS_SURFACE_FLINGER from uid=10219 pid=0
+11-13 06:55:06.117   697   792 D PermissionCache: checking android.permission.ACCESS_SURFACE_FLINGER for uid=10219 => denied (159 us)
+11-13 06:55:06.117   697   792 W ServiceManagerCppClient: Permission failure: android.permission.ROTATE_SURFACE_FLINGER from uid=10219 pid=0
+11-13 06:55:06.118   697   792 D PermissionCache: checking android.permission.ROTATE_SURFACE_FLINGER for uid=10219 => denied (375 us)
+11-13 06:55:06.118   697   792 W ServiceManagerCppClient: Permission failure: android.permission.INTERNAL_SYSTEM_WINDOW from uid=10219 pid=0
+11-13 06:55:06.118   697   792 D PermissionCache: checking android.permission.INTERNAL_SYSTEM_WINDOW for uid=10219 => denied (125 us)
+11-13 06:55:06.122   987  1050 V WindowManagerShell: Transition animation finished (aborted=false), notifying core (#13) android.os.BinderProxy@b919c41@0
+11-13 06:55:06.129   697   746 I ActivityTaskManager: Displayed me.shirazu.dshmizar.localagent.test/me.shirazu.dshmizar.localagent.poc.PoCResultsActivity for user 0: +443ms
+11-13 06:55:06.130   697   746 V WindowManager: Finish Transition (#13): created at 11-13 06:55:05.692 collect-started=0.175ms request-sent=17.796ms started=28.656ms ready=49.544ms sent=127.067ms commit=21.04ms finished=436.668ms
+11-13 06:55:06.130  1137  1137 D VRI[NexusLauncherActivity]: visibilityChanged oldVisibility=true newVisibility=false
+11-13 06:55:06.132   987  1050 V WindowManagerShell: Track 0 became idle
+11-13 06:55:06.132   987  1050 V WindowManagerShell: All active transition animations finished
+11-13 06:55:06.142  1137  1137 D NexusLauncherModelDelegate: notifySmartspaceEvent: SmartspaceTargetEvent{mSmartspaceTarget=null, mSmartspaceActionId='null', mEventType=7}
+11-13 06:55:06.160   480   530 I netd    : tetherGetStats() -> {[]} <0.51ms>
+11-13 06:55:06.161   697   841 I ImeTracker: me.shirazu.dshmizar.localagent.test:bde21a7a: onRequestHide at ORIGIN_SERVER reason HIDE_UNSPECIFIED_WINDOW fromUser false
+11-13 06:55:06.166  4392  4392 D InsetsController: hide(ime(), fromIme=false)
+11-13 06:55:06.166  4392  4392 I ImeTracker: me.shirazu.dshmizar.localagent.test:bde21a7a: onCancelled at PHASE_CLIENT_ALREADY_HIDDEN
+11-13 06:55:06.167  1137  1137 D BaseDepthController: setSurface:
+11-13 06:55:06.167  1137  1137 D BaseDepthController: 	mWaitingOnSurfaceValidity: false
+11-13 06:55:06.167  1137  1137 D BaseDepthController: 	mBaseSurface: null
+11-13 06:55:06.168  1137  1137 D BaseDepthController: mSurface is null and mCurrentBlur is: 0
+11-13 06:55:06.173  1137  1137 D StateManager: goToState - fromState: Normal, toState: Normal, partial trace:
+11-13 06:55:06.173  1137  1137 D StateManager: 	at com.android.launcher3.statemanager.StateManager.moveToRestState(go/retraceme 43e00d9cd0eb17b3d9dd30fc1741b1c71445c4c0f7c8c9b81300265c86c5b873:4)
+11-13 06:55:06.173  1137  1137 D StateManager: 	at com.android.launcher3.statemanager.StateManager.moveToRestState(go/retraceme 43e00d9cd0eb17b3d9dd30fc1741b1c71445c4c0f7c8c9b81300265c86c5b873:1)
+11-13 06:55:06.173  1137  1137 D StateManager: 	at com.android.launcher3.statemanager.StatefulActivity.onStop(go/retraceme 43e00d9cd0eb17b3d9dd30fc1741b1c71445c4c0f7c8c9b81300265c86c5b873:34)
+11-13 06:55:06.175  1137  1137 D StatsLog: LAUNCHER_ONSTOP
+11-13 06:55:06.175   697  1240 I AppWidgetServiceImpl: setAppWidgetHidden() 0
+11-13 06:55:06.177  1137  1137 D StatsLog: LAUNCHER_GOOGLE_SEARCH_RESTORE_LIST_SIZE_AFTER_ACTIVITY_RESTART
+11-13 06:55:06.182   697  1240 I ImeTracker: system_server:602d404f: onRequestHide at ORIGIN_SERVER reason IME_REQUESTED_CHANGED_LISTENER fromUser false
+11-13 06:55:06.184   697   749 I ImeTracker: system_server:602d404f: onCancelled at PHASE_SERVER_SHOULD_HIDE
+11-13 06:55:06.187  1431  1431 I GoogleInputMethodService: GoogleInputMethodService.onFinishInput():2043 
+11-13 06:55:06.193  1431  1431 I Module  : DeviceLockedStatusModuleProvider$Module.updateDeviceLockedStatus():100 repeatCheckTimes = 0, locked = false
+11-13 06:55:06.199  1431  1431 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1293 onStartInput(EditorInfo{EditorInfo{packageName=me.shirazu.dshmizar.localagent.test, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=0, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+11-13 06:55:06.199   697   931 D BackgroundInstallControlService: Package event received: 0
+11-13 06:55:06.204  1431  1431 I Module  : DeviceLockedStatusModuleProvider$Module.updateDeviceLockedStatus():100 repeatCheckTimes = 1, locked = false
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: EmojiCompatManager.getEmojiCompatIfLoaded():343 EmojiCompat.init() was never called.
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: java.lang.IllegalStateException: EmojiCompat is not initialized. Please call EmojiCompat.init() first
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at asx.p(PG:6)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at axb.b(PG:13)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at jnr.b(PG:2)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at jnr.c(PG:4)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at jnr.f(PG:3)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at jnx.c(PG:3)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at kif.cz(PG:47)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at lhl.run(PG:1025)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at jaf.execute(PG:12)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at nco.v(PG:13)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at lhn.m(PG:96)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at lhn.k(PG:25)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at kgn.onStartInput(PG:250)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at android.inputmethodservice.InputMethodService.doStartInput(InputMethodService.java:3521)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at android.inputmethodservice.InputMethodService$InputMethodImpl.startInput(InputMethodService.java:879)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at android.inputmethodservice.InputMethodService$InputMethodImpl.dispatchStartInput(InputMethodService.java:908)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at android.inputmethodservice.IInputMethodWrapper.executeMessage(IInputMethodWrapper.java:201)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at com.android.internal.os.HandlerCaller$MyHandler.handleMessage(HandlerCaller.java:44)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at android.os.Handler.dispatchMessage(Handler.java:110)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at android.os.Looper.loopOnce(Looper.java:248)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at android.os.Looper.loop(Looper.java:338)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at android.app.ActivityThread.main(ActivityThread.java:9067)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at java.lang.reflect.Method.invoke(Native Method)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+11-13 06:55:06.208  1431  1431 I EmojiCompatManager: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:932)
+11-13 06:55:06.211   697   792 W PackageConfigPersister: App-specific configuration not found for packageName: me.shirazu.dshmizar.localagent.test and userId: 0
+11-13 06:55:06.387  1127  1311 D SatelliteController: iisInCarrierRoamingNbIotNtn: satellite is disabled
+11-13 06:55:06.416   697   792 W BestClock: java.time.DateTimeException: No network time available
+11-13 06:55:06.416   697   792 W BestClock: java.time.DateTimeException: No network time available
+11-13 06:55:06.417   697   792 W BestClock: java.time.DateTimeException: No network time available
+11-13 06:55:06.781  4392  4396 I localagent.test: Compiler allocated 5042KB to compile void android.view.ViewRootImpl.performTraversals()
+11-13 06:55:07.208  4392  4407 I UiAutomation: Initialized for user 0 on display 0
+11-13 06:55:07.210   697  1892 D AccessibilityManagerService: changeCurrentUserForTestAutomationIfNeededLocked(0): ignoring because device doesn't support visible background users
+11-13 06:55:07.210   697  1892 I UiAutomationManager: Registering UiTestAutomationService (id=com.android.server.accessibility/UiAutomation, flags=0x0) when called by user 0
+11-13 06:55:07.211   697  1892 V AccessibilityManagerService: onUserStateChangedLocked for userId: 0, forceUpdate: false
+11-13 06:55:07.212   697  1892 W MagnificationConnectionManager: requestConnection duplicated request: connect=false, mConnectionState=DISCONNECTED
+11-13 06:55:07.212  1515  2269 I AiAiEcho: Settings changed for uri: content://settings/secure/accessibility_enabled
+11-13 06:55:07.214   697   697 W IPCThreadState: Sending oneway calls to frozen process.
+11-13 06:55:07.215  1515  1690 I AiAiEcho: Predicting[0]:  [CONTEXT sampling_count=5 ]
+11-13 06:55:07.215  1515  1690 I AiAiEcho: EchoTargets: 
+11-13 06:55:07.215  1515  1690 I AiAiEcho: Filtered by AiAi flag check: 
+11-13 06:55:07.215  1515  1690 I AiAiEcho: [CONTEXT ratelimit_period="10 SECONDS" ]
+11-13 06:55:07.215   697   697 W IPCThreadState: Sending oneway calls to frozen process.
+11-13 06:55:07.216  4392  4422 V UiAutomation: Init UiAutomation@93cf040[id=3, displayId=0, flags=0]
+11-13 06:55:07.216   697   697 W IPCThreadState: Sending oneway calls to frozen process.
+11-13 06:55:07.216   697   697 W IPCThreadState: Sending oneway calls to frozen process.
+11-13 06:55:07.217   697   697 W IPCThreadState: Sending oneway calls to frozen process.
+11-13 06:55:07.217  1515  1690 I AiAiEcho: #remoteViewsTwiddler: feature disabled.
+11-13 06:55:07.218  1515  1690 I AiAiEcho: Predicting[0]:  [CONTEXT sampling_count=5 ]
+11-13 06:55:07.218  1515  1690 I AiAiEcho: EchoTargets: 
+11-13 06:55:07.218  1515  1690 I AiAiEcho: Filtered by AiAi flag check: 
+11-13 06:55:07.218  1515  1690 I AiAiEcho: [CONTEXT ratelimit_period="10 SECONDS" ]
+11-13 06:55:07.220  1976  2081 I alhi    : NGA disabled due to not being eligible.
+11-13 06:55:07.221   697   697 W IPCThreadState: Sending oneway calls to frozen process.
+11-13 06:55:07.222   697   697 D BatterySaverPolicy: accessibility changed to true, updating policy.
+11-13 06:55:07.223   697  1925 D WindowManager: captureDisplay
+11-13 06:55:07.223  1515  1690 I AiAiEcho: #remoteViewsTwiddler: feature disabled.
+11-13 06:55:07.224  1515  1690 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface home with targets# 0 (types=[])
+11-13 06:55:07.225  1515  1690 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface lockscreen with targets# 0 (types=[])
+11-13 06:55:07.230   987   987 W PageIndicator: Total number of pages invalid: 0. Assuming 1 page.
+11-13 06:55:07.236  1137  1137 D SsBaseTemplateCard: No text view can be set up
+11-13 06:55:07.236  1137  1137 D SsBaseTemplateCard: Passed-in item info is null
+11-13 06:55:07.236  1137  1137 D SsBaseTemplateCard: Passed-in item info is null
+11-13 06:55:07.236  1137  1137 D SsBaseTemplateCard: Passed-in item info is null
+11-13 06:55:07.236  1137  1137 I SsBaseTemplateCard: Secondary card pane is null
+11-13 06:55:07.411   987  1050 V WindowManagerShell: Transition requested (#14): android.os.BinderProxy@aace12b TransitionRequestInfo { type = CLOSE, triggerTask = TaskInfo{userId=0 taskId=8 effectiveUid=10219 displayId=0 isRunning=false baseIntent=Intent { flg=0x14000000 cmp=me.shirazu.dshmizar.localagent.test/me.shirazu.dshmizar.localagent.poc.PoCResultsActivity } baseActivity=null topActivity=null origActivity=null realActivity=ComponentInfo{me.shirazu.dshmizar.localagent.test/me.shirazu.dshmizar.localagent.poc.PoCResultsActivity} numActivities=0 lastActiveTime=1557355 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{android.window.IWindowContainerToken$Stub$Proxy@a792988} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=Rect(0, 0 - 0, 0) topActivityInfo=null launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=true isVisible=true isVisibleRequested=true isTopActivityNoDisplay=false isSleeping=false locusId=null displayAreaFeatureId=1 isTopActivityTransparent=false isActivityStackTransparent=true lastNonFullscreenBounds=Rect(276, 694 - 804, 1774) capturedLink=null capturedLinkTimestamp=0 requestedVisibleTypes=-9 topActivityRequestOpenInBrowserEducationTimestamp=0 appCompatTaskInfo=AppCompatTaskInfo { topActivityInSizeCompat=false eligibleForLetterboxEducation= false isLetterboxEducationEnabled= false isLetterboxDoubleTapEnabled= false eligibleForUserAspectRatioButton= false topActivityBoundsLetterboxed= false isFromLetterboxDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 topActivityAppBounds=Rect(0, 0 - 0, 0) isUserFullscreenOverrideEnabled=false isSystemFullscreenOverrideEnabled=false hasMinAspectRatioOverride=false topActivityLetterboxBounds=null cameraCompatTaskInfo=CameraCompatTaskInfo { freeformCameraCompatMode=undefined}} topActivityMainWindowFrame=null}, pipChange = null, remoteTransition = null, displayChange = null, flags = 0, debugId = 14 }
+11-13 06:55:07.412   556  1211 I BpBinder: onLastStrongRef automatically unlinking death recipients: 
+11-13 06:55:07.414  4392  4407 I LocalAgentPoC: evidence: Screenshot: /storage/emulated/0/Android/data/me.shirazu.dshmizar.localagent.test/files/localagent-poc/localagent-poc-2026-11-13.png
+11-13 06:55:07.417  4392  4392 D LifecycleMonitor: Lifecycle status change: me.shirazu.dshmizar.localagent.poc.PoCResultsActivity@a3e2aae in: PAUSED
+11-13 06:55:07.418  4392  4410 I LocalAgentJni: quickjs-ng context destroyed
+11-13 06:55:07.419   556   556 I BpBinder: onLastStrongRef automatically unlinking death recipients: 
+11-13 06:55:07.420   697   931 D BackgroundInstallControlService: Package event received: 0
+11-13 06:55:07.421  4392  4407 I TestRunner: finished: runsTheIosKernelOnQuickJsAndAnswersKernelMethods(me.shirazu.dshmizar.localagent.LocalKernelPoCInstrumentedTest)
+11-13 06:55:07.423   697   792 W BestClock: java.time.DateTimeException: No network time available
+11-13 06:55:07.423   697   792 W BestClock: java.time.DateTimeException: No network time available
+11-13 06:55:07.424  4392  4407 I MonitoringInstr: Unstopped activity count: 1
+11-13 06:55:07.425   697  1941 W BestClock: java.time.DateTimeException: No network time available
+11-13 06:55:07.428  1137  1137 D ViewRootImpl: Skipping stats log for color mode
+11-13 06:55:07.429   697  1925 I AppWidgetServiceImpl: startListening() 0
+11-13 06:55:07.430  1137  1137 D StatsLog: LAUNCHER_ONRESUME
+11-13 06:55:07.430   987  1050 D WindowManagerShell: setLauncherKeepClearAreaHeight: visible=true, height=527
+11-13 06:55:07.433   697   931 D BackgroundInstallControlService: Package event received: 0
+11-13 06:55:07.433   697   931 D BackgroundInstallControlService: Package event received: 0
+11-13 06:55:07.436  1137  1137 D NexusLauncherModelDelegate: notifySmartspaceEvent: SmartspaceTargetEvent{mSmartspaceTarget=null, mSmartspaceActionId='null', mEventType=6}
+11-13 06:55:07.441  1137  1181 D QuickstepModelDelegate: notifyAppTargetEvent action=1 launchLocation=workspace/0/[-1,-1]/[1,1]
+11-13 06:55:07.443  1515  1690 I AiAiEcho: Predicting[0]:  [CONTEXT sampling_count=5 ]
+11-13 06:55:07.444  1515  1690 I AiAiEcho: EchoTargets: 
+11-13 06:55:07.444  1515  1690 I AiAiEcho: Filtered by AiAi flag check: 
+11-13 06:55:07.444  1515  1690 I AiAiEcho: [CONTEXT ratelimit_period="10 SECONDS" ]
+11-13 06:55:07.444  1515  1690 I AiAiEcho: #remoteViewsTwiddler: feature disabled.
+11-13 06:55:07.446  1515  1690 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface home with targets# 0 (types=[])
+11-13 06:55:07.449   480   530 I netd    : tetherGetStats() -> {[]} <0.76ms>
+11-13 06:55:07.450  1137  1137 D BaseDepthController: setSurface:
+11-13 06:55:07.450  1137  1137 D BaseDepthController: 	mWaitingOnSurfaceValidity: false
+11-13 06:55:07.450  1137  1137 D BaseDepthController: 	mBaseSurface: Surface(name=com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity)/@0x7a3b2ed
+11-13 06:55:07.475  4392  4407 I MonitoringInstr: Unstopped activity count: 1
+11-13 06:55:07.489  1137  1137 D SsBaseTemplateCard: No text view can be set up
+11-13 06:55:07.489  1137  1137 D SsBaseTemplateCard: Passed-in item info is null
+11-13 06:55:07.489  1137  1137 D SsBaseTemplateCard: Passed-in item info is null
+11-13 06:55:07.490  1137  1137 D SsBaseTemplateCard: Passed-in item info is null
+11-13 06:55:07.490  1137  1137 I SsBaseTemplateCard: Secondary card pane is null
+11-13 06:55:07.493   987  1117 V WindowManagerShell: onTransitionReady(transaction=2993592206047)
+11-13 06:55:07.494   987  1050 V WindowManagerShell: onTransitionReady (#14) android.os.BinderProxy@aace12b: {id=14 t=CLOSE f=0x0 trk=0 r=[0@Point(0, 0)] c=[
+11-13 06:55:07.494   987  1050 V WindowManagerShell:         {m=TO_FRONT f=SHOW_WALLPAPER|MOVE_TO_TOP leash=Surface(name=Task=1)/@0x76e4f21 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0 taskParent=-1},
+11-13 06:55:07.494   987  1050 V WindowManagerShell:         {m=CLOSE f=NONE leash=Surface(name=Task=8)/@0xa99ef46 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0 taskParent=-1},
+11-13 06:55:07.494   987  1050 V WindowManagerShell:         {m=TO_FRONT f=IS_WALLPAPER leash=Surface(name=WallpaperWindowToken{6d3464d showWhenLocked=false})/@0x966507 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0}
+11-13 06:55:07.494   987  1050 V WindowManagerShell:     ]}
+11-13 06:55:07.495   987  1050 V WindowManagerShell: Playing animation for (#14) android.os.BinderProxy@aace12b@0
+11-13 06:55:07.495   987  1050 V ShellRecents: RecentsTransitionHandler.startAnimation: no controller found
+11-13 06:55:07.495   987  1050 V WindowManagerShell: Transition doesn't have explicit remote, search filters for match for {id=14 t=CLOSE f=0x0 trk=0 r=[0@Point(0, 0)] c=[{m=TO_FRONT f=SHOW_WALLPAPER|MOVE_TO_TOP leash=Surface(name=Task=1)/@0x76e4f21 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0 taskParent=-1},{m=CLOSE f=NONE leash=Surface(name=Task=8)/@0xa99ef46 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0 taskParent=-1},{m=TO_FRONT f=IS_WALLPAPER leash=Surface(name=WallpaperWindowToken{6d3464d showWhenLocked=false})/@0x966507 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0}]}
+11-13 06:55:07.495   987  1050 V WindowManagerShell:  Checking filter Pair{{types=[] flags=0x0] notFlags=0x0 checks=[{atype=undefined independent=true modes=[CLOSE,TO_BACK] flags=IN_TASK_WITH_EMBEDDED_ACTIVITY mustBeTask=false order=ANY topActivity=null launchCookie=null taskFragmentToken=android.os.BinderProxy@49767a8 windowingMode=undefined}]} RemoteTransition { remoteTransition = android.window.IRemoteTransition$Stub$Proxy@9fc82c1, appThread = android.app.IApplicationThread$Stub$Proxy@2a0aa66, debugName = overlayBackTransition }}
+11-13 06:55:07.496   987  1050 V WindowManagerShell:  Checking filter Pair{{types=[] flags=0x0] notFlags=0x0 checks=[{atype=dream independent=true modes=[OPEN,TO_FRONT] flags=NONE mustBeTask=false order=ANY topActivity=null launchCookie=null windowingMode=undefined},{atype=home independent=true modes=[CLOSE,TO_BACK] flags=NONE mustBeTask=false order=ANY topActivity=null launchCookie=null windowingMode=undefined}]} RemoteTransition { remoteTransition = android.window.IRemoteTransition$Stub$Proxy@337d1a7, appThread = android.app.IApplicationThread$Stub$Proxy@ecf5654, debugName = LauncherToDream }}
+11-13 06:55:07.496   987  1050 V WindowManagerShell:  Checking filter Pair{{types=[] flags=0x0] notFlags=0x100 checks=[{atype=home independent=true modes=[OPEN,TO_FRONT] flags=NONE mustBeTask=false order=TOP topActivity=ComponentInfo{com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity} launchCookie=null windowingMode=undefined},{atype=standard independent=true modes=[CLOSE,TO_BACK] flags=NONE mustBeTask=false order=ANY topActivity=null launchCookie=null windowingMode=undefined},{NOT atype=undefined independent=true modes=[] flags=NONE mustBeTask=true order=ANY topActivity=null launchCookie=null customAnim=true windowingMode=undefined}]} RemoteTransition { remoteTransition = android.window.IRemoteTransition$Stub$Proxy@38d89fd, appThread = android.app.IApplicationThread$Stub$Proxy@9fd06f2, debugName = QuickstepLaunchHome }}
+11-13 06:55:07.496   987  1050 D RemoteTransitionHandler: Found filterPair{{types=[] flags=0x0] notFlags=0x100 checks=[{atype=home independent=true modes=[OPEN,TO_FRONT] flags=NONE mustBeTask=false order=TOP topActivity=ComponentInfo{com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity} launchCookie=null windowingMode=undefined},{atype=standard independent=true modes=[CLOSE,TO_BACK] flags=NONE mustBeTask=false order=ANY topActivity=null launchCookie=null windowingMode=undefined},{NOT atype=undefined independent=true modes=[] flags=NONE mustBeTask=true order=ANY topActivity=null launchCookie=null customAnim=true windowingMode=undefined}]} RemoteTransition { remoteTransition = android.window.IRemoteTransition$Stub$Proxy@38d89fd, appThread = android.app.IApplicationThread$Stub$Proxy@9fd06f2, debugName = QuickstepLaunchHome }}
+11-13 06:55:07.496   987  1050 V WindowManagerShell:  Delegate animation for (#14) to RemoteTransition { remoteTransition = android.window.IRemoteTransition$Stub$Proxy@38d89fd, appThread = android.app.IApplicationThread$Stub$Proxy@9fd06f2, debugName = QuickstepLaunchHome }
+11-13 06:55:07.507  1137  1137 D StateManager: createAtomicAnimation - fromState: Background, toState: Normal, partial trace:
+11-13 06:55:07.507  1137  1137 D StateManager: 	at com.android.quickstep.util.WorkspaceRevealAnim.prepareToAnimate(go/retraceme 43e00d9cd0eb17b3d9dd30fc1741b1c71445c4c0f7c8c9b81300265c86c5b873:22)
+11-13 06:55:07.507  1137  1137 D StateManager: 	at com.android.quickstep.util.WorkspaceRevealAnim.<init>(go/retraceme 43e00d9cd0eb17b3d9dd30fc1741b1c71445c4c0f7c8c9b81300265c86c5b873:11)
+11-13 06:55:07.507  1137  1137 D StateManager: 	at com.android.launcher3.QuickstepTransitionManager.createWallpaperOpenAnimations(go/retraceme 43e00d9cd0eb17b3d9dd30fc1741b1c71445c4c0f7c8c9b81300265c86c5b873:339)
+11-13 06:55:07.507   697   746 V WindowManager: Sent Transition (#14) createdAt=11-13 06:55:07.410 via request=TransitionRequestInfo { type = CLOSE, triggerTask = TaskInfo{userId=0 taskId=8 effectiveUid=10219 displayId=0 isRunning=false baseIntent=Intent { flg=0x14000000 cmp=me.shirazu.dshmizar.localagent.test/me.shirazu.dshmizar.localagent.poc.PoCResultsActivity } baseActivity=null topActivity=null origActivity=null realActivity=ComponentInfo{me.shirazu.dshmizar.localagent.test/me.shirazu.dshmizar.localagent.poc.PoCResultsActivity} numActivities=0 lastActiveTime=1557355 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{RemoteToken{affdcf5 Task{fa10bce #8 type=standard A=10219:me.shirazu.dshmizar.localagent.test}}} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=Rect(0, 0 - 0, 0) topActivityInfo=null launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=true isVisible=true isVisibleRequested=true isTopActivityNoDisplay=false isSleeping=false locusId=null displayAreaFeatureId=1 isTopActivityTransparent=false isActivityStackTransparent=true lastNonFullscreenBounds=Rect(276, 694 - 804, 1774) capturedLink=null capturedLinkTimestamp=0 requestedVisibleTypes=-9 topActivityRequestOpenInBrowserEducationTimestamp=0 appCompatTaskInfo=AppCompatTaskInfo { topActivityInSizeCompat=false eligibleForLetterboxEducation= false isLetterboxEducationEnabled= false isLetterboxDoubleTapEnabled= false eligibleForUserAspectRatioButton= false topActivityBoundsLetterboxed= false isFromLetterboxDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 topActivityAppBounds=Rect(0, 0 - 0, 0) isUserFullscreenOverrideEnabled=false isSystemFullscreenOverrideEnabled=false hasMinAspectRatioOverride=false topActivityLetterboxBounds=null cameraCompatTaskInfo=CameraCompatTaskInfo { freeformCameraCompatMode=undefined}} topActivityMainWindowFrame=null}, pipChange = null, remoteTransition = null, displayChange = null, flags = 0, debugId = 14 }
+11-13 06:55:07.508   697   746 V WindowManager:     startWCT=WindowContainerTransaction { changes= {} hops= [] errorCallbackToken=null taskFragmentOrganizer=null }
+11-13 06:55:07.508   697   746 V WindowManager:     info={id=14 t=CLOSE f=0x0 trk=0 r=[0@Point(0, 0)] c=[
+11-13 06:55:07.508   697   746 V WindowManager:         {WCT{RemoteToken{c320de4 Task{e6c1286 #1 type=home}}} m=TO_FRONT f=SHOW_WALLPAPER|MOVE_TO_TOP leash=Surface(name=Task=1)/@0xed331f0 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0 taskParent=-1},
+11-13 06:55:07.508   697   746 V WindowManager:         {WCT{RemoteToken{affdcf5 Task{fa10bce #8 type=standard A=10219:me.shirazu.dshmizar.localagent.test}}} m=CLOSE f=NONE leash=Surface(name=Task=8)/@0xe0a7ddf sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0 taskParent=-1},
+11-13 06:55:07.508   697   746 V WindowManager:         {m=TO_FRONT f=IS_WALLPAPER leash=Surface(name=WallpaperWindowToken{6d3464d showWhenLocked=false})/@0xf55429b sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) epz=Point(1080, 2400) d=0}
+11-13 06:55:07.508   697   746 V WindowManager:     ]}
+11-13 06:55:07.508  1137  1137 D b/311077782: LauncherAnimationRunner.setAnimation
+11-13 06:55:07.512   987  1050 V WindowManagerShell:  animated by com.android.wm.shell.transition.RemoteTransitionHandler@bfda08
+11-13 06:55:07.525   697   841 I ImeTracker: com.google.android.apps.nexuslauncher:f6736317: onRequestHide at ORIGIN_SERVER reason HIDE_UNSPECIFIED_WINDOW fromUser false
+11-13 06:55:07.526  1137  1137 D InsetsController: hide(ime(), fromIme=false)
+11-13 06:55:07.527  1137  1137 I ImeTracker: com.google.android.apps.nexuslauncher:f6736317: onCancelled at PHASE_CLIENT_ALREADY_HIDDEN
+11-13 06:55:07.527  4392  4407 I MonitoringInstr: Unstopped activity count: 1
+11-13 06:55:07.530  1431  1431 I GoogleInputMethodService: GoogleInputMethodService.onFinishInput():2043 
+11-13 06:55:07.531  1431  1431 I Module  : DeviceLockedStatusModuleProvider$Module.updateDeviceLockedStatus():100 repeatCheckTimes = 0, locked = false
+11-13 06:55:07.532   697  1908 I ImeTracker: system_server:2a406dde: onRequestHide at ORIGIN_SERVER reason IME_REQUESTED_CHANGED_LISTENER fromUser false
+11-13 06:55:07.532   697   749 I ImeTracker: system_server:2a406dde: onCancelled at PHASE_SERVER_SHOULD_HIDE
+11-13 06:55:07.533  1431  1431 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1293 onStartInput(EditorInfo{EditorInfo{packageName=com.google.android.apps.nexuslauncher, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=0, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+11-13 06:55:07.536  1431  1431 I Module  : DeviceLockedStatusModuleProvider$Module.updateDeviceLockedStatus():100 repeatCheckTimes = 1, locked = false
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: EmojiCompatManager.getEmojiCompatIfLoaded():343 EmojiCompat.init() was never called.
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: java.lang.IllegalStateException: EmojiCompat is not initialized. Please call EmojiCompat.init() first
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at asx.p(PG:6)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at axb.b(PG:13)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at jnr.b(PG:2)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at jnr.c(PG:4)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at jnr.f(PG:3)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at jnx.c(PG:3)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at kif.cz(PG:47)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at lhl.run(PG:1025)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at jaf.execute(PG:12)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at nco.v(PG:13)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at lhn.m(PG:96)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at lhn.k(PG:25)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at kgn.onStartInput(PG:250)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at android.inputmethodservice.InputMethodService.doStartInput(InputMethodService.java:3521)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at android.inputmethodservice.InputMethodService$InputMethodImpl.startInput(InputMethodService.java:879)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at android.inputmethodservice.InputMethodService$InputMethodImpl.dispatchStartInput(InputMethodService.java:908)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at android.inputmethodservice.IInputMethodWrapper.executeMessage(IInputMethodWrapper.java:201)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at com.android.internal.os.HandlerCaller$MyHandler.handleMessage(HandlerCaller.java:44)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at android.os.Handler.dispatchMessage(Handler.java:110)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at android.os.Looper.loopOnce(Looper.java:248)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at android.os.Looper.loop(Looper.java:338)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at android.app.ActivityThread.main(ActivityThread.java:9067)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at java.lang.reflect.Method.invoke(Native Method)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+11-13 06:55:07.536  1431  1431 I EmojiCompatManager: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:932)
+11-13 06:55:07.537   507  4023 I RanchuHwc: logCompositionFallbackIfChanged: layer 36 CompositionType fallback from 2 to 1
+11-13 06:55:07.537   507  4023 I RanchuHwc: logCompositionFallbackIfChanged: layer 37 CompositionType fallback from 2 to 1
+11-13 06:55:07.538   697   792 W PackageConfigPersister: App-specific configuration not found for packageName: com.google.android.apps.nexuslauncher and userId: 0
+11-13 06:55:07.577  4392  4407 I MonitoringInstr: Unstopped activity count: 1
+11-13 06:55:07.629  4392  4407 I MonitoringInstr: Unstopped activity count: 1
+11-13 06:55:07.680  4392  4407 I MonitoringInstr: Unstopped activity count: 1
+11-13 06:55:07.731  4392  4407 I MonitoringInstr: Unstopped activity count: 1
+11-13 06:55:07.783  4392  4407 I MonitoringInstr: Unstopped activity count: 1
+11-13 06:55:07.834  4392  4407 I MonitoringInstr: Unstopped activity count: 1
+11-13 06:55:07.853  1137  1137 D WorkspaceRevealAnim: onAnimationEnd: workspace alpha = 1.0
+11-13 06:55:07.856   987  1050 V WindowManagerShell: Transition animation finished (aborted=false), notifying core (#14) android.os.BinderProxy@aace12b@0
+11-13 06:55:07.859   697   746 V WindowManager: Finish Transition (#14): created at 11-13 06:55:07.410 collect-started=0.061ms request-sent=0.146ms started=5.245ms ready=20.498ms sent=81.048ms commit=27.329ms finished=448.164ms
+11-13 06:55:07.861   987  1050 V WindowManagerShell: Track 0 became idle
+11-13 06:55:07.861   987  1050 V WindowManagerShell: All active transition animations finished
+11-13 06:55:07.866   697  4018 I EGL_emulation: Opening libGLESv1_CM_emulation.so
+11-13 06:55:07.869   697  4018 I EGL_emulation: Opening libGLESv2_emulation.so
+11-13 06:55:07.872  4392  4392 D VRI[PoCResultsActivity]: visibilityChanged oldVisibility=true newVisibility=false
+11-13 06:55:07.877   697  4018 W HWUI    : Failed to choose config with EGL_SWAP_BEHAVIOR_PRESERVED, retrying without...
+11-13 06:55:07.878  4392  4392 D LifecycleMonitor: Lifecycle status change: me.shirazu.dshmizar.localagent.poc.PoCResultsActivity@a3e2aae in: STOPPED
+11-13 06:55:07.879   697  4018 W HWUI    : Failed to initialize 101010-2 format, error = EGL_SUCCESS
+11-13 06:55:07.879  4392  4392 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.app.Activity$$ExternalSyntheticLambda0@ee220a4
+11-13 06:55:07.880  4392  4392 D LifecycleMonitor: Lifecycle status change: me.shirazu.dshmizar.localagent.poc.PoCResultsActivity@a3e2aae in: DESTROYED
+11-13 06:55:07.880   697  1925 D CoreBackPreview: Window{cb5ac73 u0 me.shirazu.dshmizar.localagent.test/me.shirazu.dshmizar.localagent.poc.PoCResultsActivity}: Setting back callback null
+11-13 06:55:07.887  4392  4407 I TestRunner: run finished: 1 tests, 0 failed, 0 ignored
+11-13 06:55:07.889  4392  4392 D ViewRootImpl: Skipping stats log for color mode
+11-13 06:55:07.915  1137  1137 W FrameTracker: Missed SF frame:JANK_COMPOSER, 30015, 8304536, CUJ=J<LAUNCHER_APP_CLOSE_TO_HOME_FALLBACK>
+11-13 06:55:07.915  1137  1137 W FrameTracker: Missed SF frame:JANK_COMPOSER, 30053, 8080438, CUJ=J<LAUNCHER_APP_CLOSE_TO_HOME_FALLBACK>
+11-13 06:55:07.915  1137  1137 W FrameTracker: Missed SF frame:JANK_COMPOSER, 30099, 5210174, CUJ=J<LAUNCHER_APP_CLOSE_TO_HOME_FALLBACK>
+11-13 06:55:07.915  1137  1137 W FrameTracker: Missed SF frame:JANK_COMPOSER, 30249, 5470914, CUJ=J<LAUNCHER_APP_CLOSE_TO_HOME_FALLBACK>
+11-13 06:55:07.915  1137  1137 W FrameTracker: Missed SF frame:JANK_COMPOSER, 30279, 5400382, CUJ=J<LAUNCHER_APP_CLOSE_TO_HOME_FALLBACK>
+11-13 06:55:07.917  1137  1170 V PerfettoTrigger: Triggering /system/bin/trigger_perfetto com.android.telemetry.interaction-jank-monitor-78
+11-13 06:55:07.917   697  1908 V AccessibilityManagerService: onUserStateChangedLocked for userId: 0, forceUpdate: false
+11-13 06:55:07.921   697   931 D BackgroundInstallControlService: Package event received: 0
+11-13 06:55:07.922   697  1908 W MagnificationConnectionManager: requestConnection duplicated request: connect=false, mConnectionState=DISCONNECTED
+11-13 06:55:07.922  1515  2269 I AiAiEcho: Settings changed for uri: content://settings/secure/accessibility_enabled
+11-13 06:55:07.923   697  1908 D AccessibilityManagerService: restoreCurrentUserForTestAutomationIfNeededLocked(): ignoring because device doesn't support visible background users
+11-13 06:55:07.923   697   697 W IPCThreadState: Sending oneway calls to frozen process.
+11-13 06:55:07.924   697   697 W IPCThreadState: Sending oneway calls to frozen process.
+11-13 06:55:07.924  1137  1137 D RecentsView: onTaskRemoved: 8, not handling task stack changes
+11-13 06:55:07.924  1137  1137 D RecentsView: onTaskRemoved: 8, not handling task stack changes
+11-13 06:55:07.925   697   697 W IPCThreadState: Sending oneway calls to frozen process.
+11-13 06:55:07.925  1515  1690 I AiAiEcho: Predicting[0]:  [CONTEXT sampling_count=5 ]
+11-13 06:55:07.925  1515  1690 I AiAiEcho: EchoTargets: 
+11-13 06:55:07.925  1515  1690 I AiAiEcho: Filtered by AiAi flag check: 
+11-13 06:55:07.925  1515  1690 I AiAiEcho: [CONTEXT ratelimit_period="10 SECONDS" ]
+11-13 06:55:07.925  1515  1690 I AiAiEcho: #remoteViewsTwiddler: feature disabled.
+11-13 06:55:07.926  1515  1690 I AiAiEcho: Predicting[0]:  [CONTEXT sampling_count=5 ]
+11-13 06:55:07.927  1976  2081 I alhi    : NGA disabled due to not being eligible.
+11-13 06:55:07.928   697   697 W IPCThreadState: Sending oneway calls to frozen process.
+11-13 06:55:07.928  1515  1690 I AiAiEcho: EchoTargets: 
+11-13 06:55:07.928  1515  1690 I AiAiEcho: Filtered by AiAi flag check: 
+11-13 06:55:07.928  1515  1690 I AiAiEcho: [CONTEXT ratelimit_period="10 SECONDS" ]
+11-13 06:55:07.929   697   697 W IPCThreadState: Sending oneway calls to frozen process.
+11-13 06:55:07.930   697  1240 I ActivityManager: Force stopping me.shirazu.dshmizar.localagent.test appid=10219 user=0: finished inst
+11-13 06:55:07.931   697   697 W IPCThreadState: Sending oneway calls to frozen process.
+11-13 06:55:07.933   697   697 D BatterySaverPolicy: accessibility changed to false, updating policy.
+11-13 06:55:07.911     0     0 I binder  : 697:1240 ioctl 400c620e 7db6e0672f6c returned -11
+11-13 06:55:07.914     0     0 I binder  : 697:1240 ioctl 400c620e 7db6e0672f6c returned -11
+11-13 06:55:07.933  4362  4362 I app_process: System.exit called, status: 0
+11-13 06:55:07.933  4362  4362 I AndroidRuntime: VM exiting with result code 0.
+11-13 06:55:07.933   697  1240 E ActivityManager: Unable to freeze binder for 4392: -11
+11-13 06:55:07.935  1515  1690 I AiAiEcho: #remoteViewsTwiddler: feature disabled.
+11-13 06:55:07.936  1515  1690 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface home with targets# 0 (types=[])
+11-13 06:55:07.938   697  1240 I ActivityManager: Killing 4392:me.shirazu.dshmizar.localagent.test/u0a219 (adj 0): stop me.shirazu.dshmizar.localagent.test due to finished inst
+11-13 06:55:07.940  1515  1690 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface lockscreen with targets# 0 (types=[])
+11-13 06:55:07.940  1137  1137 D SsBaseTemplateCard: No text view can be set up
+11-13 06:55:07.940  1137  1137 D SsBaseTemplateCard: Passed-in item info is null
+11-13 06:55:07.940  1137  1137 D SsBaseTemplateCard: Passed-in item info is null
+11-13 06:55:07.941  1137  1137 D SsBaseTemplateCard: Passed-in item info is null
+11-13 06:55:07.942  1137  1137 I SsBaseTemplateCard: Secondary card pane is null
+11-13 06:55:07.947   987   987 W PageIndicator: Total number of pages invalid: 0. Assuming 1 page.
+11-13 06:55:07.946     0     0 I binder  : undelivered TRANSACTION_COMPLETE
+11-13 06:55:07.966   697  1908 V ActivityManager: Got obituary of 4392:me.shirazu.dshmizar.localagent.test
+11-13 06:55:07.947     0     0 I binder  : undelivered transaction 272930, process died.
+11-13 06:55:07.948     0     0 I binder  : undelivered transaction 272937, process died.
+11-13 06:55:07.968   697   749 W ActivityManager: setHasOverlayUi called on unknown pid: 4392
+11-13 06:55:07.968   565   565 I adbd    : Remote process closed the socket (on MSG_PEEK)
+11-13 06:55:07.970   483   483 I Zygote  : Process 4392 exited due to signal 9 (Killed)
+11-13 06:55:07.971   697   757 I libprocessgroup: Removed cgroup /sys/fs/cgroup/apps/uid_10219/pid_4392
+11-13 06:55:07.993     0     0 I logd    : logdr: UID=2000 GID=2000 PID=4430 n tail=0 logMask=99 pid=0 start=0ns deadline=0ns

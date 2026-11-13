@@ -1,0 +1,8 @@
+
+me.shirazu.dshmizar.localagent.LocalKernelPoCInstrumentedTest:.
+
+Time: 2.497
+
+OK (1 test)
+
+

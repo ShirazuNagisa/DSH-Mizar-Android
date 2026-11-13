@@ -33,4 +33,8 @@ include(":mizarkit")
 // Compiles mizarkit's sources against android.jar so a JDK-only method cannot
 // reach a phone. Ships nothing; see the module's build file.
 include(":mizarkit-android-api")
+// The local agent: the iOS local kernel's JavaScript bundle on QuickJS with the
+// Android host bridged in. A library so the PoC can be exercised without the
+// app; see localagent/README.md.
+include(":localagent")
 include(":app")

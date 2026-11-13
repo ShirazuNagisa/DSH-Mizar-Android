@@ -1,0 +1,58 @@
+# 构建与校验记录（2026-11-13，本机）
+
+环境：Windows 11 / JDK 17.0.21（Temurin）/
+`GRADLE_USER_HOME=D:\Env\gradle-home-android` /
+`ANDROID_HOME=C:\Users\84494\AppData\Local\Android\Sdk`（platform 36、build-tools 36.0.0）/
+NDK `28.2.13676358`（r28c，后装）。
+
+## Gradle
+
+```
+> Task :localagent:assembleDebug
+> Task :localagent:assembleDebugAndroidTest
+BUILD SUCCESSFUL
+
+> Task :localagent:checkKernelBundle
+checkKernelBundle: OK - 0ec1242a2900440da4c3be8249b024622a97dff09a1c69a68a893bb20ee5495b (56505 bytes)
+BUILD SUCCESSFUL
+
+> Task :app:clean :app:assembleDebug
+> Task :app:assembleDebug
+BUILD SUCCESSFUL
+```
+
+（`:app:packageDebug` 第一次因增量打包缓存报 `!zip.isFile()`，`:app:clean` 后正常；
+同时并行改 app 源码的其他任务会重建 APK，所以 APK 大小/时间戳以当时为准。）
+
+## 内核 bundle 一致性
+
+```
+android asset: 0ec1242a2900440da4c3be8249b024622a97dff09a1c69a68a893bb20ee5495b 56505 B
+iOS dist:     0ec1242a2900440da4c3be8249b024622a97dff09a1c69a68a893bb20ee5495b 56505 B
+```
+
+另用 Node 脚本把 `iOS/MizarKit/Sources/MizarKit/Kernel/KernelBundle.swift` 的
+JSON 转义块解码，`dist === decoded` 为 `true`（同一份字节）。
+
+## 原生库（NDK r28c / ndk-build，`-Wl,-z,max-page-size=16384`）
+
+```
+x86_64    libmizarquickjs.so  965224 B  min_align=0x4000  sha256=4b0331fe9baa735111e56527a7d8d02a297b36139bb8b0435399f94aba3ee127
+arm64-v8a libmizarquickjs.so  894176 B  min_align=0x4000  sha256=e02450a429fa20bbaf6224f472bb3d0c38f4e20f7e7edc003516deefe5e4b52a
+```
+
+导出的 JNI 符号（`JNIEXPORT`，`-fvisibility=hidden` 下）：
+
+```
+Java_me_shirazu_dshmizar_localagent_QuickJsNative_create
+Java_me_shirazu_dshmizar_localagent_QuickJsNative_setDispatcher
+Java_me_shirazu_dshmizar_localagent_QuickJsNative_evaluate
+Java_me_shirazu_dshmizar_localagent_QuickJsNative_close
+JNI_OnLoad
+```
+
+## 设备
+
+AVD `mizar36` / `emulator-5558`：API 36、x86_64、`getconf PAGESIZE=4096`。
+PoC：`am instrument -w -e class me.shirazu.dshmizar.localagent.LocalKernelPoCInstrumentedTest`
+→ `OK (1 test)`；结果见同目录 `localagent-poc/` 与 `logcat.txt`。
