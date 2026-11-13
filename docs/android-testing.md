@@ -453,3 +453,24 @@ determinism -- `SnapshotScene` forces Reduce Motion inside the composition it
 renders.
 
 
+
+## 16 KB page-size devices
+
+Android 15+ can boot with 16 KB memory pages. Two things are checkable without
+such a device, and `scripts/check-16k.sh` checks both:
+
+- every 64-bit `.so` in the APK has `LOAD` segments aligned to `0x4000`
+  (`readelf -lW`, arm64-v8a and x86_64);
+- `zipalign -c -P 16 -v 4` accepts the archive.
+
+CI runs it after the debug build (`Require a 16 KB-compatible APK`). Locally:
+
+```sh
+scripts/check-16k.sh app/build/outputs/apk/debug/app-debug.apk \
+  "$ANDROID_HOME/build-tools/36.0.0/zipalign"
+```
+
+Current state (2026-11-14): all five native libraries are `0x4000`-aligned and
+the archive passes; QuickJS (`libmizarquickjs.so`) is compiled by the module's
+CMake build in this repo, the rest come from AndroidX/ML Kit. A real 16 KB
+device is still the only way to prove runtime behaviour.

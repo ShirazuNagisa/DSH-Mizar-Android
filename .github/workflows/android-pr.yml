@@ -107,6 +107,11 @@ jobs:
             :mizarkit-android-api:androidApiCheck \
             :mizarkit:test :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
 
+      # 16 KB page-size devices cannot map 4 KB-aligned native libraries. Both
+      # halves of what the APK controls are checkable without such a device.
+      - name: Require a 16 KB-compatible APK
+        run: scripts/check-16k.sh app/build/outputs/apk/debug/app-debug.apk
+
       # A suite that silently discovered nothing is a green check that proves
       # nothing. Count the cases the JVM actually ran.
       - name: Require a non-empty JVM suite
