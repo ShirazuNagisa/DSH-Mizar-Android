@@ -73,9 +73,14 @@ jobs:
             tag="${GITHUB_REF_NAME#v}"
             [ "$tag" = "$version" ] || { echo "tag $tag != versionName $version" >&2; exit 1; }
           fi
-          ./gradlew :mizarkit-android-api:androidApiCheck :mizarkit:test :app:assembleRelease --no-daemon
+          ./gradlew :mizarkit-android-api:androidApiCheck :mizarkit:test :app:testDebugUnitTest :localagent:test :app:assembleRelease --no-daemon
           mkdir -p dist
           cp app/build/outputs/apk/release/app-release.apk "dist/dsh-mizar-${version}.apk"
+
+      # A release APK that cannot be mapped on a 16 KB page-size device is a release
+      # that installs and then dies at the first native call; the check is offline.
+      - name: Require a 16 KB-compatible APK
+        run: scripts/check-16k.sh dist/*.apk
 
       - name: Verify the APK is signed
         run: |

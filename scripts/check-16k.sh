@@ -25,9 +25,10 @@ fi
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-# Extract everything: a pattern limited to lib/ behaves differently between the
-# Info-ZIP on a Linux runner and the one bundled with Git for Windows.
-unzip -q "$apk" -d "$work"
+# -o overwrites: a release APK can carry duplicate resource entries (the same resource
+# from two packages), and without it the extraction stops at an interactive prompt.
+# Both check behaviours are equal for duplicate names -- only the .so files are read.
+unzip -q -o "$apk" -d "$work"
 
 fail=0
 for abi in arm64-v8a x86_64; do
