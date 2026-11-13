@@ -322,6 +322,12 @@
     <string name="account_devices">已登录的设备</string>
     <string name="account_device_current">这台手机</string>
     <string name="account_no_devices">没有已登录的设备。</string>
+    <string name="account_computers">我的电脑</string>
+    <string name="account_no_computers">这个账户下还没有电脑。在电脑上打开 AGI Mizar 并登录同一个账户即可出现。</string>
+    <string name="account_computers_loading">正在查找你的电脑…</string>
+    <string name="account_computers_retry">重试</string>
+    <string name="account_computer_open">打开</string>
+    <string name="account_computer_offline">离线</string>
     <string name="account_paid_until">付费至 %1$s</string>
     <string name="account_invite">兑换邀请码</string>
     <string name="account_invite_hint">邀请码</string>

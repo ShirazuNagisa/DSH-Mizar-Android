@@ -44,7 +44,39 @@ internal class AccountCoordinator(
     private val openBrowser: (String) -> Boolean,
     private val onIdentityChanged: () -> Unit,
     private val onPlanChanged: () -> Unit,
+    /** The account's computer directory, when the build carries one. */
+    private val desktopsApi: me.shirazu.mizar.kit.account.AccountDesktopsApi? = null,
 ) {
+
+    /**
+     * Read the computers this account can open.
+     *
+     * Discovery is the relay's answer and costs one round trip; it is read when the
+     * account screen opens rather than at launch, because a signed-out phone has
+     * nothing to ask and a free account still works without a computer list.
+     */
+    fun loadDesktops() {
+        val session = store.state.value.account.session ?: return
+        val api = desktopsApi ?: return
+        if (store.state.value.account.desktopsLoading) return
+        store.update { it.copy(account = it.account.copy(desktopsLoading = true, desktopsError = null)) }
+        scope.launch {
+            try {
+                val list = api.desktops(session.token)
+                if (store.state.value.account.session?.token != session.token) return@launch
+                store.update {
+                    it.copy(account = it.account.copy(desktops = list, desktopsLoading = false))
+                }
+            } catch (error: AccountError) {
+                if (store.state.value.account.session?.token != session.token) return@launch
+                // A directory that cannot be read is not a sign-out: the cached list
+                // stays, and the screen offers a retry.
+                store.update {
+                    it.copy(account = it.account.copy(desktopsLoading = false, desktopsError = error.message))
+                }
+            }
+        }
+    }
 
     /** Read the stored session and quietly refresh it. Never blocks a launch. */
     suspend fun load() {

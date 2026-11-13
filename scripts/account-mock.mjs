@@ -340,6 +340,11 @@ const SURVEYS = [
 /** Who answered what, by `${userId}:${surveyId}`. In memory, like everything here. */
 const surveyCompletions = new Map()
 
+// Account computer discovery: the relay would broker these; the mock answers with
+// two computers so the phone's list and its open flow can be walked on an AVD.
+const desktopConnects = []
+let desktopTokens = 0
+
 function isExpired(survey) {
   return typeof survey.expiresAt === 'number' && survey.expiresAt <= Date.now()
 }
@@ -867,6 +872,56 @@ const server = createServer(async (request, response) => {
       user: publicUser(user, device.id),
       ...(issued.notice === undefined ? {} : { notice: issued.notice }),
     })
+    return
+  }
+
+  if (method === 'GET' && route === '/desktops') {
+    const current = sessionOf(request)
+    if (current === null) {
+      send(response, 401, { error: 'UNAUTHENTICATED', message: 'a session token is required' })
+      return
+    }
+    send(response, 200, {
+      desktops: [
+        {
+          deviceId: 'mock-desktop-1',
+          name: 'Mock Studio',
+          model: 'Windows 11',
+          platform: 'windows',
+          online: true,
+          room: 'MOCKROOM1',
+        },
+        {
+          deviceId: 'mock-desktop-2',
+          name: 'Mock Mac mini',
+          model: 'Mac mini',
+          platform: 'macos',
+          online: false,
+        },
+      ],
+    })
+    return
+  }
+
+  if (method === 'POST' && route === '/connect') {
+    const current = sessionOf(request)
+    if (current === null) {
+      send(response, 401, { error: 'UNAUTHENTICATED', message: 'a session token is required' })
+      return
+    }
+    const body = await readBody(request).catch(() => null)
+    const deviceId = typeof body?.deviceId === 'string' ? body.deviceId : ''
+    if (deviceId === 'mock-desktop-2') {
+      send(response, 409, { error: 'DESKTOP_OFFLINE', message: 'the computer is not connected' })
+      return
+    }
+    if (deviceId !== 'mock-desktop-1') {
+      send(response, 404, { error: 'DESKTOP_NOT_FOUND', message: 'no such computer on this account' })
+      return
+    }
+    desktopTokens += 1
+    desktopConnects.push({ deviceId, engine: body?.engine ?? null })
+    send(response, 200, { room: 'MOCKROOM1', token: `aco_mock_${desktopTokens}` })
     return
   }
 

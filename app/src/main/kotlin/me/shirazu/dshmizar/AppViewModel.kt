@@ -194,6 +194,10 @@ data class AccountUiState(
     /** The redeem-code dialog, and what the last successful redeem bought. */
     val redeemOpen: Boolean = false,
     val redeemNotice: String? = null,
+    /** The computers this account can open without a pairing code. */
+    val desktops: List<me.shirazu.mizar.kit.account.AccountDesktop> = emptyList(),
+    val desktopsLoading: Boolean = false,
+    val desktopsError: String? = null,
 ) {
     val profile get() = session?.profile
     val isPaid: Boolean get() = profile?.isPaid == true
@@ -544,6 +548,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // The plan decides which relay the host's tunnel uses; a change asks the
         // host to move. Nothing else in the account domain touches the socket.
         onPlanChanged = { ownership.current?.let { socket -> viewModelScope.launch { syncRelayTier(socket) } } },
+        desktopsApi = accountClient,
     )
 
     /** Read the stored session and quietly refresh it. Never blocks a launch. */
@@ -606,6 +611,73 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun closeAccountScreen() = account.closeScreen()
+
+    /** Read the account's computers for the account screen. */
+    fun loadAccountDesktops() = account.loadDesktops()
+
+    /**
+     * Open a computer the account found, without a pairing code.
+     *
+     * The relay asks the computer to mint a token for this phone; the room it
+     * answers in is the same shape a paired host stores, so everything after this
+     * point is the ordinary connection path. The token is a bearer credential, so it
+     * only travels over the account's TLS connection and is stored like a pairing's.
+     */
+    fun openAccountDesktop(desktop: me.shirazu.mizar.kit.account.AccountDesktop) {
+        val session = _state.value.account.session ?: return
+        if (_state.value.account.desktopsLoading) return
+        viewModelScope.launch {
+            _state.update {
+                it.copy(account = it.account.copy(desktopsLoading = true, desktopsError = null))
+            }
+            try {
+                val connection = accountClient.connectToDesktop(
+                    token = session.token,
+                    deviceId = desktop.deviceId,
+                    engine = activity.agentEngine(),
+                )
+                val base = me.shirazu.mizar.kit.account.relayRoomUrl(
+                    BuildConfig.ACCOUNT_BASE_URL,
+                    connection.room,
+                ) ?: throw IllegalStateException("the account service named a room this build cannot dial")
+                val paired = PairedHost(
+                    hostId = desktop.deviceId,
+                    hostName = desktop.name.ifBlank { desktop.model.ifBlank { desktop.deviceId } },
+                    authority = null,
+                    baseUrl = base.trimEnd('/'),
+                    deviceId = desktop.deviceId,
+                    deviceToken = connection.token,
+                )
+                runCatching { credentials.save(paired) }
+                val hosts = credentials.loadAll().sortedBy { it.pairedAtMillis }
+                _state.update {
+                    it.copy(
+                        hosts = hosts,
+                        host = paired,
+                        account = it.account.copy(desktopsLoading = false, screenOpen = false),
+                        selectedSessionId = null,
+                        sessions = emptyList(),
+                        groups = emptyList(),
+                        conversation = emptyList(),
+                        turns = emptyList(),
+                        stats = null,
+                        phase = Phase.CONNECTING,
+                    )
+                }
+                reconnect.cancel()
+                connect(paired)
+            } catch (error: Throwable) {
+                _state.update {
+                    it.copy(
+                        account = it.account.copy(
+                            desktopsLoading = false,
+                            desktopsError = messageOf(error, desktop.name),
+                        ),
+                    )
+                }
+            }
+        }
+    }
 
     fun setAccountMode(mode: AccountMode) = account.setMode(mode)
 

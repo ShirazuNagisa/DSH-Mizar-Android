@@ -49,7 +49,7 @@ class AccountClient(
     private val baseUrl: String = DEFAULT_BASE_URL,
     private val transport: HttpTransport = OkHttpHttpTransport(),
     private val appVersion: String? = null,
-) : AccountApi, AccountSurveysApi, AccountAnnouncementsApi {
+) : AccountApi, AccountSurveysApi, AccountAnnouncementsApi, AccountDesktopsApi {
 
     /**
      * Create an account.
@@ -255,6 +255,33 @@ class AccountClient(
         ),
         UserEnvelope.serializer(),
     ).user
+
+    /** The account's computers, newest state from the relay's tunnel table. */
+    override suspend fun desktops(token: String): List<AccountDesktop> = decode(
+        send("GET", "/desktops", token = token),
+        DesktopsEnvelope.serializer(),
+    ).desktops
+
+    /**
+     * Ask a connected computer for a token this phone may use.
+     *
+     * The engine travels in the body because the relay asks that computer to mint a
+     * token already scoped to it; the token then answers only that agent's rows.
+     */
+    override suspend fun connectToDesktop(
+        token: String,
+        deviceId: String,
+        engine: String?,
+    ): DesktopConnection = decode(
+        send(
+            "POST", "/connect", token = token,
+            body = WIRE_JSON.encodeToString(
+                ConnectDesktopBody.serializer(),
+                ConnectDesktopBody(deviceId = deviceId, engine = engine?.takeIf { it.isNotBlank() }),
+            ),
+        ),
+        DesktopConnection.serializer(),
+    )
 
     /** The device object this install sends. */
     fun device(id: String, name: String, model: String): AccountDevicePayload =

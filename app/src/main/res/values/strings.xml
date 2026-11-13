@@ -336,6 +336,12 @@
     <string name="account_devices">Signed-in devices</string>
     <string name="account_device_current">This phone</string>
     <string name="account_no_devices">No devices are signed in.</string>
+    <string name="account_computers">Your computers</string>
+    <string name="account_no_computers">No computer is on this account yet. Open AGI Mizar on your computer and sign in with the same account.</string>
+    <string name="account_computers_loading">Looking for your computers…</string>
+    <string name="account_computers_retry">Try again</string>
+    <string name="account_computer_open">Open</string>
+    <string name="account_computer_offline">Offline</string>
     <string name="account_paid_until">Paid until %1$s</string>
     <string name="account_invite">Redeem an invite code</string>
     <string name="account_invite_hint">Invite code</string>

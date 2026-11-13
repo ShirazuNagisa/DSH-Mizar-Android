@@ -36,6 +36,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,6 +65,7 @@ import me.shirazu.dshmizar.ui.design.ButtonShape
 import me.shirazu.dshmizar.ui.design.Corner
 import me.shirazu.dshmizar.ui.design.SegmentedControl
 import me.shirazu.dshmizar.ui.hexColor
+import me.shirazu.mizar.kit.account.AccountDesktop
 import me.shirazu.mizar.kit.account.AccountDevice
 import me.shirazu.mizar.kit.account.AccountUser
 import java.text.DateFormat
@@ -378,6 +380,54 @@ private fun SignedIn(model: AppViewModel, account: AccountUiState) {
         for (device in profile.devices) DeviceRow(device)
     }
 
+    // The account's computers: discovered by the relay, opened without a code.
+    // Read when the screen opens, and a signed-out phone has nothing to ask.
+    LaunchedEffect(Unit) { model.loadAccountDesktops() }
+    Divider()
+    SectionTitle(stringResource(R.string.account_computers))
+    when {
+        account.desktopsLoading && account.desktops.isEmpty() -> Text(
+            stringResource(R.string.account_computers_loading),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        account.desktops.isEmpty() -> Column {
+            Text(
+                account.desktopsError ?: stringResource(R.string.account_no_computers),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (account.desktopsError != null) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            if (account.desktopsError != null) {
+                TextButton(onClick = { model.loadAccountDesktops() }) {
+                    Text(stringResource(R.string.account_computers_retry))
+                }
+            }
+        }
+
+        else -> {
+            for (desktop in account.desktops) {
+                DesktopRow(
+                    desktop = desktop,
+                    busy = account.desktopsLoading,
+                    onOpen = { model.openAccountDesktop(desktop) },
+                )
+            }
+            account.desktopsError?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+    }
+
     Divider()
     SectionTitle(stringResource(R.string.account_invite))
     // One implementation, opened from here and from settings: the dialog is where
@@ -427,6 +477,35 @@ private fun SignedIn(model: AppViewModel, account: AccountUiState) {
                 model.deleteAccount()
             },
         )
+    }
+}
+
+@Composable
+private fun DesktopRow(desktop: AccountDesktop, busy: Boolean, onOpen: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                desktop.name.ifBlank { desktop.model.ifBlank { desktop.deviceId } },
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+            )
+            Text(
+                if (desktop.online) {
+                    listOf(desktop.platform, desktop.model).filter { it.isNotBlank() }.joinToString(" · ")
+                } else {
+                    stringResource(R.string.account_computer_offline)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
+        TextButton(onClick = onOpen, enabled = desktop.online && !busy) {
+            Text(stringResource(R.string.account_computer_open))
+        }
     }
 }
 
