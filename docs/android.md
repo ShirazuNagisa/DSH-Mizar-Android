@@ -1,8 +1,31 @@
 # Android 客户端
 
-同一套 Mizar 协议的第二个客户端：手机看 DSH agent 干活、发消息、回答审批。协议本身由主机插件
-实现，见 [DSH-Mizar 的 protocol-v1.md](https://github.com/ShirazuNagisa/DSH-Mizar/blob/main/docs/protocol-v1.md)；
+同一套 Mizar 协议的第二个客户端：手机看 DSH agent 干活、发消息、回答审批。
+**宿主是 AGI Mizar 桌面端**（与 iOS 同一个宿主），协议见
+[AGI Mizar 的 protocol-v1.md](https://github.com/ShirazuNagisa/AGI-Mizar/blob/main/docs/protocol-v1.md)；
 中继见 [DSH-Mizar-Relay 的 deployment.md](https://github.com/ShirazuNagisa/DSH-Mizar-Relay/blob/main/docs/deployment.md)。
+仓库里的 `plugin/` 只是旧 `dsh-mizar` 插件镜像，供本地开发宿主，不代表生产宿主。
+
+## 2026-11 追赶 iOS 的增量（0.11 线）
+
+客户端在这轮里对齐了 AGI Mizar 宿主与 iOS 0.9.9 的能力，新增：
+
+- **状态通道**：WS 二进制状态帧（`0x53` 魔数、`u8 idLen + sessionId` 信封）驱动免费的运行中过程、
+  流式正文与结束后折叠；`session.stream` 在断线重连后回放本轮 journal。归约在 `mizarkit/TurnStream`，
+  协议规范见工作区根 `protocol/state-channel-v1.md`。
+- **对话内图片**：Markdown `![alt](path)` 经 `file.stat` + `file.read` 分片读取、解码缓存与灯箱；
+  付费账户或局域网链路解锁，免费+中继只显示提示、不发请求。
+- **新方法**：`session.compact`（上下文压缩）、`session.fork`（按已完成轮次分支，`atSeq` 必须是
+  真实 inclusive `turn/end.seq`）、`usage.overview`（首页用量）、`file.stat`；`session.prompt`
+  支持 `mode=steer`（设置里的「默认引导发送」打开且本轮在跑时）。
+- **事件**：`session.changed` 目录变化（250ms 合并、2s 静默），`turn.settled` 仍作为完成通知兜底。
+- **运营与首启**：应用内公告（中继 WS `/app/v1/announcements`，轮询兜底）、问卷（`/account/v1/surveys`）、
+  9 步新手教程（升级用户按版本重走一次、保留设置/账户）、设置目录化（8 主题 + 二级页）、
+  首页用量概览、平台内 Agent 切换（DSH / Claude Code / Codex，`hello.engine` 作用域）。
+- **本地 Agent（实验）**：`localagent/` 用 QuickJS-NG 跑 iOS `LocalKernel` 的同一份 TS 内核；
+  仅前台，UI 接线仍在进行（PoC 报告见工作区 `docs/android/local-agent-poc-2026-11-13.md`）。
+- **测试**：JVM 453（mizarkit）+ 285（app）；androidTest 含 8 张视觉基线、mock 宿主
+  （`test/mock-host/`）与关键流程；`androidApiCheck` 用 android-26 守门。
 
 ## 目录
 
