@@ -8,6 +8,15 @@
     the APK, pair it to the host on this machine, take a screenshot, drive a gesture,
     read the log, stop it.
 
+    Two AVDs are supported out of the box, side by side: mizar35 (API 35, pixel_6,
+    port 5556, the userdebug reference machine) and mizar36 (API 36, pixel_8, port
+    5558, the visual baseline). Select one with -Avd/-Port; every adb call is pinned
+    to -s emulator-<Port> so the two never cross wires.
+
+    `boot` is headless (-no-window) for automation; `window` is the same boot with a
+    real emulator window (the visual, Xcode-Device-Hub-style entry point), and
+    `start -Window` is the detached visible variant for a normal terminal.
+
     The pairing is the interesting part: the emulator reaches the host's Mizar
     listener through 10.0.2.2 (the emulator's alias for the host's loopback), so the
     link is direct and the public relay is not involved at all. A pairing code is
@@ -20,12 +29,33 @@
     ./emu.ps1 install
     ./emu.ps1 pair ZH8M-NVT0
     ./emu.ps1 shot after-pair
+    ./emu.ps1 window              # visible window; background job under DSH
+    ./emu.ps1 start -Window       # detached visible window, normal terminal
+    ./emu.ps1 create -Avd mizar36 -Port 5558 -Image 'system-images;android-36;google_apis;x86_64' -Device pixel_8
+    ./emu.ps1 boot -Avd mizar36 -Port 5558
+    ./emu.ps1 install -Avd mizar36 -Port 5558 -Apk app/build/outputs/apk/debug/app-debug.apk
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('create', 'boot', 'start', 'wait', 'install', 'pair', 'shot', 'swipe', 'tap', 'logcat', 'grant', 'locale', 'stop', 'status')]
+    [ValidateSet('create', 'boot', 'start', 'window', 'wait', 'install', 'pair', 'shot', 'swipe', 'tap', 'logcat', 'grant', 'locale', 'stop', 'status')]
     [string] $Command,
+
+    # Which AVD/port to drive. Defaults are the API 35 reference machine; pass
+    # -Avd mizar36 -Port 5558 for the API 36 visual baseline. Two AVDs can run
+    # side by side because every adb call is pinned to -s emulator-<Port>.
+    [string] $Avd = 'mizar35',
+    [int] $Port = 5556,
+    [string] $Image = 'system-images;android-35;google_apis;x86_64',
+    [string] $Device = 'pixel_6',
+    # Renderer for -gpu. `host` was verified on the RTX 4070/Radeon 780M box;
+    # `swiftshader`/`swangle` are the software fallbacks if the host driver breaks.
+    [string] $Gpu = 'host',
+    # APK to install; defaults to the release build, override with -Apk for debug.
+    [string] $Apk = '',
+
+    # With `start`: launch the emulator with a visible window instead of -no-window.
+    [switch] $Window,
 
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]] $Rest
@@ -41,16 +71,14 @@ $Adb = Join-Path $Sdk 'platform-tools\adb.exe'
 $Emulator = Join-Path $Sdk 'emulator\emulator.exe'
 $AvdManager = Join-Path $Sdk 'cmdline-tools\latest\bin\avdmanager.bat'
 
-$AvdName = 'mizar35'
-$Image = 'system-images;android-35;google_apis;x86_64'
-$Port = 5556
+$AvdName = $Avd
 $Serial = "emulator-$Port"
 
 # The host's Mizar listener binds 127.0.0.1; 10.0.2.2 is how the emulator reaches it.
 $HostAuthority = '10.0.2.2:19390'
 
 $RepoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-$Apk = Join-Path $RepoRoot 'app\build\outputs\apk\release\app-release.apk'
+$ApkPath = if ($Apk) { $Apk } else { Join-Path $RepoRoot 'app\build\outputs\apk\release\app-release.apk' }
 $Shots = Join-Path $RepoRoot '.devstate'
 $AvdDir = Join-Path $env:USERPROFILE ".android\avd\$AvdName.avd"
 
@@ -80,6 +108,19 @@ function Test-Booted {
 
 if (-not (Test-Path $Adb)) { Fail "adb not found at $Adb (set ANDROID_SDK_ROOT)" }
 
+function Test-EmulatorRunning {
+    $existing = Get-CimInstance Win32_Process -Filter "Name LIKE 'qemu-system-x86_64%'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match "-avd\s+$([regex]::Escape($AvdName))(\s|$)" }
+    return [bool]$existing
+}
+
+function Get-EmulatorArguments([bool] $Windowed) {
+    $arguments = @('-avd', $AvdName, '-no-audio', '-no-boot-anim', '-gpu', $Gpu,
+        '-memory', '4096', '-port', $Port, '-no-snapshot', '-no-metrics')
+    if (-not $Windowed) { $arguments += '-no-window' }
+    return $arguments
+}
+
 switch ($Command) {
     'create' {
         if (-not $env:JAVA_HOME) { Fail 'JAVA_HOME must be set for avdmanager' }
@@ -88,8 +129,8 @@ switch ($Command) {
             Remove-Item -Recurse -Force $AvdDir
             Remove-Item -Force (Join-Path $env:USERPROFILE ".android\avd\$AvdName.ini") -ErrorAction SilentlyContinue
         }
-        Note "creating $AvdName from $Image"
-        cmd /c "echo no| `"$AvdManager`" create avd -n $AvdName -k `"$Image`" -d pixel_6 --force"
+        Note "creating $AvdName from $Image on $Device"
+        cmd /c "echo no| `"$AvdManager`" create avd -n $AvdName -k `"$Image`" -d $Device --force"
         if ($LASTEXITCODE -ne 0) { Fail 'avdmanager failed' }
 
         # swiftshader_indirect hangs under WHPX with this image; `host` renders through
@@ -101,7 +142,7 @@ switch ($Command) {
             switch -Regex ($line) {
                 '^disk\.dataPartition\.path\s*=' { continue }
                 '^hw\.gpu\.enabled\s*=' { 'hw.gpu.enabled = yes'; continue }
-                '^hw\.gpu\.mode\s*=' { 'hw.gpu.mode = host'; continue }
+                '^hw\.gpu\.mode\s*=' { "hw.gpu.mode = $Gpu"; continue }
                 '^hw\.ramSize\s*=' { 'hw.ramSize = 4096'; continue }
                 default { $line }
             }
@@ -113,18 +154,28 @@ switch ($Command) {
     'boot' {
         # Blocking on purpose: under the harness this must run as a background job so
         # the process tree outlives the tool call that started it.
-        & $Emulator -avd $AvdName -no-window -no-audio -no-boot-anim `
-            -gpu host -memory 4096 -port $Port -no-snapshot -no-metrics
+        if ($Window) { & $Emulator @(Get-EmulatorArguments $true) }
+        else { & $Emulator @(Get-EmulatorArguments $false) }
+    }
+
+    'window' {
+        # The visual entry point (Xcode Device Hub style): a real emulator window instead
+        # of -no-window. Blocking on purpose, like `boot` -- under the harness run it as
+        # a background job; from a normal terminal use `start -Window` for a detached one.
+        Note "starting $AvdName with a window (gpu=$Gpu, port=$Port)"
+        & $Emulator @(Get-EmulatorArguments $true)
     }
 
     'start' {
-        $existing = Get-Process -Name 'qemu-system-x86_64-headless' -ErrorAction SilentlyContinue
-        if ($existing) { Note 'emulator already running'; exit 0 }
-        Start-Process -FilePath $Emulator -ArgumentList @(
-            '-avd', $AvdName, '-no-window', '-no-audio', '-no-boot-anim',
-            '-gpu', 'host', '-memory', '4096', '-port', $Port, '-no-snapshot', '-no-metrics'
-        ) -WindowStyle Hidden
-        Note 'emulator launched (detached)'
+        if (Test-EmulatorRunning) { Note "emulator $AvdName already running"; exit 0 }
+        if ($Window) {
+            # No -WindowStyle Hidden: the emulator's own GUI window must stay visible.
+            Start-Process -FilePath $Emulator -ArgumentList (Get-EmulatorArguments $true)
+            Note 'emulator launched (detached, windowed)'
+        } else {
+            Start-Process -FilePath $Emulator -ArgumentList (Get-EmulatorArguments $false) -WindowStyle Hidden
+            Note 'emulator launched (detached, headless)'
+        }
     }
 
     'wait' {
@@ -137,8 +188,8 @@ switch ($Command) {
     }
 
     'install' {
-        if (-not (Test-Path $Apk)) { Fail "no release APK at $Apk -- run :app:assembleRelease first" }
-        & $Adb -s $Serial install -r $Apk
+        if (-not (Test-Path $ApkPath)) { Fail "no APK at $ApkPath -- run :app:assembleRelease (or :app:assembleDebug with -Apk) first" }
+        & $Adb -s $Serial install -r $ApkPath
         if ($LASTEXITCODE -ne 0) { Fail 'install failed' }
         Note 'installed'
     }
@@ -193,13 +244,19 @@ switch ($Command) {
     'stop' {
         & $Adb -s $Serial emu kill 2>&1 | Out-Null
         Start-Sleep -Seconds 3
-        Get-Process -Name 'qemu-system-x86_64-headless', 'emulator' -ErrorAction SilentlyContinue |
-            Stop-Process -Force
+        # Only this AVD's qemu, not every emulator on the machine: the API 35 and API 36
+        # machines are expected to run side by side.
+        Get-CimInstance Win32_Process -Filter "Name LIKE 'qemu-system-x86_64%'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -match "-avd\s+$([regex]::Escape($AvdName))(\s|$)" } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        Get-CimInstance Win32_Process -Filter "Name = 'emulator.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -match "-avd\s+$([regex]::Escape($AvdName))(\s|$)" } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
         foreach ($lock in @('hardware-qemu.ini.lock', 'multiinstance.lock')) {
             $path = Join-Path $AvdDir $lock
             if (Test-Path $path) { Remove-Item -Force $path -ErrorAction SilentlyContinue }
         }
-        Note 'stopped'
+        Note "stopped $AvdName"
     }
 
     'status' {
