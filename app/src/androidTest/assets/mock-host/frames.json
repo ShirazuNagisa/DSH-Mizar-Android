@@ -1,0 +1,54 @@
+{
+  "frames": [
+    {
+      "name": "thinking-begin",
+      "sessionId": "mock-session-1",
+      "bytes": "Dm1vY2stc2Vzc2lvbi0xUwEAAAAAAQAAAAAAAA=="
+    },
+    {
+      "name": "thinking-heartbeat",
+      "sessionId": "mock-session-1",
+      "bytes": "Dm1vY2stc2Vzc2lvbi0xUwEBAAAAAQAAAAAAAA=="
+    },
+    {
+      "name": "narration-snapshot",
+      "sessionId": "mock-session-1",
+      "bytes": "Dm1vY2stc2Vzc2lvbi0xUwUGAAAAAgAAAAAAHUxvb2tpbmcgYXQgdGhlIHBhaXJpbmcgY29kZS4K"
+    },
+    {
+      "name": "narration-append",
+      "sessionId": "mock-session-1",
+      "bytes": "Dm1vY2stc2Vzc2lvbi0xUwUCAAAAAgAAAB0AMVRoZSBob3N0IHBhcnQgaXMgbG93ZXJjYXNlZCBidXQgdGhlIGNvZGUgaXMgbm90Lgo="
+    },
+    {
+      "name": "answer-snapshot",
+      "sessionId": "mock-session-1",
+      "bytes": "Dm1vY2stc2Vzc2lvbi0xUwYGAAAAAwAAAAAADEkgZm91bmQgaXQ6IA=="
+    },
+    {
+      "name": "answer-append",
+      "sessionId": "mock-session-1",
+      "bytes": "Dm1vY2stc2Vzc2lvbi0xUwYCAAAAAwAAAAwALGBQYWlyaW5nVXJpLnBhcnNlYCBub3JtYWxpc2VzIG9ubHkgdGhlIGhvc3Qu"
+    },
+    {
+      "name": "answer-final",
+      "sessionId": "mock-session-1",
+      "bytes": "Dm1vY2stc2Vzc2lvbi0xUwYIAAAAAwAAAAAAAA=="
+    },
+    {
+      "name": "completed",
+      "sessionId": "mock-session-1",
+      "bytes": "Dm1vY2stc2Vzc2lvbi0xUwsAAAAABAAAAAAAAA=="
+    },
+    {
+      "name": "awaiting-approval",
+      "sessionId": "mock-session-1",
+      "bytes": "Dm1vY2stc2Vzc2lvbi0xUwMAAAAABQAAAAAAAA=="
+    },
+    {
+      "name": "completed-after-approval",
+      "sessionId": "mock-session-1",
+      "bytes": "Dm1vY2stc2Vzc2lvbi0xUwsAAAAABgAAAAAAAA=="
+    }
+  ]
+}

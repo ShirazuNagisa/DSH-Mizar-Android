@@ -3,6 +3,23 @@ name: android-pr
 # Verification only. No keystore, no release secrets, no publishing: a pull request
 # must be provable without any of the material that could sign or ship a build.
 # The release pipeline lives in release.yml and is the only thing that touches a tag.
+#
+# Two checks, and both run on a pull request:
+#
+#   verify          JVM suite, lint and the debug build -- the cheap layer.
+#   instrumentation A booted API 36 emulator. By default it runs the *subset* that
+#                   pins the screens: the visual snapshots and the mock-host fixture
+#                   contract, plus the behavioural tests for the approval answer and
+#                   the conversation surface. A manual dispatch can ask for `full`
+#                   (every instrumentation case), and a PR labeled
+#                   `instrumentation-full` does the same; `skip` is for a run where
+#                   the emulator cannot be had at all.
+#
+# Why the subset is the default rather than the whole suite: the emulator is the
+# slow half of CI (~6-9 minutes including boot), while the tests themselves are
+# under a minute. Running the screens on every PR is what catches the spacing
+# change nobody looked at; the full suite is for the PR that touched the corners
+# the subset does not reach.
 on:
   pull_request:
     paths:
@@ -16,9 +33,13 @@ on:
   workflow_dispatch:
     inputs:
       instrumentation:
-        description: 'Also run the isolated emulator suite (slow, needs KVM)'
-        type: boolean
-        default: false
+        description: 'Emulator suite: subset (screens + key flows), full, or skip'
+        type: choice
+        options:
+          - subset
+          - full
+          - skip
+        default: subset
 
 permissions:
   contents: read
@@ -65,6 +86,19 @@ jobs:
             exit 1
           fi
 
+      # The goldens are part of the change under review: a deleted or truncated PNG
+      # turns the visual suite green (it fails, actually -- a missing golden is a
+      # failure), but a baseline that vanished together with its test would not, so
+      # the expected number is checked here. Update the floor when a page is added.
+      - name: Require committed visual goldens
+        run: |
+          count=$(find app/src/androidTest/assets/snapshots -name '*.png' | wc -l)
+          echo "visual goldens: $count"
+          if [ "$count" -lt 8 ]; then
+            echo "expected at least 8 golden PNGs in app/src/androidTest/assets/snapshots" >&2
+            exit 1
+          fi
+
       - name: Unit tests, lint and debug build
         env:
           GRADLE_USER_HOME: ${{ github.workspace }}/.gradle-home
@@ -104,14 +138,15 @@ jobs:
             app/build/reports/lint-results-debug.*
 
   instrumentation:
-    name: Isolated emulator suite
-    # Not on every pull request: the emulator is the slow, flaky half, and the
-    # comment on the PR is what decides whether it is needed. A manual dispatch can
-    # ask for it directly.
+    name: Emulator suite (${{ github.event_name == 'workflow_dispatch' && inputs.instrumentation || 'subset' }})
+    # On every pull request, and by manual dispatch unless it asks to skip. The
+    # skip path exists because an unreachable KVM host should still let a PR record
+    # the JVM verdict; it is not the default, so the screens are normally checked.
     if: >-
-      github.event_name == 'workflow_dispatch' && github.event.inputs.instrumentation == 'true'
-      || contains(github.event.pull_request.labels.*.name, 'instrumentation')
+      github.event_name == 'pull_request'
+      || (github.event_name == 'workflow_dispatch' && inputs.instrumentation != 'skip')
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -123,6 +158,32 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+
+      # The scope is decided in one place: a PR runs the screen subset, a dispatch
+      # may ask for everything, and the `instrumentation-full` label forces the full
+      # suite on a PR whose change reaches a corner the subset does not cover.
+      - name: Choose the instrumentation scope
+        run: |
+          full=0
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.instrumentation }}" = "full" ]; then
+            full=1
+          fi
+          if [ "${{ contains(github.event.pull_request.labels.*.name, 'instrumentation-full') }}" = "true" ]; then
+            full=1
+          fi
+          if [ "$full" = "1" ]; then
+            echo 'INSTRUMENTATION_SCOPE=full' >> "$GITHUB_ENV"
+            echo 'INSTRUMENTATION_MIN_CASES=40' >> "$GITHUB_ENV"
+            echo 'INSTRUMENTATION_CLASSES=' >> "$GITHUB_ENV"
+          else
+            echo 'INSTRUMENTATION_SCOPE=subset' >> "$GITHUB_ENV"
+            echo 'INSTRUMENTATION_MIN_CASES=8' >> "$GITHUB_ENV"
+            # The classes here are the suite's contract: the visual snapshots and the
+            # mock-host fixture decode are what this workflow exists to run on every
+            # PR; the two behavioural classes are the flows that would otherwise only
+            # be checked on the operator's phone.
+            echo 'INSTRUMENTATION_CLASSES=me.shirazu.dshmizar.snapshot.VisualSnapshotTest,me.shirazu.dshmizar.mockhost.MockHostFixturesTest,me.shirazu.dshmizar.ConversationUiTest,me.shirazu.dshmizar.LiveTurnTest' >> "$GITHUB_ENV"
+          fi
 
       - name: Enable KVM
         run: |
@@ -144,37 +205,91 @@ jobs:
           #
           # Animations stay ON. Turning them off (animator_duration_scale = 0) makes
           # the typewriter reveal jump to its final frame, and the two reveal tests
-          # then fail for a reason that has nothing to do with the change.
+          # then fail for a reason that has nothing to do with the change. The
+          # snapshot harness forces Reduce Motion for its own renders instead, so
+          # the goldens do not race an animation.
           disable-animations: false
-          script: ./gradlew --no-daemon --console=plain :app:connectedDebugAndroidTest
+          script: |
+            set +e
+            # Install, then run the runner directly instead of through
+            # `connectedDebugAndroidTest`. The Gradle task uninstalls the app when it
+            # finishes, and that removes the app's external files directory -- which
+            # is where the snapshot harness writes the actual image and the magenta
+            # diff of a failure. Running the runner by hand keeps the app installed
+            # long enough to pull the evidence. The same commands work locally; see
+            # docs/android-testing.md.
+            mkdir -p app/build/outputs/androidTest-artifacts
+            log=app/build/outputs/androidTest-artifacts/am-instrument.log
+            ./gradlew --no-daemon --console=plain :app:installDebug :app:installDebugAndroidTest
+            install_status=$?
+            if [ "$install_status" -ne 0 ]; then
+              exit "$install_status"
+            fi
+            if [ -n "${INSTRUMENTATION_CLASSES:-}" ]; then
+              adb shell am instrument -w -r -e class "$INSTRUMENTATION_CLASSES" \
+                me.shirazu.dshmizar.test/androidx.test.runner.AndroidJUnitRunner 2>&1 | tee "$log"
+            else
+              adb shell am instrument -w -r \
+                me.shirazu.dshmizar.test/androidx.test.runner.AndroidJUnitRunner 2>&1 | tee "$log"
+            fi
+            # Failure artefacts and (on a record run) the goldens themselves. Pulling
+            # while the app is still installed is the whole point of this arrangement.
+            # The other androidTest render classes write their evidence into their own
+            # directories under the same app files dir; they are collected too, so a
+            # red run comes back with every picture it produced.
+            mkdir -p app/build/outputs/androidTest-artifacts
+            for dir in snapshots screenshots features-shell; do
+              adb pull "/sdcard/Android/data/me.shirazu.dshmizar/files/$dir/." \
+                "app/build/outputs/androidTest-artifacts/$dir/" || true
+            done
+            failures=$(grep -c 'INSTRUMENTATION_STATUS_CODE: -2' "$log")
+            errors=$(grep -c 'INSTRUMENTATION_STATUS_CODE: -1' "$log")
+            # `am instrument -w` returns 0 even when assertions failed; the runner's
+            # own verdict is the only failure signal, so both forms are checked.
+            broken=$(grep -c '^FAILURES!!!' "$log")
+            echo "instrumentation: ${failures:-0} failure line(s), ${errors:-0} error line(s), ${broken:-0} FAILURES marker(s)"
+            if [ "${failures:-0}" -gt 0 ] || [ "${errors:-0}" -gt 0 ] || [ "${broken:-0}" -gt 0 ]; then
+              exit 1
+            fi
+            exit 0
 
-      # The API 36-only tests report as skipped on older platforms. A run where
-      # everything was skipped is not a pass, so both numbers are checked.
+      # A run where everything was skipped is not a pass, and a subset that silently
+      # shrank to nothing is the same failure in green clothes, so the executed count
+      # has a floor per scope. Parsed from the runner's own status lines: `1` is a
+      # test starting, `0` passed, `-1`/`-2` are failures, `-3` skipped/ignored.
+      # The `OK (N tests)` verdict is the fallback when a runner build stops emitting
+      # the per-test status bundles.
       - name: Require executed cases and report skips
         run: |
           python3 - <<'PY'
-          import glob, sys, xml.etree.ElementTree as ET
-          total = ran = skipped = 0
-          skipped_names = []
-          for path in glob.glob('app/build/outputs/androidTest-results/**/TEST-*.xml', recursive=True):
-              for case in ET.parse(path).iter('testcase'):
-                  total += 1
-                  if case.find('skipped') is not None:
-                      skipped += 1
-                      skipped_names.append(case.get('name'))
-                  else:
-                      ran += 1
-          print(f'cases: {total}, executed: {ran}, skipped: {skipped}')
-          for name in skipped_names:
-              print(f'  skipped: {name}')
-          if ran == 0:
-              sys.exit('no instrumentation test executed')
+          import os, re, sys
+          log_path = 'app/build/outputs/androidTest-artifacts/am-instrument.log'
+          log = open(log_path, encoding='utf-8', errors='replace').read()
+          started = len(re.findall(r'^INSTRUMENTATION_STATUS_CODE: 1$', log, re.M))
+          passed = len(re.findall(r'^INSTRUMENTATION_STATUS_CODE: 0$', log, re.M))
+          failed = len(re.findall(r'^INSTRUMENTATION_STATUS_CODE: -[12]$', log, re.M))
+          skipped = len(re.findall(r'^INSTRUMENTATION_STATUS_CODE: -3$', log, re.M))
+          ok = re.search(r'^OK \((\d+) tests?\)', log, re.M)
+          failures_marker = re.search(r'^FAILURES!!!', log, re.M)
+          if passed == 0 and ok:
+              passed = int(ok.group(1))
+          if failed == 0 and failures_marker:
+              failed = 1
+          minimum = int(os.environ.get('INSTRUMENTATION_MIN_CASES', '1'))
+          scope = os.environ.get('INSTRUMENTATION_SCOPE')
+          print(f'scope: {scope}, started: {started}, passed: {passed}, failed: {failed}, skipped: {skipped}')
+          if started == 0 and passed == 0:
+              sys.exit('no instrumentation test started; the runner log is empty')
+          if failed:
+              sys.exit(f'{failed} instrumentation case(s) failed')
+          if passed < minimum:
+              sys.exit(f'only {passed} instrumentation case(s) passed; scope {scope} requires at least {minimum}')
           PY
 
-      - name: Upload instrumentation reports
+      - name: Upload instrumentation reports and snapshot artefacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: android-instrumentation-reports
           if-no-files-found: ignore
-          path: app/build/outputs/androidTest-results/**
+          path: app/build/outputs/androidTest-artifacts/**

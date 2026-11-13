@@ -31,9 +31,15 @@ jobs:
       # `tools platform-tools`, and Google removed the legacy `tools` package
       # from the SDK repository -- so the bare action fails in sdkmanager with
       # "Failed to find package 'tools'" before any of this workflow runs.
+      #
+      # 36, not 35: `app/build.gradle.kts` declares compileSdk 36 and pins
+      # buildToolsVersion 36.0.0, and a tag build must not depend on AGP
+      # downloading a build-tools version the workflow did not ask for. The same
+      # versions are installed by android-pr.yml, so PR and release verify the same
+      # toolchain (audit 2026-11-13, D2).
       - uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-35 platforms;android-26 build-tools;35.0.0'
+          packages: 'platform-tools platforms;android-36 platforms;android-26 build-tools;36.0.0'
 
       - name: Decode the keystore
         env:
@@ -74,7 +80,11 @@ jobs:
       - name: Verify the APK is signed
         run: |
           apk=$(ls dist/*.apk)
-          "${ANDROID_HOME}/build-tools/35.0.0/apksigner" verify --print-certs "$apk" > /dev/null \
+          # The build-tools version is named explicitly, and it is the one the app
+          # pins (`buildToolsVersion = "36.0.0"`). Asking for `35.0.0` here failed on
+          # any runner that only installed 36 -- the package the SDK step named above
+          # (audit 2026-11-13, D2).
+          "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --print-certs "$apk" > /dev/null \
             || { echo "the release apk is not signed; check the MIZAR_* secrets" >&2; exit 1; }
           echo "signed: $apk"
 

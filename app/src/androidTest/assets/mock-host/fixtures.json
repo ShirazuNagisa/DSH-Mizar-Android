@@ -1,0 +1,746 @@
+{
+  "host": {
+    "hostId": "mock-host-1",
+    "hostName": "Mock Studio",
+    "home": "/Users/operator/work",
+    "engine": null,
+    "engines": [
+      {
+        "id": "dsh",
+        "label": "DSH",
+        "connected": true
+      },
+      {
+        "id": "codex",
+        "label": "Codex",
+        "connected": false,
+        "detail": "not configured"
+      }
+    ]
+  },
+  "pairing": {
+    "code": "MOCK-1234",
+    "deviceId": "mock-device-1",
+    "deviceToken": "mzd_mock_0123456789abcdefghij"
+  },
+  "workspaces": [
+    {
+      "workspaceId": "ws-api",
+      "path": "/Users/operator/work/api",
+      "title": "api"
+    },
+    {
+      "workspaceId": "ws-site",
+      "path": "/Users/operator/work/site",
+      "title": "site"
+    }
+  ],
+  "sessions": [
+    {
+      "sessionId": "mock-session-1",
+      "updatedAt": "@now-4000",
+      "running": true,
+      "blank": false,
+      "agentAvailable": true,
+      "cwd": "/Users/operator/work/api"
+    },
+    {
+      "sessionId": "mock-session-2",
+      "updatedAt": "@now-90000",
+      "running": false,
+      "blank": false,
+      "agentAvailable": true,
+      "cwd": "/Users/operator/work/api"
+    },
+    {
+      "sessionId": "mock-session-3",
+      "updatedAt": "@now-3600000",
+      "running": false,
+      "blank": false,
+      "agentAvailable": true,
+      "cwd": "/Users/operator/work/site"
+    }
+  ],
+  "messages": {
+    "sessionId": "mock-session-1",
+    "asOfSeq": 7,
+    "hasMore": false,
+    "context": {
+      "window": 200000,
+      "pressureTokens": 48200,
+      "projectedTokens": 53900,
+      "percent": 27,
+      "breakdown": {
+        "systemTokens": 12000,
+        "toolsTokens": 3200,
+        "messageTokens": 33000
+      }
+    },
+    "records": [
+      {
+        "type": "turn/start",
+        "seq": 1,
+        "time": "@now-240000",
+        "data": {
+          "turn": 1
+        }
+      },
+      {
+        "type": "user/message",
+        "seq": 2,
+        "time": "@now-239000",
+        "data": {
+          "turn": 1,
+          "source": {
+            "kind": "user"
+          },
+          "message": {
+            "content": [
+              {
+                "type": "text",
+                "text": "The pairing screen crashes when the code has a lowercase letter. Find it and add a regression test."
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "assistant/message",
+        "seq": 3,
+        "time": "@now-200000",
+        "data": {
+          "turn": 1,
+          "message": {
+            "content": [
+              {
+                "type": "text",
+                "text": "## What was wrong\n\n`PairingUri.parse` normalised only the host part of the code, so the token kept the caller's case and the comparison against the generated code failed. I will run the pairing tests before changing anything."
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "tool/call",
+        "seq": 4,
+        "time": "@now-180000",
+        "data": {
+          "turn": 1,
+          "name": "shell",
+          "callId": "call-1",
+          "arguments": "{\"command\":\"./gradlew.bat :mizarkit:test --tests '*Pairing*'\"}"
+        }
+      },
+      {
+        "type": "tool/result",
+        "seq": 5,
+        "time": "@now-170000",
+        "data": {
+          "turn": 1,
+          "ok": true,
+          "message": {
+            "toolCallId": "call-1",
+            "content": [
+              {
+                "type": "text",
+                "text": "PairingUriTest > aLowercaseCodeIsStillOneCode PASSED"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "assistant/message",
+        "seq": 6,
+        "time": "@now-150000",
+        "data": {
+          "turn": 1,
+          "message": {
+            "content": [
+              {
+                "type": "text",
+                "text": "The fix normalises the whole code before it is compared, and the new test replays a recording with an uppercase code."
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "turn/end",
+        "seq": 7,
+        "time": "@now-140000",
+        "data": {
+          "turn": 1,
+          "reason": {
+            "kind": "completed"
+          },
+          "mizarDeliverables": [
+            {
+              "path": "docs/report.png",
+              "description": "The test report for the regression"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "stats": {
+    "title": "Fix the pairing crash",
+    "tokenUsage": {
+      "uncachedInputTokens": 12480,
+      "outputTokens": 3120,
+      "cacheReadTokens": 98000,
+      "cacheWriteTokens": 0,
+      "billedInputTokens": 14080
+    },
+    "cacheHit": {
+      "ratio": 0.88,
+      "displayPercent": "88%"
+    },
+    "context": {
+      "window": 200000,
+      "pressureTokens": 48200,
+      "projectedTokens": 53900,
+      "percent": 27,
+      "breakdown": {
+        "systemTokens": 12000,
+        "toolsTokens": 3200,
+        "messageTokens": 33000
+      }
+    },
+    "stats": {
+      "turns": 4,
+      "steps": 11,
+      "llmMs": 42000.0,
+      "toolMs": 6500.0,
+      "ttftMs": 780.0,
+      "decodeTokensPerSecond": 64.2
+    },
+    "model": {
+      "lastUsed": {
+        "provider": "deepseek",
+        "model": "deepseek-v4.1-pro",
+        "reasoningEffort": "high"
+      },
+      "next": {
+        "provider": "deepseek",
+        "model": "deepseek-v4.1-pro",
+        "reasoningEffort": "high"
+      }
+    },
+    "permissionPreset": "auto"
+  },
+  "models": {
+    "default": {
+      "provider": "deepseek",
+      "model": "deepseek-v4.1-pro",
+      "reasoningEffort": "high"
+    },
+    "providers": [
+      {
+        "id": "deepseek",
+        "name": "DeepSeek",
+        "models": [
+          {
+            "id": "deepseek-v4.1-pro",
+            "name": "DeepSeek V4.1 Pro",
+            "efforts": [
+              {
+                "id": "high",
+                "name": "High"
+              },
+              {
+                "id": "max",
+                "name": "Max"
+              }
+            ],
+            "defaultEffort": "high"
+          }
+        ]
+      }
+    ],
+    "failures": []
+  },
+  "permissions": {
+    "options": [
+      {
+        "value": "read-only",
+        "name": "Read only"
+      },
+      {
+        "value": "auto",
+        "name": "Default"
+      },
+      {
+        "value": "danger-full-access",
+        "name": "Full access"
+      }
+    ],
+    "defaults": [],
+    "defaultPreset": "auto"
+  },
+  "pending": {
+    "approvals": [
+      {
+        "requestId": "request-1",
+        "sessionId": "mock-session-1",
+        "toolName": "shell",
+        "reason": "Run the instrumentation suite to reproduce the pairing crash."
+      }
+    ],
+    "questions": [
+      {
+        "callId": "call-2",
+        "sessionId": "mock-session-1",
+        "questions": [
+          {
+            "id": "question-1",
+            "header": "Platform",
+            "question": "Which platform should the fix land on first?",
+            "options": [
+              {
+                "label": "Android",
+                "description": "The phone client in this repository"
+              },
+              {
+                "label": "iOS",
+                "description": "The Swift client, which already has the fix"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "usage": {
+    "sessions": 12,
+    "days": [
+      {
+        "date": "2026-11-07",
+        "messages": 41,
+        "inputTokens": 184000,
+        "outputTokens": 42000,
+        "hours": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          9000,
+          24000,
+          38000,
+          12000,
+          0,
+          0,
+          16000,
+          42000,
+          26000,
+          17000,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "models": [
+          {
+            "model": "deepseek-v4.1-pro",
+            "messages": 41,
+            "inputTokens": 184000,
+            "outputTokens": 42000
+          }
+        ]
+      },
+      {
+        "date": "2026-11-08",
+        "messages": 18,
+        "inputTokens": 96000,
+        "outputTokens": 21000,
+        "hours": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          14000,
+          26000,
+          18000,
+          0,
+          0,
+          0,
+          12000,
+          26000,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "models": [
+          {
+            "model": "deepseek-v4.1-pro",
+            "messages": 18,
+            "inputTokens": 96000,
+            "outputTokens": 21000
+          }
+        ]
+      },
+      {
+        "date": "2026-11-10",
+        "messages": 63,
+        "inputTokens": 240000,
+        "outputTokens": 61000,
+        "hours": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          22000,
+          44000,
+          61000,
+          30000,
+          9000,
+          0,
+          0,
+          14000,
+          36000,
+          24000,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "models": [
+          {
+            "model": "deepseek-v4.1-pro",
+            "messages": 55,
+            "inputTokens": 220000,
+            "outputTokens": 56000
+          },
+          {
+            "model": "deepseek-v4",
+            "messages": 8,
+            "inputTokens": 20000,
+            "outputTokens": 5000
+          }
+        ]
+      },
+      {
+        "date": "2026-11-11",
+        "messages": 9,
+        "inputTokens": 38000,
+        "outputTokens": 9000,
+        "hours": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          6000,
+          12000,
+          20000,
+          0,
+          0,
+          0,
+          0,
+          0,
+          9000,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "models": [
+          {
+            "model": "deepseek-v4.1-pro",
+            "messages": 9,
+            "inputTokens": 38000,
+            "outputTokens": 9000
+          }
+        ]
+      },
+      {
+        "date": "2026-11-12",
+        "messages": 34,
+        "inputTokens": 132000,
+        "outputTokens": 33000,
+        "hours": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          8000,
+          18000,
+          26000,
+          14000,
+          0,
+          0,
+          0,
+          11000,
+          26000,
+          19000,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "models": [
+          {
+            "model": "deepseek-v4.1-pro",
+            "messages": 34,
+            "inputTokens": 132000,
+            "outputTokens": 33000
+          }
+        ]
+      }
+    ]
+  },
+  "files": [
+    {
+      "path": "docs/report.png",
+      "name": "report.png",
+      "mediaType": "image/png",
+      "previewable": true,
+      "image": "640x400"
+    },
+    {
+      "path": "docs/notes.txt",
+      "name": "notes.txt",
+      "mediaType": "text/plain",
+      "previewable": true,
+      "text": "The pairing code is normalised before it is compared.\n\nThis file is served by the mock host so the delivered-file preview has something to read.\n"
+    }
+  ],
+  "stream": {
+    "sessionId": "mock-session-1",
+    "turn": 2,
+    "state": 6,
+    "interval": 3,
+    "textSeq": 66,
+    "truncated": false,
+    "entries": [
+      {
+        "interval": 1,
+        "state": 1,
+        "text": ""
+      },
+      {
+        "interval": 3,
+        "state": 6,
+        "text": "I found it: `PairingUri.parse` normalises only the host.",
+        "final": true
+      }
+    ]
+  },
+  "autoplayOnPrompt": true,
+  "timeline": [
+    {
+      "afterMs": 400,
+      "type": "state",
+      "name": "thinking-begin",
+      "sessionId": "mock-session-1",
+      "state": "THINKING",
+      "interval": 1,
+      "flags": []
+    },
+    {
+      "afterMs": 800,
+      "type": "state",
+      "name": "thinking-heartbeat",
+      "sessionId": "mock-session-1",
+      "state": "THINKING",
+      "interval": 1,
+      "flags": [
+        "heartbeat"
+      ]
+    },
+    {
+      "afterMs": 600,
+      "type": "state",
+      "name": "narration-snapshot",
+      "sessionId": "mock-session-1",
+      "state": "STREAM_NARRATION",
+      "interval": 2,
+      "flags": [
+        "snapshot",
+        "append"
+      ],
+      "text": "Looking at the pairing code.\n"
+    },
+    {
+      "afterMs": 700,
+      "type": "state",
+      "name": "narration-append",
+      "sessionId": "mock-session-1",
+      "state": "STREAM_NARRATION",
+      "interval": 2,
+      "flags": [
+        "append"
+      ],
+      "textSeq": "auto",
+      "text": "The host part is lowercased but the code is not.\n"
+    },
+    {
+      "afterMs": 700,
+      "type": "state",
+      "name": "answer-snapshot",
+      "sessionId": "mock-session-1",
+      "state": "STREAM_FINAL",
+      "interval": 3,
+      "flags": [
+        "snapshot",
+        "append"
+      ],
+      "text": "I found it: "
+    },
+    {
+      "afterMs": 500,
+      "type": "state",
+      "name": "answer-append",
+      "sessionId": "mock-session-1",
+      "state": "STREAM_FINAL",
+      "interval": 3,
+      "flags": [
+        "append"
+      ],
+      "textSeq": "auto",
+      "text": "`PairingUri.parse` normalises only the host."
+    },
+    {
+      "afterMs": 400,
+      "type": "state",
+      "name": "answer-final",
+      "sessionId": "mock-session-1",
+      "state": "STREAM_FINAL",
+      "interval": 3,
+      "flags": [
+        "final"
+      ]
+    },
+    {
+      "afterMs": 200,
+      "type": "state",
+      "name": "completed",
+      "sessionId": "mock-session-1",
+      "state": "COMPLETED",
+      "interval": 4,
+      "flags": []
+    },
+    {
+      "afterMs": 200,
+      "type": "event",
+      "name": "turn.settled",
+      "data": {
+        "sessionId": "mock-session-1"
+      }
+    },
+    {
+      "afterMs": 100,
+      "type": "event",
+      "name": "session.changed",
+      "data": {
+        "sessionId": "mock-session-1",
+        "running": false
+      }
+    },
+    {
+      "afterMs": 800,
+      "type": "pending",
+      "pending": {
+        "approvals": [
+          {
+            "requestId": "request-timeline-1",
+            "sessionId": "mock-session-1",
+            "toolName": "write_file",
+            "reason": "Write the regression test the operator just approved."
+          }
+        ],
+        "questions": [
+          {
+            "callId": "call-timeline-1",
+            "sessionId": "mock-session-1",
+            "questions": [
+              {
+                "id": "question-timeline-1",
+                "header": "Scope",
+                "question": "Should the fix also cover the relay pairing path?",
+                "options": [
+                  {
+                    "label": "Yes",
+                    "description": "Cover both paths in one change"
+                  },
+                  {
+                    "label": "No",
+                    "description": "Keep the fix to the direct path"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "afterMs": 100,
+      "type": "event",
+      "name": "approval.request",
+      "data": {
+        "sessionId": "mock-session-1"
+      }
+    },
+    {
+      "afterMs": 1500,
+      "type": "state",
+      "name": "awaiting-approval",
+      "sessionId": "mock-session-1",
+      "state": "AWAITING_APPROVAL",
+      "interval": 5,
+      "flags": []
+    },
+    {
+      "afterMs": 2500,
+      "type": "pending",
+      "pending": {
+        "approvals": [],
+        "questions": []
+      }
+    },
+    {
+      "afterMs": 100,
+      "type": "state",
+      "name": "completed-after-approval",
+      "sessionId": "mock-session-1",
+      "state": "COMPLETED",
+      "interval": 6,
+      "flags": []
+    }
+  ]
+}

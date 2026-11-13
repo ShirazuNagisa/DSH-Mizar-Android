@@ -20,6 +20,19 @@
  * Testing hooks:
  *   GET /account/v1/me?fail=revoked   → 401 SESSION_REVOKED
  *   POST /account/v1/reset            → forget every account, session and code
+ *   WS /app/v1/announcements          → snapshot, then one frame per created banner
+ *                                       (auth: `x-mizar-session`; `?token=` for tests)
+ *   GET /account/v1/announcements     → the polling twin of the socket
+ *   GET /account/v1/surveys           → two live questionnaires and one closed one
+ *   POST /account/v1/surveys/submit   → pays the reward, then marks it done per account
+ *   POST /mock/announcements          → create a banner and broadcast it on the socket
+ *   GET /mock/announcements           → every banner this mock knows about
+ *   POST /mock/surveys/reset          → forget every submission (repeatable UI runs)
+ *
+ *   node scripts/account-mock.mjs --selftest
+ *       Runs the whole account/survey/announcement loop against itself on a random
+ *       local port and prints ok/FAIL per check; exits non-zero on failure. No
+ *       emulator needed.
  */
 import { createHash, randomBytes } from 'node:crypto'
 import { createServer } from 'node:http'
@@ -246,6 +259,299 @@ main{max-width:22rem;padding:2rem;text-align:center}h1{font-size:1.35rem}.muted{
 <body><main><h1>${title}</h1>${body}</main></body></html>`
 }
 
+// ── questionnaires (0.9.9 operator channel) ────────────────────────────────
+
+/**
+ * The questionnaires the operator dispatched, fixed like the fixed account.
+ *
+ * Three question types and one closed questionnaire, because the client has to draw
+ * all three and must not draw a form for a survey nobody can answer any more.
+ */
+const SURVEYS = [
+  {
+    id: 'survey-turn-cycle',
+    title: 'What should the turn cycle do next?',
+    summary: 'Three short questions.',
+    rewardDays: 7,
+    active: true,
+    expiresAt: null,
+    questions: [
+      {
+        id: 'q1',
+        type: 'single',
+        prompt: 'Pick the update you want first',
+        required: true,
+        options: [
+          { id: 'o1', label: 'Faster syncing' },
+          { id: 'o2', label: 'Better Markdown' },
+        ],
+      },
+      {
+        id: 'q2',
+        type: 'multi',
+        prompt: 'Which platforms do you use?',
+        required: false,
+        options: [
+          { id: 'm1', label: 'Android' },
+          { id: 'm2', label: 'iOS' },
+          { id: 'm3', label: 'Desktop' },
+        ],
+      },
+      {
+        id: 'q3',
+        type: 'text',
+        prompt: 'Anything else?',
+        required: true,
+        maxLength: 400,
+      },
+    ],
+  },
+  {
+    id: 'survey-notifications',
+    title: 'How are the alerts?',
+    summary: 'One question.',
+    rewardDays: 3,
+    active: true,
+    expiresAt: null,
+    questions: [
+      {
+        id: 'n1',
+        type: 'single',
+        prompt: 'Do the alerts arrive while the turn runs?',
+        required: true,
+        options: [
+          { id: 'yes', label: 'Always' },
+          { id: 'late', label: 'Sometimes late' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'survey-archive',
+    title: 'The 0.9.8 survey',
+    summary: 'Closed.',
+    rewardDays: 1,
+    active: false,
+    expiresAt: null,
+    questions: [],
+  },
+]
+
+/** Who answered what, by `${userId}:${surveyId}`. In memory, like everything here. */
+const surveyCompletions = new Map()
+
+function isExpired(survey) {
+  return typeof survey.expiresAt === 'number' && survey.expiresAt <= Date.now()
+}
+
+/** The surveys as this account sees them: the completion state is per account. */
+function surveysFor(user) {
+  return SURVEYS.map((survey) => {
+    const record = surveyCompletions.get(`${user.id}:${survey.id}`)
+    return {
+      id: survey.id,
+      title: survey.title,
+      summary: survey.summary,
+      rewardDays: survey.rewardDays,
+      questions: survey.questions,
+      active: survey.active,
+      // Omitted rather than null, as the real relay does.
+      ...(survey.expiresAt === null ? {} : { expiresAt: survey.expiresAt }),
+      completed: record !== undefined,
+      ...(record === undefined ? {} : { completedAt: record.completedAt }),
+    }
+  })
+}
+
+/**
+ * The answers the relay would accept, as a map by question id, or `null` when the
+ * shape is wrong. It is deliberately strict: the point of the mock is to catch a
+ * client that sends a choice array where a single string belongs.
+ */
+function validAnswers(survey, answers) {
+  if (!Array.isArray(answers)) return null
+  const byId = new Map()
+  for (const answer of answers) {
+    if (typeof answer !== 'object' || answer === null) return null
+    const question = survey.questions.find((candidate) => candidate.id === answer.questionId)
+    if (question === undefined || byId.has(question.id)) return null
+    if (question.type === 'multi') {
+      if (!Array.isArray(answer.value) || answer.value.length === 0) return null
+      if (answer.value.some((id) => typeof id !== 'string' || !question.options.some((option) => option.id === id))) {
+        return null
+      }
+      byId.set(question.id, [...answer.value])
+    } else {
+      if (typeof answer.value !== 'string' || answer.value.trim() === '') return null
+      if (question.type === 'single' && !question.options.some((option) => option.id === answer.value)) return null
+      byId.set(question.id, answer.value)
+    }
+  }
+  // Every required question has to be there, as the submit button promised.
+  for (const question of survey.questions) {
+    if (question.required && !byId.has(question.id)) return null
+  }
+  return byId
+}
+
+/** Add the reward to whatever paid time the account has already. */
+function paySurvey(user, survey) {
+  const base = Math.max(Date.now(), user.grantedPaidUntil ?? 0)
+  user.grantedPaidUntil = base + survey.rewardDays * DAY
+}
+
+// ── announcements (0.9.9 operator channel) ─────────────────────────────────
+
+/**
+ * The banners the operator is broadcasting.
+ *
+ * Two are seeded so a fresh install has something to show: one that names a settings
+ * page, and one that is a link with the `notice` tone. `POST /mock/announcements`
+ * pushes more, and every connected socket receives it as a `created` frame.
+ */
+const ANNOUNCEMENTS = [
+  {
+    id: 'mock-announcement-seed-1',
+    title: '0.9.9 is on its way',
+    body: 'The new settings directory and the live turn card are ready to try.',
+    symbol: 'megaphone',
+    tone: 'info',
+    button: { label: 'Open notifications settings', target: 'notifications' },
+    createdAt: Date.now() - 3_600_000,
+    expiresAt: null,
+    active: true,
+  },
+  {
+    id: 'mock-announcement-seed-2',
+    title: 'Read the release notes',
+    body: 'Every change in this build, in one page.',
+    symbol: 'sparkles',
+    tone: 'notice',
+    button: { label: 'Open the release page', target: 'https://github.com/ShirazuNagisa/DSH-Mizar/releases' },
+    createdAt: Date.now() - 7_200_000,
+    expiresAt: null,
+    active: true,
+  },
+]
+
+let announcementSequence = 0
+
+/** Connected `/app/v1/announcements` sockets. */
+const announcementSockets = new Set()
+
+/** What is live right now, oldest first, as both the socket snapshot and the poll serve it. */
+function liveAnnouncements() {
+  const now = Date.now()
+  return ANNOUNCEMENTS
+    .filter((announcement) => announcement.active !== false)
+    .filter((announcement) => announcement.expiresAt === null || announcement.expiresAt > now)
+    .slice()
+    .sort((left, right) => (left.createdAt ?? 0) - (right.createdAt ?? 0))
+}
+
+/** Build one banner from a mock POST body, or `null` when it is not one. */
+function createAnnouncement(body) {
+  const title = typeof body?.title === 'string' ? body.title.trim() : ''
+  const text = typeof body?.body === 'string' ? body.body.trim() : ''
+  if (title === '' || text === '') return null
+  const rawButton = body?.button
+  const button = typeof rawButton === 'object' && rawButton !== null
+    && typeof rawButton.label === 'string' && typeof rawButton.target === 'string'
+    ? { label: rawButton.label.trim(), target: rawButton.target.trim() }
+    : null
+  const expiresInMs = typeof body?.expiresInMs === 'number' ? body.expiresInMs : 7 * DAY
+  return {
+    id: `mock-announcement-${++announcementSequence}`,
+    title,
+    body: text,
+    symbol: typeof body?.symbol === 'string' ? body.symbol : null,
+    tone: typeof body?.tone === 'string' ? body.tone : 'info',
+    button,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + expiresInMs,
+    active: body?.active !== false,
+  }
+}
+
+// The WebSocket handshake and framing. Twenty lines of RFC 6455 rather than a
+// dependency: this mock is one file on purpose, and the client only needs text
+// frames down and pings up.
+
+const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
+
+/** One server frame; the server never masks. */
+function wsFrame(opcode, payload) {
+  const data = Buffer.isBuffer(payload) ? payload : Buffer.from(String(payload), 'utf8')
+  const length = data.length
+  let header
+  if (length < 126) {
+    header = Buffer.from([0x80 | opcode, length])
+  } else if (length < 65_536) {
+    header = Buffer.alloc(4)
+    header[0] = 0x80 | opcode
+    header[1] = 126
+    header.writeUInt16BE(length, 2)
+  } else {
+    header = Buffer.alloc(10)
+    header[0] = 0x80 | opcode
+    header[1] = 127
+    header.writeBigUInt64BE(BigInt(length), 2)
+  }
+  return Buffer.concat([header, data])
+}
+
+/** Parse whatever complete client frames arrived; the socket buffers between reads. */
+function parseClientFrames(client, chunk) {
+  client.buffer = Buffer.concat([client.buffer, chunk])
+  const frames = []
+  while (client.buffer.length >= 2) {
+    const first = client.buffer[0]
+    const second = client.buffer[1]
+    const opcode = first & 0x0f
+    const masked = (second & 0x80) !== 0
+    let length = second & 0x7f
+    let offset = 2
+    if (length === 126) {
+      if (client.buffer.length < 4) break
+      length = client.buffer.readUInt16BE(2)
+      offset = 4
+    } else if (length === 127) {
+      if (client.buffer.length < 10) break
+      length = Number(client.buffer.readBigUInt64BE(2))
+      offset = 10
+    }
+    if (length > 1_000_000) {
+      client.buffer = Buffer.alloc(0)
+      frames.push({ opcode: 0x8, payload: Buffer.alloc(0) })
+      break
+    }
+    const maskLength = masked ? 4 : 0
+    if (client.buffer.length < offset + maskLength + length) break
+    let payload = client.buffer.subarray(offset + maskLength, offset + maskLength + length)
+    if (masked) {
+      const mask = client.buffer.subarray(offset, offset + 4)
+      payload = Buffer.from(payload.map((byte, index) => byte ^ mask[index % 4]))
+    }
+    client.buffer = client.buffer.subarray(offset + maskLength + length)
+    frames.push({ opcode, payload })
+  }
+  return frames
+}
+
+/** Refuse an upgrade in HTTP terms, so the client's WebSocket call fails cleanly. */
+function rejectUpgrade(socket, status) {
+  const reason = status === 401 ? 'Unauthorized' : status === 404 ? 'Not Found' : 'Bad Request'
+  socket.write(`HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`)
+  socket.destroy()
+}
+
+function broadcastAnnouncement(announcement) {
+  const frame = wsFrame(0x1, JSON.stringify({ type: 'announcement', announcement }))
+  for (const client of announcementSockets) {
+    if (!client.socket.destroyed) client.socket.write(frame)
+  }
+}
+
 const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`)
   const path = url.pathname
@@ -270,6 +576,32 @@ const server = createServer(async (request, response) => {
     return
   }
 
+  // ── mock-only scripts for the operator channels ───────────────────────────
+  if (method === 'GET' && path === '/mock/announcements') {
+    send(response, 200, { announcements: ANNOUNCEMENTS })
+    return
+  }
+
+  if (method === 'POST' && path === '/mock/announcements') {
+    const body = await readBody(request)
+    const announcement = createAnnouncement(body)
+    if (announcement === null) {
+      send(response, 400, { error: 'INVALID_INPUT', message: 'title and body are required' })
+      return
+    }
+    ANNOUNCEMENTS.push(announcement)
+    // Push it to whoever is listening: the socket is the path a real banner takes.
+    broadcastAnnouncement(announcement)
+    send(response, 200, { announcement })
+    return
+  }
+
+  if (method === 'POST' && path === '/mock/surveys/reset') {
+    surveyCompletions.clear()
+    send(response, 200, { ok: true })
+    return
+  }
+
   if (!path.startsWith('/account/v1/')) {
     send(response, 404, { error: 'NOT_FOUND', message: 'no such endpoint' })
     return
@@ -281,6 +613,9 @@ const server = createServer(async (request, response) => {
     sessions.clear()
     flows.clear()
     handoffs.clear()
+    surveyCompletions.clear()
+    for (const client of announcementSockets) client.socket.end()
+    announcementSockets.clear()
     seed()
     send(response, 200, { ok: true })
     return
@@ -592,7 +927,127 @@ const server = createServer(async (request, response) => {
     return
   }
 
+  // ── announcements: the polling twin of the socket ─────────────────────────
+  if (method === 'GET' && route === '/announcements') {
+    if (sessionOf(request) === null) {
+      send(response, 401, { error: 'UNAUTHENTICATED', message: 'a session token is required' })
+      return
+    }
+    send(response, 200, { announcements: liveAnnouncements() })
+    return
+  }
+
+  // ── surveys ───────────────────────────────────────────────────────────────
+  if (method === 'GET' && route === '/surveys') {
+    const current = sessionOf(request)
+    if (current === null) {
+      send(response, 401, { error: 'UNAUTHENTICATED', message: 'a session token is required' })
+      return
+    }
+    send(response, 200, { surveys: surveysFor(current.user) })
+    return
+  }
+
+  if (method === 'POST' && route === '/surveys/submit') {
+    const current = sessionOf(request)
+    if (current === null) {
+      send(response, 401, { error: 'UNAUTHENTICATED', message: 'a session token is required' })
+      return
+    }
+    const body = await readBody(request)
+    const survey = SURVEYS.find((candidate) => candidate.id === body?.surveyId)
+    if (survey === undefined) {
+      send(response, 404, { error: 'SURVEY_NOT_FOUND', message: 'no such questionnaire' })
+      return
+    }
+    if (survey.active === false || isExpired(survey)) {
+      send(response, 410, { error: 'SURVEY_UNAVAILABLE', message: 'this questionnaire is closed' })
+      return
+    }
+    if (surveyCompletions.has(`${current.user.id}:${survey.id}`)) {
+      send(response, 409, { error: 'SURVEY_ALREADY_DONE', message: 'this account already answered it' })
+      return
+    }
+    // `validAnswers` returns the map when the shape is right; an empty map is a
+    // valid answer only for a survey with no required questions.
+    if (validAnswers(survey, body?.answers) === null) {
+      send(response, 400, { error: 'SURVEY_INVALID_ANSWERS', message: 'some answers were not accepted' })
+      return
+    }
+    surveyCompletions.set(`${current.user.id}:${survey.id}`, {
+      completedAt: Date.now(),
+      answers: body?.answers ?? [],
+    })
+    paySurvey(current.user, survey)
+    // The relay answers with the profile the reward was just applied to.
+    send(response, 200, {
+      user: publicUser(current.user, current.session.deviceId),
+      rewardDays: survey.rewardDays,
+    })
+    return
+  }
+
   send(response, 404, { error: 'NOT_FOUND', message: 'no such account endpoint' })
+})
+
+/**
+ * The announcement socket.
+ *
+ * The relay serves it on the relay *origin* (`/app/v1/announcements`), not under
+ * `/account/v1`, because a WebSocket upgrade cannot be proxied by the account API's
+ * forwarder. Auth is the session token in `x-mizar-session`; the query fallback
+ * exists only so `--selftest` and curl can drive it without custom headers.
+ *
+ * A fresh connection gets a `snapshot` of everything live; `POST /mock/announcements`
+ * then pushes each new one as an `announcement` frame.
+ */
+server.on('upgrade', (request, socket) => {
+  const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`)
+  if (url.pathname !== '/app/v1/announcements') {
+    rejectUpgrade(socket, 404)
+    return
+  }
+  const headerToken = request.headers['x-mizar-session']
+  const token = (typeof headerToken === 'string' && headerToken !== '' ? headerToken : '')
+    || (url.searchParams.get('token') ?? '')
+  const session = sessions.get(token)
+  if (session === undefined || session.revoked) {
+    rejectUpgrade(socket, 401)
+    return
+  }
+  const key = request.headers['sec-websocket-key']
+  if (typeof key !== 'string' || request.headers['sec-websocket-version'] !== '13') {
+    rejectUpgrade(socket, 400)
+    return
+  }
+  const accept = createHash('sha1').update(`${key}${WS_GUID}`, 'utf8').digest('base64')
+  socket.write(
+    'HTTP/1.1 101 Switching Protocols\r\n'
+    + 'Upgrade: websocket\r\n'
+    + 'Connection: Upgrade\r\n'
+    + `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
+  )
+  console.log('WS /app/v1/announcements connected')
+  socket.write(wsFrame(0x1, JSON.stringify({ type: 'snapshot', announcements: liveAnnouncements() })))
+  const client = { socket, token, userId: session.userId, buffer: Buffer.alloc(0) }
+  announcementSockets.add(client)
+  const forget = () => {
+    announcementSockets.delete(client)
+    console.log('WS /app/v1/announcements closed')
+  }
+  socket.on('data', (chunk) => {
+    for (const frame of parseClientFrames(client, chunk)) {
+      if (frame.opcode === 0x8) {
+        socket.end()
+        return
+      }
+      // Ping: answer with the same payload. Anything else (text/binary) is not part
+      // of this protocol and is ignored, as the client ignores unknown frames.
+      if (frame.opcode === 0x9) socket.write(wsFrame(0xA, frame.payload))
+    }
+  })
+  socket.on('close', forget)
+  socket.on('error', forget)
 })
 
 function seed() {
@@ -605,8 +1060,191 @@ function seed() {
   void user
 }
 
+// ── self test ──────────────────────────────────────────────────────────────
+
+/** One JSON request against the mock, with the token when there is one. */
+async function json(url, { method = 'GET', token = null, body } = {}) {
+  const headers = {}
+  if (token !== null) headers.authorization = `Bearer ${token}`
+  if (body !== undefined) headers['content-type'] = 'application/json'
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  const parsed = await response.json().catch(() => null)
+  return { status: response.status, body: parsed }
+}
+
+/** Resolve with the next WebSocket message, or reject after `timeoutMs`. */
+function nextSocketMessage(socket, timeoutMs = 4_000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      socket.removeEventListener('message', onMessage)
+      reject(new Error('timed out waiting for a socket frame'))
+    }, timeoutMs)
+    function onMessage(event) {
+      clearTimeout(timer)
+      socket.removeEventListener('message', onMessage)
+      resolve(JSON.parse(String(event.data)))
+    }
+    socket.addEventListener('message', onMessage)
+  })
+}
+
+/**
+ * Walk the whole 0.9.9 operator channel against this very process: login, the
+ * surveys list, a submitted reward, the already-done refusal, the polling twin and
+ * the socket's snapshot + created frames.
+ *
+ *     node scripts/account-mock.mjs --selftest
+ */
+async function selftest() {
+  const failures = []
+  const check = (name, ok, detail = '') => {
+    console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok || detail === '' ? '' : ` — ${detail}`}`)
+    if (!ok) failures.push(name)
+  }
+  await new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', resolve)
+  })
+  const port = server.address().port
+  const origin = `http://127.0.0.1:${port}`
+  const account = `${origin}/account/v1`
+  const device = {
+    id: 'selftest-device',
+    name: 'Self test',
+    model: 'node',
+    platform: 'android',
+    appVersion: '0.0.0',
+  }
+  let socket = null
+  try {
+    const login = await json(`${account}/login`, {
+      method: 'POST',
+      body: { identifier: 'shirazu', password: 'mizar-test-password', device },
+    })
+    check('login', login.status === 200 && typeof login.body?.token === 'string')
+    const token = login.body?.token
+    if (typeof token !== 'string') throw new Error('no session token')
+
+    const me = await json(`${account}/me`, { token })
+    check('me', me.status === 200 && me.body?.user?.username === 'shirazu')
+
+    const list = await json(`${account}/surveys`, { token })
+    const surveys = list.body?.surveys ?? []
+    check('surveys list', list.status === 200 && surveys.length === 3)
+    const survey = surveys.find((candidate) => candidate.id === 'survey-turn-cycle')
+    check(
+      'three question types',
+      survey !== undefined && survey.questions.map((question) => question.type).join(',') === 'single,multi,text',
+    )
+    check('completion starts false', survey?.completed === false)
+
+    const invalid = await json(`${account}/surveys/submit`, {
+      method: 'POST',
+      token,
+      body: { surveyId: 'survey-turn-cycle', answers: [{ questionId: 'q1', value: { nested: true } }] },
+    })
+    check('invalid answers rejected', invalid.status === 400 && invalid.body?.error === 'SURVEY_INVALID_ANSWERS')
+
+    const missingRequired = await json(`${account}/surveys/submit`, {
+      method: 'POST',
+      token,
+      body: { surveyId: 'survey-turn-cycle', answers: [{ questionId: 'q1', value: 'o2' }] },
+    })
+    check('required answers enforced', missingRequired.status === 400)
+
+    const answers = [
+      { questionId: 'q1', value: 'o2' },
+      { questionId: 'q2', value: ['m1', 'm2'] },
+      { questionId: 'q3', value: 'selftest' },
+    ]
+    const submit = await json(`${account}/surveys/submit`, {
+      method: 'POST',
+      token,
+      body: { surveyId: 'survey-turn-cycle', answers },
+    })
+    check(
+      'submit pays the reward',
+      submit.status === 200 && submit.body?.rewardDays === 7 && submit.body?.user?.plan === 'paid',
+    )
+
+    const again = await json(`${account}/surveys/submit`, {
+      method: 'POST',
+      token,
+      body: { surveyId: 'survey-turn-cycle', answers },
+    })
+    check('one answer per account', again.status === 409 && again.body?.error === 'SURVEY_ALREADY_DONE')
+
+    const unknown = await json(`${account}/surveys/submit`, {
+      method: 'POST',
+      token,
+      body: { surveyId: 'no-such-survey', answers: [] },
+    })
+    check('unknown survey', unknown.status === 404 && unknown.body?.error === 'SURVEY_NOT_FOUND')
+
+    const after = await json(`${account}/surveys`, { token })
+    check(
+      'completion is remembered',
+      after.body?.surveys?.find((candidate) => candidate.id === 'survey-turn-cycle')?.completed === true,
+    )
+    check(
+      'closed survey is still listed',
+      after.body?.surveys?.find((candidate) => candidate.id === 'survey-archive')?.active === false,
+    )
+
+    const poll = await json(`${account}/announcements`, { token })
+    check('polling announcements', poll.status === 200 && (poll.body?.announcements?.length ?? 0) >= 2)
+
+    const unauthorised = await json(`${account}/surveys`)
+    check('surveys need a session', unauthorised.status === 401)
+
+    // The socket. Node's built-in WebSocket cannot set custom headers here, which is
+    // why the mock accepts the token as a query parameter for tests.
+    socket = new WebSocket(`ws://127.0.0.1:${port}/app/v1/announcements?token=${encodeURIComponent(token)}`)
+    const snapshot = await nextSocketMessage(socket)
+    check('socket snapshot', snapshot.type === 'snapshot' && snapshot.announcements.length >= 2)
+
+    const createdFrame = nextSocketMessage(socket)
+    const created = await json(`${origin}/mock/announcements`, {
+      method: 'POST',
+      body: {
+        title: 'Self test banner',
+        body: 'Created by --selftest.',
+        tone: 'notice',
+        button: { label: 'Open about', target: 'about' },
+      },
+    })
+    check('mock create announcement', created.status === 200 && created.body?.announcement?.id !== undefined)
+    const pushed = await createdFrame
+    check(
+      'socket created frame',
+      pushed.type === 'announcement' && pushed.announcement?.title === 'Self test banner',
+    )
+  } catch (error) {
+    console.error(`FAIL selftest threw — ${error instanceof Error ? error.message : error}`)
+    failures.push('exception')
+  } finally {
+    if (socket !== null) socket.close()
+    await new Promise((resolve) => server.close(resolve))
+  }
+  if (failures.length > 0) {
+    console.error(`\n${failures.length} check(s) failed: ${failures.join(', ')}`)
+    process.exitCode = 1
+    return
+  }
+  console.log('\nall checks passed')
+}
+
 seed()
-server.listen(PORT, HOST, () => {
-  console.log(`account mock on http://${HOST}:${PORT}  (emulator: ${PUBLIC})`)
-  console.log('account: shirazu / mizar-test-password   invite: MOCK-INVITE')
-})
+if (args.includes('--selftest')) {
+  await selftest()
+} else {
+  server.listen(PORT, HOST, () => {
+    console.log(`account mock on http://${HOST}:${PORT}  (emulator: ${PUBLIC})`)
+    console.log('account: shirazu / mizar-test-password   invite: MOCK-INVITE')
+    console.log(`announcements: ws://${HOST}:${PORT}/app/v1/announcements (POST /mock/announcements to push one)`)
+  })
+}

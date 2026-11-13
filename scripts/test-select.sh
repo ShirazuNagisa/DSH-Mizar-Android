@@ -71,12 +71,23 @@ while IFS= read -r file; do
         app/src/main/res/*|app/src/main/AndroidManifest.xml)
             add ":app:assembleDebug" ;;
         # UI code: unit tests for the pure parts, instrumentation for the rest.
-        app/src/main/kotlin/*/ui/*|app/src/androidTest/*)
+        app/src/main/kotlin/*/ui/*)
             add ":app:testDebugUnitTest"
+            add ":app:connectedDebugAndroidTest" ;;
+        # The device-only suite, its goldens and its mock-host fixtures. A golden is
+        # only ever verified by running the suite on a device: comparing PNGs is not
+        # something a build or a JVM test can do, so the expensive layer is the
+        # correct one here. The mock host lives in test/mock-host/ and its fixtures
+        # in `app/src/androidTest/assets/mock-host/`, and `MockHostFixturesTest`
+        # decodes both, which is why a fixture change maps to the same run.
+        app/src/androidTest/*)
             add ":app:connectedDebugAndroidTest" ;;
         app/src/main/*)
             add ":app:testDebugUnitTest"
             add ":app:assembleDebug" ;;
+        # Test tooling (`test/mock-host/`): run by hand or by CI, never by a build.
+        # A change here can only be verified by pointing a device at the host.
+        test/*) ;;
         # Docs, scripts and screenshots cannot break the app.
         *) ;;
     esac
