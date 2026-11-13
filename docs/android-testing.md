@@ -18,7 +18,7 @@ and never signs in against a real service, so it needs no pairing and no network
 |---|---|---|---|
 | Protocol | `:mizarkit:test` | frames, pairing, projection, the log buffer | ~10 s |
 | App logic | `:app:testDebugUnitTest` | pure app-side code (the Markdown reveal) | ~20 s |
-| UI | `:app:connectedDebugAndroidTest` | Compose behaviour and the visual goldens, only on a device | 28 s for the eight goldens, 165 s for the whole suite (API 36, 2026-11-13), plus the emulator boot |
+| UI | `:app:connectedDebugAndroidTest` | Compose behaviour and the visual goldens, only on a device | ~30-80 s for the nine goldens, 170-340 s for the whole suite (API 36, 2026-11-13; the wide end is a just-rebooted emulator), plus the emulator boot |
 | Mock host | `test/mock-host/mock-host.mjs` | a drivable Mizar v1 host for the streaming/lightbox surfaces | manual, seconds |
 | Live host | `:mizarkit:hostCheck` | the client against a real plugin listener | manual |
 
@@ -64,7 +64,8 @@ CI while passing four times locally. Two rules that go with it:
 `:mizarkit` is a plain Kotlin/JVM module compiled by the JDK 17 toolchain, and
 **Android lint never looks at a JVM module**. `URLDecoder.decode(String, Charset)`
 is a Java 10 addition that Android only gained in API 33, so the compiler was
-happy, all 360 kit tests were happy, and every phone below Android 13 threw
+happy, all 360 kit tests were happy (360 at the 0.10.5 point in time; 363 after 0.10.6 and 457 after
+the 2026-11 parity work), and every phone below Android 13 threw
 `NoSuchMethodError` the moment a pairing link was decoded. The API 26 smoke test
 found it; nothing in the build could have.
 
@@ -173,10 +174,11 @@ bar, the keyboard and the notification shade are checked by hand with
 |---|---|
 | `answer-card.png` | one assistant answer (the original baseline, kept) |
 | `home.png` | home: mark, host name, workspace and model chips, composer |
-| `session.png` | session page: app bar, a finished turn with its tool step and delivered file, composer, context figures |
+| `session.png` | session page: app bar, a finished turn (folded tool step, delivered file, branch action), composer, context figures |
 | `approval-dock.png` | the approval deck: card behind the front one, position marker, Next pill |
 | `sidebar.png` | sidebar: header, search, new-session key, both workspaces expanded, connection footer |
 | `settings.png` | the settings directory, at the popover width (272 dp) |
+| `context-sheet.png` | the composer's context sheet: the figures, the em dashes for what the host did not send, and the "Compact the context" row (a popover is its own window, so its content is recorded on its own) |
 | `account-signed-out.png` | the account form, signed out |
 | `account-signed-in.png` | the account profile, devices and invite section, signed in |
 
@@ -226,7 +228,7 @@ Only the visual class, while iterating on a page:
   -Pandroid.testInstrumentationRunnerArguments.class=me.shirazu.dshmizar.snapshot.VisualSnapshotTest
 ```
 
-Measured on `mizar36` (API 36), 2026-11-13: the eight goldens take **27.6 s**, the
+Measured on `mizar36` (API 36), 2026-11-13: the nine goldens take **~30-80 s** (warm emulator vs just rebooted), the
 whole 55-case suite **165 s** of test execution (3 min wall including an incremental
 build). `MockHostFixturesTest` is 0.2 s of that: it decodes fixtures, it does not
 draw.
@@ -275,7 +277,7 @@ git diff --stat app/src/androidTest/assets/snapshots
 
 `-e class` accepts a comma-separated list; each class is a shard the runner can
 take alone, which is what makes recording one page cheap. A record run takes about
-18 s for all eight.
+8-80 s for all nine, depending on the emulator's warmth and whether the APK has to be rebuilt first.
 
 `-e snapshot record` is the only accepted value that changes behaviour: with any
 other value (or no argument, which is what CI and a normal run have) the suite
@@ -447,3 +449,5 @@ false`): the typewriter tests depend on the reveal not jumping to its last frame
 The snapshot harness does not rely on the device-wide setting for its own
 determinism -- `SnapshotScene` forces Reduce Motion inside the composition it
 renders.
+
+

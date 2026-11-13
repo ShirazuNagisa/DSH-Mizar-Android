@@ -94,8 +94,8 @@ jobs:
         run: |
           count=$(find app/src/androidTest/assets/snapshots -name '*.png' | wc -l)
           echo "visual goldens: $count"
-          if [ "$count" -lt 8 ]; then
-            echo "expected at least 8 golden PNGs in app/src/androidTest/assets/snapshots" >&2
+          if [ "$count" -lt 9 ]; then
+            echo "expected at least 9 golden PNGs in app/src/androidTest/assets/snapshots" >&2
             exit 1
           fi
 
@@ -293,3 +293,4 @@ jobs:
           name: android-instrumentation-reports
           if-no-files-found: ignore
           path: app/build/outputs/androidTest-artifacts/**
+

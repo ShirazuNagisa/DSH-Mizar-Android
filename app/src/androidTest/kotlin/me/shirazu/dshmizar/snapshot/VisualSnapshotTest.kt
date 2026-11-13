@@ -2,6 +2,7 @@ package me.shirazu.dshmizar.snapshot
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
@@ -235,7 +236,10 @@ class VisualSnapshotTest {
     fun theContextSheetMatchesItsGolden() {
         rule.setContent {
             SnapshotCrop(width = PopoverSize.COMPACT_WIDTH) {
-                Box(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
+                // A Column, because `ContextContent` is a series of rows meant to go
+                // inside the popover's column -- composed straight into a Box they
+                // would stack on top of each other and the golden would show the bug.
+                Column(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
                     ContextContent(
                         context = SnapshotFixtures.stats().context,
                         onCompact = {},
