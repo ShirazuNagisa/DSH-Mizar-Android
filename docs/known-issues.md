@@ -111,6 +111,12 @@ group with no end and no steps, which `isPending` reports as still running for e
 
 That ghost is what keeps the lock-screen card up (KI-5) and delays the completion notification.
 
+**Fixed in code** (2026-11): `Conversation` now dedupes prompts by the prompt record's own id across
+groups (`Conversation.kt` prompt-merge rule, covered by `ConversationTest`), so the turn-less copy
+is merged into its turn instead of being kept as `unopened-head`. The phone-level reproduction
+(0.10.6) has not been repeated on a real session yet; treat that as a verification item, not an
+open defect.
+
 Next step: the `applyPage` note already prints the shape (`t=<turn> ... p=<prompts>`), so a
 reconnect with that line in logcat names the two ids directly. The fix belongs where the groups are
 built or merged — dedupe by the prompt record's own id across groups, not by the group's synthetic

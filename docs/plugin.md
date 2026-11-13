@@ -2,7 +2,8 @@
 
 `plugin/` 是一份 `dsh-mizar` 的镜像：`DSH-Mizar` 仓库某个提交的完整源码树，加上 Android 需要的少量增量。
 
-当前基准：**`02d4cc5`**（2026-10-19，上游此时已把插件改为 GPL-3.0-only，镜像随之）。
+当前基准：**`0a69770`**（2026-10-23，`Mirror plugin 0.8.9`）加 `b148be8`（2026-10-24，page-detail patch）；
+镜像 `plugin/package.json` 是 `0.8.9`。生产宿主早已换成 `AGI Mizar` 桌面端，这份镜像只供本地开发宿主。
 上游再动之后跑一次 `scripts/sync-plugin.mjs`，把这一行的哈希更新成新的 HEAD。
 
 ## 为什么不直接改 DSH-Mizar

@@ -17,7 +17,7 @@ apk=app/build/outputs/apk/release/app-release.apk
 [ -f "$apk" ] || { echo "no release apk produced" >&2; exit 1; }
 
 if ! apksigner verify --print-certs "$apk" >/dev/null 2>&1; then
-  if ! "${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}/build-tools/35.0.0/apksigner" verify "$apk" >/dev/null 2>&1; then
+  if ! "${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}/build-tools/36.0.0/apksigner" verify "$apk" >/dev/null 2>&1; then
     echo "the release apk is not signed -- set keystore.properties or MIZAR_* env" >&2
     exit 1
   fi

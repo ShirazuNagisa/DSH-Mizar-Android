@@ -10,7 +10,8 @@ AAPT: …\app\build\intermediates\stable_resource_ids_file\debug\processDebugRes
       error: failed to open: 无效的句柄 (13)
 ```
 
-同一份源码、同一套版本（AGP 8.7.3 / Kotlin 2.1.0 / Gradle 8.11.1 / buildTools 35.0.0）换到干净的
+同一份源码、同一套版本（AGP 8.7.3 / Kotlin 2.1.0 / Gradle 8.11.1 / buildTools **35.0.0**，这是当时记录；
+现行工具链已是 buildTools 36.0.0）换到干净的
 缓存目录后立刻构建成功（41.33 MB）。已排除：项目配置差异、路径与 ACL、残留 build 产物、
 Gradle 构建缓存开关、守护进程、`TEMP`/`TMP`、预建目标目录/文件、aapt2 产物缓存、
 AGP 版本降级（8.6.1 同样失败）。**结论：共享缓存里有坏条目，让 AAPT2 拿到无效句柄。**

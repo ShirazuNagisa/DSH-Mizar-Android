@@ -184,6 +184,9 @@ Android 16 的 Live Updates 是 iOS Live Activity 的对位：`push/LiveTurn.kt`
 
 ## 交付文件预览（0.10.5 起）
 
+> 前置条件：`file.read` 由 **AGI Mizar 宿主**提供；仓库里 `plugin/` 的 0.8.9 镜像没有该方法
+> （也没有 `mizarDeliverables`），在旧镜像宿主上点开卡片会一直失败。手机端代码本身不区分宿主。
+
 模型用 `present` 交付的文件，宿主在 `turn/end` 上以 `mizarDeliverables` 带下来（它从该轮的工具调用里
 读出来，因为摘要页本来不带工具流量）。手机在回答下面画成卡片，点开走 `file.read` 取字节：
 
