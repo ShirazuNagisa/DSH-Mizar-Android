@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The local agent's picker row and settings summary. Kept in its own file (and the
+  zh twin) so the common strings.xml, which other screens own, is not touched.
+-->
+<resources>
+    <string name="localagent_switch_title">Local Agent</string>
+    <string name="localagent_switch_experimental">experimental</string>
+    <string name="localagent_switch_title_format">%1$s (%2$s)</string>
+    <string name="localagent_switch_detail">Runs on this phone — no computer needed</string>
+    <string name="localagent_switch_unconfigured">No model configured yet</string>
+    <string name="localagent_switch_unavailable">The on-device kernel is unavailable</string>
+</resources>

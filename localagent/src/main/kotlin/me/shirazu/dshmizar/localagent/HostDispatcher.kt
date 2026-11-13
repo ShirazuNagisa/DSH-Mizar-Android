@@ -13,16 +13,20 @@ package me.shirazu.dshmizar.localagent
  * `null` value, an array and an error would otherwise be indistinguishable.
  * `assets/localagent-host.js` is the only caller and turns the envelope back
  * into the kernel's callback API.
+ *
+ * [route] is where the answer is decided. The engine owns the interesting cases
+ * (a protocol frame the kernel pushed, a streaming HTTP request, the event queue);
+ * everything else is the file-system/KV sandbox.
  */
-class HostDispatcher internal constructor(private val sandbox: MizarHostSandbox) {
+class HostDispatcher internal constructor(private val route: (String, String, String) -> String) {
     /**
      * Dispatch one host operation.
      *
      * Ops mirror `PlatformHost` in `iOS/LocalKernel/kernel/src/host/host.ts`:
-     * `fs.readText`, `fs.writeText`, `fs.appendText`, `fs.deletePath`,
-     * `fs.listDir`, `fs.isDirectory`, `fs.makeDir`, `kv.get`, `kv.set`,
-     * `kv.delete`, `log`, `uuid`, `now`, `frame`.
+     * `fs.*`, `kv.*`, `http.*`, `log`, `uuid`, `now`, plus the two engine-owned
+     * ones — `frame` (a protocol frame for a connection) and `events.poll` (host
+     * work finished off the JS thread).
      */
     fun call(op: String, first: String?, second: String?): String =
-        sandbox.call(op, first.orEmpty(), second.orEmpty())
+        route(op, first.orEmpty(), second.orEmpty())
 }

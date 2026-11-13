@@ -66,6 +66,20 @@ dependencies {
     // libraries, so building the app never needs the NDK. See README.md
     // §Engine for why the published `quickjs-android` AARs could not be used.
 
+    // The local link speaks the kit's protocol: `WebSocketTransport` is what
+    // `LocalKernelTransport` implements, and `MizarConnection`, its configuration
+    // and the event DTOs are the whole client side. `api` on purpose — the app
+    // wires those kit types to this module's host, so they have to be visible
+    // through it.
+    api(project(":mizarkit"))
+
+    // Streaming host HTTP (`host.http`): the kernel's SSE parser consumes lines,
+    // and OkHttp is the client the kit already ships (pairing, relay, sockets).
+    implementation(libs.okhttp)
+
+    testImplementation(libs.junit4)
+    testImplementation(libs.kotlinx.coroutines.test)
+
     androidTestImplementation(libs.junit4)
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.androidx.test.runner)

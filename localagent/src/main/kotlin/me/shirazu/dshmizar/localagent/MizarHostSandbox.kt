@@ -34,7 +34,6 @@ internal class MizarHostSandbox(
     private val root: File,
     private val kvStore: KernelKeyValueStore,
     private val listener: LocalKernelEngine.Listener,
-    private val onFrame: (String) -> Unit,
 ) {
 
     init {
@@ -53,6 +52,9 @@ internal class MizarHostSandbox(
      * `assets/localagent-host.js` is the only caller, and keeping the names
      * flat (`fs.readText`) is what lets the JNI bridge stay a single generic
      * callback instead of one native method per host function.
+     *
+     * The engine intercepts `frame`, `http.*` and `events.poll` before this
+     * router sees them; what remains is exactly the file-system/KV sandbox.
      */
     fun call(op: String, first: String, second: String): String = when (op) {
         "fs.readText" -> fsReadText(first)
@@ -72,21 +74,15 @@ internal class MizarHostSandbox(
 
         "uuid" -> ok(uuid())
         "now" -> ok(now())
-        "frame" -> {
-            onFrame(first)
-            ok()
-        }
 
         else -> fail("the host bridge does not know the operation \"$op\"")
     }
 
     // -- Envelopes ------------------------------------------------------------
 
-    private fun ok(value: Any? = null): String =
-        JSONObject().put("ok", true).put("value", value ?: JSONObject.NULL).toString()
+    private fun ok(value: Any? = null): String = Envelopes.ok(value)
 
-    private fun fail(message: String): String =
-        JSONObject().put("ok", false).put("error", message).toString()
+    private fun fail(message: String): String = Envelopes.fail(message)
 
     private fun describe(error: Throwable): String = when (val message = error.message) {
         null -> error.javaClass.simpleName

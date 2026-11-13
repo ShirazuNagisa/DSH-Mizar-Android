@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="localagent_switch_title">本地 Agent</string>
+    <string name="localagent_switch_experimental">实验</string>
+    <string name="localagent_switch_title_format">%1$s（%2$s）</string>
+    <string name="localagent_switch_detail">在这台手机上运行，不需要电脑</string>
+    <string name="localagent_switch_unconfigured">尚未配置模型</string>
+    <string name="localagent_switch_unavailable">本机内核不可用</string>
+</resources>

@@ -22,14 +22,22 @@ localagent/
   src/main/cpp/Android.mk / Application.mk
   src/main/jniLibs/{x86_64,arm64-v8a}/libmizarquickjs.so   prebuilt（16 KB 页对齐）
   src/main/kotlin/me/shirazu/dshmizar/localagent/
-    LocalKernelEngine.kt            引擎线程、boot、连接、kernel.* 调用
+    LocalKernelEngine.kt            引擎线程、boot、多条连接、host op 路由、kernel.* 调用
+    LocalKernelLink.kt              引擎给 transport 的窄接口（+ 连接的帧通道）
+    LocalKernelTransport.kt         进程内 WebSocketTransport：把内核当宿主 dial
+    LocalAgentHost.kt               引擎生命周期 / transport 工厂 / 配置 / 状态 / 清数据
+    LocalInteractions.kt            审批/提问的自动回答（AUTO_DENY / AUTO_ALLOW）
+    HostHttpTransport.kt            host.http：OkHttp 流式（行粒度 chunk/done/error/abort）
+    HostEventQueue.kt               引擎线程外完成的 host 事件（http chunk）队列
     QuickJsNative.kt                JNI 方法声明（4 个）
     HostDispatcher.kt               JS → Kotlin 的唯一方法 call(op, first, second)
-    MizarHostSandbox.kt             沙箱 fs、KV、日志、uuid/now、帧落地、op 路由
+    MizarHostSandbox.kt             沙箱 fs、KV、日志、uuid/now
+    Envelopes.kt                    {ok,value} / {ok,error} 信封
     KernelKeyValueStore.kt          与 iOS 同名接口；PoC 用 SharedPreferences
     KernelProtocol.kt               client frame：hello / 请求 / 应答解析
-  src/androidTest/...               设备上的 PoC（断言 + 证据 + 截图）
-  evidence/                         本轮实测证据（png / logcat / json / txt）
+  src/test/...                      JVM：transport 帧规则、交互回答 payload
+  src/androidTest/...               设备：PoC 自测 + 真 MizarConnection 一轮 turn
+  evidence/                         上一轮 PoC 实测证据（png / logcat / json / txt）
 ```
 
 ## 引擎
@@ -161,16 +169,58 @@ adb -s emulator-5558 logcat -d -s LocalAgentPoC:V LocalAgentJni:V
 `PoCResultsActivity` 上截图。测试包名固定是
 `me.shirazu.dshmizar.localagent.test`（library 模块的自测 APK）。
 
-## 已知限制（PoC 阶段有意为之）
+## 接入 App：传输适配（本轮新增）
 
-- **http 是占位**：`host.http.request` 直接 `onError`。`kernel.*` 不碰它，但
-  `openai-compat` 引擎的回合会碰；接真模型前必须换成 OkHttp 流式实现。
-- **fs/kv 是同步阻塞**：在内核线程上直接做 IO，一次大文件读写会卡住定时器与帧
-  投递。正式实现要按 iOS 的做法把慢操作挪到别的线程、结果再回引擎线程。
-- **只有前台可用**：与 iOS 相同，进程被冻结/杀死后内核停止；Android 侧进程存活
-  由 app 的前台服务决定（现有 `foregroundServiceType` 机制），不归本模块管。
-- **凭据存储**：PoC 的 `SharedPreferencesKernelKeyValueStore` 是明文。`apiKey.*`
-  必须换成 `EncryptedSharedPreferences`（app 已依赖 `androidx.security-crypto`），
-  通过 `KernelKeyValueStore` 注入即可，不用改引擎代码。
-- **16 KB 真机未实测**：`.so` 已按 16 KB 对齐构建，但目前只在 4 KB 页的
-  `mizar36` AVD 上加载过；上架前需要 16 KB AVD/真机复核。
+App 侧不需要新协议，也不需要改 `mizarkit`：`MizarConnection` 的 transport 是注入了工厂的，
+本地模式只是换一个 `WebSocketTransport`，hello/welcome、关联请求、事件流、重连逻辑全部复用。
+设计文档见 `Android/docs/local-agent-link.md`。
+接线示意（Lead 在 `AppViewModel` 里接，不在本模块）：
+
+```kotlin
+private val localAgent = LocalAgentHost(getApplication(), BuildConfig.VERSION_NAME, Build.MODEL)
+
+private suspend fun connectLocal() {
+    stopWatchers()
+    ownership.current?.disconnect()
+    ownership.release()
+
+    val socket = MizarConnection(
+        configuration = localAgent.configuration(),       // authority = "local:19390"，永不 dial
+        makeTransport = { localAgent.openTransport() },   // 进程内帧通道
+    )
+    val welcome = socket.connect()                        // hello → welcome，同一套帧
+    // 之后和远程完全一样：adoptConnection/becomeLive/startWatchers/refreshSessions。
+    // 本地用一个合成 PairedHost 占位（hostId/hostName/deviceId 都来自 welcome）。
+    LocalInteractions.launch(viewModelScope, socket, LocalInteractionPolicy.AUTO_DENY)
+}
+```
+
+- 状态：`suspend fun LocalAgentHost.status(): LocalAgentStatus`（available / configured /
+  storedBytes / provider / model / bootError）；`toSettingsLocalAgent()` 转成设置页已有的
+  `SettingsLocalAgent`，onboarding 的 `localAgentAvailable/localAgentConfigured` 直接填。
+- 入口：`ui/localagent/LocalAgentEntry.kt` 的 `LocalAgentSwitcherRow(status, current, onPick)`，
+  挂在 `AgentSwitcher` popover 末尾即可（不改 `AgentCatalog`：本地是另一个宿主，不是第五个 agent）。
+- 退出/清理：`localAgent.close()`、`localAgent.clearData()`（只删沙箱，不动模型配置和 KV）。
+- 审批：本轮用 `LocalInteractions` 自动回答（默认拒绝）；接现有审批 dock 时不要启动它即可。
+
+## 已知限制（本轮有意为之）
+
+- **轮次不是事件驱动**：内核只推交互一族事件（`interactions.changed`/`approval.*`/`question.*`），
+  没有桌面的状态通道和 `turn.settled`；运行中/结束靠 App 现有 `session.messages` 轮询，
+  过程行与结束提示会有最多一个 poll 周期的延迟。
+- **审批/提问自动回答**：没有卡片；`AUTO_DENY` 拒绝所有审批，提问选第一个选项。真实审批 dock
+  接线后停用 responder 即可。
+- **桌面独有方法返回 NOT_IMPLEMENTED**（kit 回退 null）：`usage.overview`、`session.sync`、
+  `session.stream`、`file.stat`/`file.read`、`relay.set`；因此本地模式下图片、交付文件预览、
+  用量页、附件按现有 UI 规则隐藏/提示。附件上传内核本身未实现（`upload.*` NOT_IMPLEMENTED）。
+- **http 本轮已实现**（OkHttp 流式，行粒度 chunk / done / error / abort）：模型流式回答可用；
+  但 `host.http` 的网络错误只会上报给内核，内核以 `turn/end error` 收尾。
+- **fs/kv 仍是同步阻塞**：在内核线程上直接做 IO，大文件读写会卡住定时器与帧投递。
+  下一步按 iOS 的做法异步化（后台执行 + 回引擎线程回调）。
+- **只有前台可用**：与 iOS 相同；进程被冻结/杀死后内核停止，下次 boot 由内核补 `turn/end`。
+- **PoC 默认连接常驻**：boot 为了自测保留一条默认连接（`call()`/状态读取用它），所以 App 的
+  transport 断开时内核不会因为“最后一个客户端走了”而 fail-closed 结算 pending 审批；进程或引擎
+  销毁时无影响。正式接线可把默认连接改成按需（`call()` 首次使用时再 handshake）。
+- **凭据存储**：`SharedPreferencesKernelKeyValueStore` 是明文；正式接线注入
+  `EncryptedSharedPreferences`（app 已依赖 `androidx.security-crypto`）。
+- **16 KB 真机未实测**：`.so` 已按 16 KB 对齐构建，目前只在 4 KB 页的 `mizar36` AVD 上加载过。
