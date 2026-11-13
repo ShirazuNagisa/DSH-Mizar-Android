@@ -18,7 +18,7 @@ and never signs in against a real service, so it needs no pairing and no network
 |---|---|---|---|
 | Protocol | `:mizarkit:test` | frames, pairing, projection, the log buffer | ~10 s |
 | App logic | `:app:testDebugUnitTest` | pure app-side code (the Markdown reveal) | ~20 s |
-| UI | `:app:connectedDebugAndroidTest` | Compose behaviour and the visual goldens, only on a device | ~30-80 s for the nine goldens, 170-340 s for the whole suite (API 36, 2026-11-13; the wide end is a just-rebooted emulator), plus the emulator boot |
+| UI | `:app:connectedDebugAndroidTest` | Compose behaviour and the visual goldens, only on a device | ~30-80 s for the ten goldens, 170-340 s for the whole suite (API 36, 2026-11-13; the wide end is a just-rebooted emulator), plus the emulator boot |
 | Mock host | `test/mock-host/mock-host.mjs` | a drivable Mizar v1 host for the streaming/lightbox surfaces | manual, seconds |
 | Live host | `:mizarkit:hostCheck` | the client against a real plugin listener | manual |
 
@@ -181,6 +181,7 @@ bar, the keyboard and the notification shade are checked by hand with
 | `context-sheet.png` | the composer's context sheet: the figures, the em dashes for what the host did not send, and the "Compact the context" row (a popover is its own window, so its content is recorded on its own) |
 | `account-signed-out.png` | the account form, signed out |
 | `account-signed-in.png` | the account profile, devices and invite section, signed in |
+| `account-computers.png` | the account's computers: one online with its Open action, one offline with Open disabled |
 
 The home page's greeting is picked from the current hour ("Good morning" ..
 "Good night"), so the band that line sits in is **masked**: the test finds the
@@ -228,7 +229,7 @@ Only the visual class, while iterating on a page:
   -Pandroid.testInstrumentationRunnerArguments.class=me.shirazu.dshmizar.snapshot.VisualSnapshotTest
 ```
 
-Measured on `mizar36` (API 36), 2026-11-13: the nine goldens take **~30-80 s** (warm emulator vs just rebooted), the
+Measured on `mizar36` (API 36), 2026-11-13: the ten goldens take **~30-80 s** (warm emulator vs just rebooted), the
 whole 55-case suite **165 s** of test execution (3 min wall including an incremental
 build). `MockHostFixturesTest` is 0.2 s of that: it decodes fixtures, it does not
 draw.
@@ -277,7 +278,7 @@ git diff --stat app/src/androidTest/assets/snapshots
 
 `-e class` accepts a comma-separated list; each class is a shard the runner can
 take alone, which is what makes recording one page cheap. A record run takes about
-8-80 s for all nine, depending on the emulator's warmth and whether the APK has to be rebuilt first.
+8-80 s for all ten, depending on the emulator's warmth and whether the APK has to be rebuilt first.
 
 `-e snapshot record` is the only accepted value that changes behaviour: with any
 other value (or no argument, which is what CI and a normal run have) the suite

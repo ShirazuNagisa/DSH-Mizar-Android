@@ -323,4 +323,22 @@ class VisualSnapshotTest {
         }
         rule.captureSnapshot("account-signed-in")
     }
+
+    /**
+     * The account's computers: one online with an Open action, one offline and
+     * disabled. The section is the phone-side end of account-based discovery.
+     */
+    @Test
+    fun theAccountComputersMatchTheirGolden() {
+        rule.setContent {
+            SnapshotPage {
+                AccountScreen(
+                    model = SnapshotFixtures.model,
+                    account = SnapshotFixtures.accountWithComputers(),
+                    onClose = {},
+                )
+            }
+        }
+        rule.captureSnapshot("account-computers")
+    }
 }

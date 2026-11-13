@@ -95,7 +95,7 @@ jobs:
           count=$(find app/src/androidTest/assets/snapshots -name '*.png' | wc -l)
           echo "visual goldens: $count"
           if [ "$count" -lt 9 ]; then
-            echo "expected at least 9 golden PNGs in app/src/androidTest/assets/snapshots" >&2
+            echo "expected at least 10 golden PNGs in app/src/androidTest/assets/snapshots" >&2
             exit 1
           fi
 

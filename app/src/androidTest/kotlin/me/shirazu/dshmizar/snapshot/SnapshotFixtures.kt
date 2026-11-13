@@ -35,6 +35,7 @@ import me.shirazu.mizar.kit.Throughput
 import me.shirazu.mizar.kit.TokenUsage
 import me.shirazu.mizar.kit.WorkspaceGroup
 import me.shirazu.mizar.kit.WorkspaceRow
+import me.shirazu.mizar.kit.account.AccountDesktop
 import me.shirazu.mizar.kit.account.AccountDevice
 import me.shirazu.mizar.kit.account.AccountSession
 import me.shirazu.mizar.kit.account.AccountUser
@@ -452,5 +453,26 @@ internal object SnapshotFixtures {
             ),
         ),
         handoffEntry = false,
+    )
+
+    /** The account screen with the account's computers: one online, one offline. */
+    fun accountWithComputers(): AccountUiState = accountSignedIn().copy(
+        desktops = listOf(
+            AccountDesktop(
+                deviceId = "desktop-1",
+                name = "Studio PC",
+                model = "Windows 11",
+                platform = "windows",
+                online = true,
+                room = "ROOM1",
+            ),
+            AccountDesktop(
+                deviceId = "desktop-2",
+                name = "Mac mini",
+                model = "Mac mini (M4)",
+                platform = "macos",
+                online = false,
+            ),
+        ),
     )
 }
