@@ -1466,6 +1466,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val rowRunning = list.items.firstOrNull { it.sessionId == selected }?.running == true
             val lastInFlight = _state.value.turns.lastOrNull()?.let { it.isRunning || it.isPending } == true
             if (!rowRunning && lastInFlight) refreshConversationQuietly()
+            // The transcript becomes the settled turn's owner as soon as the host says
+            // the turn is over; keeping the live copy too would draw the answer twice.
+            if (!rowRunning) dropCaughtUpLiveTurn(selected)
         }
         announceFinishedTurns(list.items)
         liveTurn.sync(list.items)
@@ -1572,6 +1575,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun startStateChannel(socket: MizarConnection) {
         streamJob?.cancel()
+        note("state channel listening")
         streamJob = viewModelScope.launch {
             socket.stateFrames.collect { delivered ->
                 if (!ownership.owns(socket)) return@collect
@@ -1628,15 +1632,45 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(liveTurn = null) }
             return
         }
+        val snapshot = stream.snapshot()
         val last = _state.value.turns.lastOrNull()
-        val view = stream.snapshot().toUi(
+        // The stream itself is the witness that a turn is running: a prompt that the
+        // host has opened but the transcript has not caught up with yet has no
+        // history row, and trusting the history alone drew it as already settled.
+        val streamRunning = !snapshot.finished &&
+            (snapshot.current != null || snapshot.blocks.isNotEmpty())
+        val running = streamRunning || last?.isRunning == true
+        val view = snapshot.toUi(
             sessionId = selected,
-            running = last?.isRunning == true,
-            startedAtMillis = last?.startedAtMillis,
-            endedAtMillis = last?.endedAtMillis,
+            running = running,
+            // Times only mean something when the history row really is this turn; a
+            // live stream that arrived before its row would otherwise borrow the
+            // previous turn's clock and show a made-up duration.
+            startedAtMillis = last?.takeIf { it.isRunning }?.startedAtMillis,
+            endedAtMillis = if (running) null else last?.takeIf { !it.isRunning }?.endedAtMillis,
             lastFrameAtMillis = lastStreamFrameAtMillis,
         )
         _state.update { it.copy(liveTurn = view) }
+    }
+
+    /**
+     * Drop a settled live copy once the transcript has the same ending.
+     *
+     * The session list is the first place that says a turn is over; the conversation
+     * refresh follows within a round trip. Clearing only when both agree keeps the
+     * stream's answer visible until the history can draw it, and stops a duplicate
+     * "completed" block afterwards.
+     */
+    private fun dropCaughtUpLiveTurn(sessionId: String) {
+        if (streamSession != sessionId) return
+        val view = _state.value.liveTurn ?: return
+        if (!view.settled || view.stream.blocks.isEmpty()) return
+        val last = _state.value.turns.lastOrNull() ?: return
+        if (last.isRunning || last.isPending) return
+        stream.beginTurn(null)
+        streamSession = null
+        lastStreamFrameAtMillis = null
+        _state.update { it.copy(liveTurn = null) }
     }
 
     // ── usage, agents, the guide ────────────────────────────────────────────

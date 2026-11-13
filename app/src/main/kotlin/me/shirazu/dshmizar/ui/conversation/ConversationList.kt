@@ -125,6 +125,16 @@ internal fun ConversationList(
         }
     }
 
+    // Whether the stream's turn is one of the history rows below. When it is not --
+    // a prompt the host has not recorded yet, or a session with no turns at all --
+    // the stream gets a section of its own at the end. Without that it was either
+    // invisible (history empty) or overwrote the previous settled turn (history had
+    // one), which is the "live area never draws" half of the state-channel report.
+    val live = liveTurn
+    val liveConsumed = live != null && state.turns.indices.any { index ->
+        liveApplies(state.turns[index], live, isLast = index == state.turns.lastIndex)
+    }
+
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
@@ -173,6 +183,16 @@ internal fun ConversationList(
                     },
                     onForkTurn = onForkTurn,
                 )
+            }
+        }
+
+        // The stream as its own section: the running turn before the host has written
+        // its `turn/start`, or the whole live view of an empty conversation. It is
+        // the same composable the history row uses when it does match, so a stream
+        // that settles here folds exactly like one that replaced a row.
+        if (live != null && !liveConsumed) {
+            item(key = "live") {
+                ConversationStream(view = live, onCopy = onCopy)
             }
         }
 
@@ -434,10 +454,26 @@ private fun TurnSummary(
                 fontFeatureSettings = "tnum",
             ),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.shimmering(active = active),
         )
 
-        Spacer(Modifier.weight(1f))
+        // The trailing row is measured right-to-left in effect: the step count and the
+        // short detail/retry labels keep their width, and only the optional fork label
+        // takes what is left. On a 390 dp phone "Completed in 2 min 14 s" plus "Branch
+        // in a new conversation" plus "3 steps" used to wrap the step count into
+        // "3 ste / ps"; nothing in the row wraps now, and the fork label ellipsizes
+        // instead of stealing a line from the counter.
+        val forkAt = turn.endSeq
+        // A known end position, an ended turn and a host that offers the branch: all
+        // three, or there is no button to draw.
+        val forkClick: (() -> Unit)? = forkAt
+            ?.takeIf { !active && turn.turn != null }
+            ?.let { at -> onForkTurn?.let { fork -> { fork(at) } } }
+        if (forkClick == null) {
+            Spacer(Modifier.weight(1f))
+        }
 
         // Only while the detail is still missing: once a tool row is on screen the
         // turn already carries its full log, and the affordance would re-fetch what
@@ -450,7 +486,12 @@ private fun TurnSummary(
                 onClick = { onLoadDetail(turnNumber) },
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
             ) {
-                Text(stringResource(R.string.turn_detail), style = MaterialTheme.typography.labelSmall)
+                Text(
+                    stringResource(R.string.turn_detail),
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    softWrap = false,
+                )
             }
         }
         if (turn.failed || neverStarted) {
@@ -462,23 +503,32 @@ private fun TurnSummary(
                     onClick = { onRetry(prompt) },
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                 ) {
-                    Text(stringResource(R.string.retry_turn), style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        stringResource(R.string.retry_turn),
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
                 }
             }
         }
         // Branch after a finished turn, at the log position of its `turn/end`. A turn
         // with no known boundary shows nothing: the host would have to guess where to
         // cut, and a fork in the wrong place is worse than no fork.
-        val forkAt = turn.endSeq
-        if (!active && turn.turn != null && forkAt != null && onForkTurn != null) {
-            TextButton(
-                onClick = { onForkTurn(forkAt) },
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-            ) {
-                Text(
-                    stringResource(R.string.conv_fork_turn),
-                    style = MaterialTheme.typography.labelSmall,
-                )
+        if (forkClick != null) {
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                TextButton(
+                    onClick = forkClick,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.conv_fork_turn),
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false,
+                    )
+                }
             }
         }
         if (turn.steps.isNotEmpty()) {
@@ -486,6 +536,8 @@ private fun TurnSummary(
                 stringResource(R.string.step_count, turn.steps.size),
                 style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                maxLines = 1,
+                softWrap = false,
             )
         }
     }
@@ -540,8 +592,15 @@ private const val TYPEWRITER_GRACE_MILLIS = 2_500L
  */
 private fun liveApplies(turn: ConversationTurn, live: LiveTurnView, isLast: Boolean): Boolean {
     val streamTurn = live.turn ?: live.stream.turn
-    val applies = if (streamTurn != null) turn.turn == streamTurn else isLast
-    if (!applies) return false
+    val matches = if (streamTurn != null) turn.turn == streamTurn else isLast
+    if (!matches) return false
+    // Only an in-flight row may be replaced by the stream. A settled history row is
+    // the transcript's own rendering of a turn the stream is no longer in charge of;
+    // replacing it would hide the previous answer the moment a new prompt is sent.
+    // Anything that cannot replace a row becomes the live section at the end.
+    val inFlight = turn.isRunning || turn.isPending ||
+        (turn.turn != null && live.stream.turn != null && live.stream.turn == turn.turn)
+    if (!inFlight) return false
     // A settled stream that carries no block can draw nothing: an old host (no
     // journal), or a frame that never arrived. Falling back to the history is the
     // only honest answer -- the alternative is a finished turn rendered as a bare
