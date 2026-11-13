@@ -72,6 +72,13 @@ discovered while verifying the new UI.
   so the work is deciding what to do while the new turn is still only optimistic — which is the
   same question KI-3 answered for scrolling, and it deserves the same treatment rather than a
   quick comparison change.
+- **Not reproduced on 0.11** (2026-11-14, mock host on emulator-5558): sent a prompt from the bottom
+  of a transcript whose previous turn had completed; the previous turn kept its "Completed in …"
+  header while the session-level running state lit the top bar and the live section. The 0.11
+  live-turn rendering draws the in-flight turn as its own section instead of hanging a session-level
+  flag on the last archived turn, which is why the mis-attribution no longer shows. Treat the
+  original 0.10.6 sighting as historical; if it reappears, capture a screenshot during the gap between
+  send and the optimistic turn appearing.
 
 ## KI-5 — the live card stays on "电脑正在处理…" while the app is in the background
 
@@ -94,6 +101,21 @@ it. The fix is to give the connection an owner that outlives the screen: the ser
 socket, runs the monitor and the settle path, and the view model observes it. That is a real piece
 of work, not a patch, and it should be scoped on its own. The plan is in
 `foreground-service.md` under 「待办：把连接下沉到服务」.
+
+**Verified on the emulator, 2026-11-14** — the 0.10.6 measurement does not hold on the 0.11 build:
+
+- backgrounded the app with a turn running (`keyevent 3`), waited 40 s;
+- the socket stayed up and the monitor kept running: `heartbeat: connected=true silent=0
+  foreground=false` lines continue every ~18 s, and `adbc` still shows the app's TCP sockets;
+- pushed `turn.settled` from the mock host while the app was in the background: logcat shows
+  `event turn.settled` → `settled mock-session-1: posted=true failed=false`, the live card
+  (notification id 2) is withdrawn, and the shade shows **"Turn finished — Fix the pairing crash ·
+  1 min 40 s · …"**;
+- evidence: `docs/evidence/android-background-settle-notification-2026-11-14.png`.
+
+What is still open is the **real phone** version of this run (ColorOS/Vendor freeze policies differ
+from the emulator), and the FCM path when no socket exists at all. So treat KI-5 as verified in the
+emulator, not as closed for every device.
 
 ## Open verification items
 
@@ -129,9 +151,10 @@ address this one.
   effective target is 80 x 48 dp (0.10.0 measured 66 x 37 dp because the header layout clipped the
   target); taps 20 px outside the target do nothing, taps just inside its overhang cycle the deck,
   and the approval buttons stay 48 dp with the card height unchanged.
-- **Background completion notification on a real phone** is not verified. The emulator run covers
-  the logic, but the real-device automation kept the app foreground around turn settle (and the
-  relay link churned), so no clean background-settle-to-notification run was captured.
+- **Background completion notification**: verified on the emulator on 2026-11-14 (see KI-5) — socket
+  survives backgrounding, `turn.settled` arrives, the card is withdrawn and "Turn finished" is posted.
+  A **real phone** run is still open: vendor freeze policies and a relay link that churns are not the
+  emulator's conditions.
 - **Path clipping below API 33** is not verified on a device.
 - **Real-device pass** is partially done: install/upgrade from a differently signed build,
   re-pairing, relay, cold start, drawer, real screen-corner radius, foreground-suppression and the
