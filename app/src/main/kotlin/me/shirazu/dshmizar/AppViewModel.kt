@@ -17,10 +17,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import me.shirazu.dshmizar.domain.ActivityCoordinator
@@ -31,6 +34,7 @@ import me.shirazu.dshmizar.domain.CONVERSATION_FULL_PAGE
 import me.shirazu.dshmizar.domain.CONVERSATION_REFRESH_PAGE
 import me.shirazu.dshmizar.domain.ConnectionMonitor
 import me.shirazu.dshmizar.domain.ConversationCoordinator
+import me.shirazu.dshmizar.domain.ConversationPrefetch
 import me.shirazu.dshmizar.domain.SendCoordinator
 import me.shirazu.dshmizar.domain.ReconnectCoordinator
 import me.shirazu.dshmizar.domain.RouteOutcome
@@ -85,6 +89,9 @@ import me.shirazu.mizar.kit.HostInfo
 import me.shirazu.mizar.kit.DeliveredStateFrame
 import me.shirazu.mizar.kit.FileSlice
 import me.shirazu.mizar.kit.TurnStream
+import me.shirazu.mizar.kit.SessionMessagesCursor
+import me.shirazu.mizar.kit.SessionSyncOutcome
+import me.shirazu.mizar.kit.SessionSyncRequest
 import me.shirazu.mizar.kit.UsageOverview as HostUsageOverview
 import me.shirazu.dshmizar.domain.AgentCatalog
 import me.shirazu.dshmizar.domain.AgentEngine
@@ -483,6 +490,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * within the same second. One job, replaced never, keeps the two from fighting.
      */
     private var quietRefreshJob: Job? = null
+
+    // ── conversation prefetch ────────────────────────────────────────────────
+    //
+    // iOS warms the cache for the sessions in the list with one `session.sync` batch;
+    // without it, opening a session costs a full page read before anything is drawn.
+    // Android reads only the open session on demand, so the list read is the natural
+    // moment to warm the next few -- one throttled batch, best effort, and skipped for
+    // the rest of the connection once the host says it does not know the method.
+
+    private var prefetchJob: Job? = null
+    private var prefetchedAtMillis = 0L
+    private var syncUnsupported = false
 
     /** The sentence the permanent notice currently shows, so it is only rewritten on change. */
     private var lastLinkNotice: String? = null
@@ -1564,6 +1583,73 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // The screen opens on what was last read, once: after that the operator is in
         // control of where they are.
         index.restoreLastSession()
+        prefetchRecentConversations(socket, scoped)
+    }
+
+    /**
+     * Warm the cache for the next few sessions with one `session.sync` batch.
+     *
+     * Best effort by design: a host that predates the method is remembered for the
+     * connection's lifetime, a failure is dropped (the on-demand read still works),
+     * and the batch is bounded in sessions, messages and bytes so a metered relay is
+     * not asked to carry a second copy of everything.
+     */
+    private fun prefetchRecentConversations(socket: MizarConnection, sessions: List<SessionRow>) {
+        if (syncUnsupported) return
+        val host = _state.value.host ?: return
+        if (_state.value.localAgentActive) return
+        val now = System.currentTimeMillis()
+        if (now - prefetchedAtMillis < PREFETCH_INTERVAL_MILLIS) return
+        if (prefetchJob?.isActive == true) return
+        val candidates = ConversationPrefetch.candidates(sessions, _state.value.selectedSessionId)
+        if (candidates.isEmpty()) return
+        prefetchedAtMillis = now
+        prefetchJob = viewModelScope.launch(Dispatchers.IO) {
+            val requests = candidates.map { row ->
+                val cached = runCatching { conversationCache.load(host.hostId, row.sessionId) }.getOrNull()
+                val lastSeq = cached?.messages?.records?.lastOrNull()?.let(::seqOf)
+                // A cache that holds records covers up to its own write instant; claiming
+                // the row's timestamp instead would ask "is my row newer than my row".
+                SessionSyncRequest(
+                    sessionId = row.sessionId,
+                    cursor = lastSeq?.let { SessionMessagesCursor.After(it) } ?: SessionMessagesCursor.Empty,
+                    updatedAt = if (lastSeq == null) null else cached?.updatedAtMillis?.toDouble(),
+                    maxMessages = PREFETCH_MESSAGES,
+                )
+            }
+            val outcome = runCatching {
+                socket.syncSessions(requests, maxBytes = PREFETCH_MAX_BYTES, maxItems = requests.size)
+            }.onFailure {
+                // Prefetch is an optimisation: never let its failure look like a broken
+                // connection, but keep one line so "why is the cache cold?" is answerable.
+                note("prefetch failed: ${it.message}")
+            }.getOrNull() ?: return@launch
+            when (outcome) {
+                SessionSyncOutcome.Unsupported -> {
+                    syncUnsupported = true
+                    note("prefetch: host predates session.sync")
+                }
+
+                is SessionSyncOutcome.Answered -> {
+                    var warmed = 0
+                    for (item in outcome.result.items) {
+                        if (item.error != null || item.unchanged == true) continue
+                        val page = item.messages ?: continue
+                        if (!ownership.owns(socket)) return@launch
+                        conversationCache.record(host.hostId, item.sessionId, page)
+                        warmed += 1
+                    }
+                    note("prefetch: warmed $warmed of ${requests.size} session(s)")
+                }
+            }
+        }
+    }
+
+    /** The log position inside a cached record, wrapped or bare. */
+    private fun seqOf(record: JsonElement): Int? {
+        val obj = record as? JsonObject ?: return null
+        val seq = (obj["event"] as? JsonObject)?.get("seq") ?: obj["seq"]
+        return (seq as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
     }
 
     // ── catalog change bursts ───────────────────────────────────────────────
@@ -2903,6 +2989,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun stopWatchers() {
         monitor.stop()
+        // A different socket may speak a different host: forget what this one said about
+        // session.sync, and the throttle that belonged to it.
+        prefetchJob?.cancel()
+        syncUnsupported = false
+        prefetchedAtMillis = 0L
     }
 
     /**
@@ -3203,6 +3294,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         /** How stale the screen may get before returning to it triggers a refresh. */
         const val STALE_MILLIS = 15_000L
+
+        /** How many messages one prefetched page carries. */
+        const val PREFETCH_MESSAGES = 24
+
+        /** Byte ceiling for the whole prefetch batch; the host clamps it to 16 KiB..800 KiB. */
+        const val PREFETCH_MAX_BYTES = 512 * 1024
+
+        /** At most one prefetch batch per this interval, whichever refresh triggered it. */
+        const val PREFETCH_INTERVAL_MILLIS = 60_000L
 
         /** How much the round trip has to move before the notice is worth rewriting. */
         const val LATENCY_NOTICE_STEP_MILLIS = 20L

@@ -19,6 +19,9 @@
   真实 inclusive `turn/end.seq`）、`usage.overview`（首页用量）、`file.stat`；`session.prompt`
   支持 `mode=steer`（设置里的「默认引导发送」打开且本轮在跑时）。
 - **事件**：`session.changed` 目录变化（250ms 合并、2s 静默），`turn.settled` 仍作为完成通知兜底。
+- **历史批量预读**：`session.list` 刷新后一次 `session.sync` 预热最近 ≤6 个会话（每项 ≤24 条、整批 ≤512 KiB）：
+  用缓存最后 `seq` 做 `afterSeq`、并把缓存写入时刻当 `updatedAt` 发给宿主（宿主可跳过没动过的行）；
+  老宿主回一次 `Unsupported` 后本连接不再尝试。
 - **运营与首启**：应用内公告（中继 WS `/app/v1/announcements`，轮询兜底）、问卷（`/account/v1/surveys`）、
   9 步新手教程（升级用户按版本重走一次、保留设置/账户）、设置目录化（8 主题 + 二级页）、
   首页用量概览、平台内 Agent 切换（DSH / Claude Code / Codex，`hello.engine` 作用域）。
