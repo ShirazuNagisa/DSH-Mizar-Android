@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The live conversation stream: the running turn's status/process lines, its
+  settled header and fold, and pictures a message points at. Own file so the
+  conversation work does not collide with the shared catalogue.
+
+  State names are NOT here: they come from the generated protocol table
+  (SessionState.text / .english), which is the single source shared with the
+  desktop and iOS.
+-->
+<resources>
+    <!-- Live footer clock -->
+    <string name="conv_stream_clock_start">DeepSeeking…</string>
+    <string name="conv_stream_clock">DeepSeeking for %1$s</string>
+    <string name="conv_seconds">%1$d s</string>
+    <string name="conv_minutes">%1$d min %2$d s</string>
+
+    <!-- Settled header -->
+    <string name="conv_stream_completed">Completed</string>
+    <string name="conv_stream_completed_in">Completed in %1$s</string>
+    <string name="conv_stream_interrupted">Interrupted</string>
+    <string name="conv_stream_interrupted_after">Interrupted after %1$s</string>
+    <string name="conv_stream_note_paused">You interrupted this turn.</string>
+    <string name="conv_stream_note_failed">This turn stopped because of an error.</string>
+    <string name="conv_stream_lost">The connection to the computer was lost.</string>
+    <string name="conv_stream_stale">The computer stopped sending its state.</string>
+    <string name="conv_stream_earlier_omitted">Earlier process was omitted.</string>
+    <string name="conv_stream_earlier_steps">Earlier %1$d steps</string>
+
+    <!-- Accessibility -->
+    <string name="conv_stream_access_status">Turn status</string>
+    <string name="conv_stream_access_clock">Turn running time</string>
+    <string name="conv_stream_access_header">Turn result</string>
+    <string name="conv_stream_show_process">Show the process</string>
+    <string name="conv_stream_hide_process">Hide the process</string>
+
+    <!-- Turn actions -->
+    <string name="conv_compact_context">Compact the context</string>
+    <string name="conv_fork_turn">Branch in a new conversation</string>
+
+    <!-- Inline pictures in a message -->
+    <string name="conv_image_loading">Reading the picture…</string>
+    <string name="conv_image_locked_title">Subscribe to a paid account to view pictures across networks</string>
+    <string name="conv_image_locked_body">Pictures live on the computer. A free account can see them on the local network; a paid account can see them anywhere.</string>
+    <string name="conv_image_open">Open the picture</string>
+    <string name="conv_image_close">Close the picture</string>
+    <string name="conv_image_retry">Try again</string>
+    <string name="conv_image_caption">Picture: %1$s</string>
+    <string name="conv_image_missing">The picture is no longer on the computer.</string>
+    <string name="conv_image_forbidden">The computer would not read that picture.</string>
+    <string name="conv_image_too_large">That picture is too large to show here.</string>
+    <string name="conv_image_old_plugin">This computer is too old to share pictures.</string>
+    <string name="conv_image_offline">The computer is not reachable right now.</string>
+    <string name="conv_image_not_image">That file is not a picture this phone can draw.</string>
+    <string name="conv_image_unreadable">The picture could not be read.</string>
+</resources>

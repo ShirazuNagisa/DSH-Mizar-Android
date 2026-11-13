@@ -82,6 +82,35 @@ import me.shirazu.mizar.kit.CredentialStore
 import me.shirazu.mizar.kit.Diagnosis
 import me.shirazu.mizar.kit.Diagnoses
 import me.shirazu.mizar.kit.HostInfo
+import me.shirazu.mizar.kit.DeliveredStateFrame
+import me.shirazu.mizar.kit.FileSlice
+import me.shirazu.mizar.kit.TurnStream
+import me.shirazu.mizar.kit.UsageOverview as HostUsageOverview
+import me.shirazu.dshmizar.domain.AgentCatalog
+import me.shirazu.dshmizar.domain.AgentEngine
+import me.shirazu.dshmizar.domain.AgentScoping
+import me.shirazu.dshmizar.domain.AgentSurface
+import me.shirazu.dshmizar.domain.AgentTarget
+import me.shirazu.dshmizar.domain.HostAgent
+import me.shirazu.dshmizar.domain.LiveTurnView
+import me.shirazu.dshmizar.domain.OnboardingStorageKeys
+import me.shirazu.dshmizar.domain.OnboardingVersion
+import me.shirazu.dshmizar.domain.UsageOverview as UsageHistory
+import me.shirazu.dshmizar.domain.toAppHistory
+import me.shirazu.dshmizar.domain.toUi
+import me.shirazu.dshmizar.ui.conversation.ConversationImageBridge
+import me.shirazu.dshmizar.ui.conversation.ConversationImagePresenter
+import me.shirazu.dshmizar.ui.conversation.PictureFacts
+import me.shirazu.dshmizar.ui.settings.SettingsFileCache
+import me.shirazu.dshmizar.ui.settings.SettingsTopic
+import me.shirazu.dshmizar.domain.AnnouncementAction
+import me.shirazu.dshmizar.domain.AnnouncementBannerState
+import me.shirazu.dshmizar.domain.AnnouncementCoordinator
+import me.shirazu.dshmizar.domain.AnnouncementFeed
+import me.shirazu.dshmizar.domain.AnnouncementPreferenceStore
+import me.shirazu.dshmizar.domain.SurveyCoordinator
+import me.shirazu.dshmizar.domain.SurveysUiState
+import me.shirazu.mizar.kit.account.AnnouncementClient
 import me.shirazu.mizar.kit.probeHostId
 import me.shirazu.dshmizar.ui.Format
 import me.shirazu.mizar.kit.MizarConnection
@@ -291,6 +320,12 @@ data class UiState(
     val hapticsEnabled: Boolean = true,
     /** Diagnostic: stretch the typewriter to eight seconds so it can be watched. */
     val slowTypewriter: Boolean = false,
+    /**
+     * Send a message typed while a turn is running straight to the host as a steer,
+     * instead of holding it above the composer until the turn settles. Off by
+     * default, like iOS 0.9.9's 「默认引导发送」.
+     */
+    val steerByDefault: Boolean = false,
     /** Prefer a direct LAN socket over the relay when one can be found. */
     val localNetworkFirst: Boolean = false,
     /** The live link is a direct/LAN socket rather than the relay. */
@@ -315,6 +350,24 @@ data class UiState(
     val account: AccountUiState = AccountUiState(),
     val balance: BalanceUiState = BalanceUiState(),
     val filePreview: FilePreviewUiState = FilePreviewUiState(),
+    /**
+     * The open session's running turn, reduced from the host's state channel.
+     *
+     * Null when no turn is running, when nothing is selected, or when the host is
+     * too old to push state frames — the screen then falls back to what the
+     * transcript says, which is what it drew before the channel existed.
+     */
+    val liveTurn: LiveTurnView? = null,
+    /** The host's usage history for the home page, or null when it cannot be read. */
+    val usageOverview: UsageHistory? = null,
+    val usageLoading: Boolean = false,
+    val usageUpdatedAtMillis: Long? = null,
+    /** The agents this computer serves, and which one this phone is scoped to. */
+    val agentCatalog: AgentCatalog = AgentCatalog(),
+    /** The first-run guide is on screen. */
+    val onboardingOpen: Boolean = false,
+    /** The guide is replaying because this build is newer than the stored version. */
+    val onboardingUpdate: Boolean = false,
 ) {
     /**
      * The gate iOS uses for attachments and the running turn's detail: a paying
@@ -436,6 +489,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun start() {
         viewModelScope.launch {
             loadAccount()
+            // The first-run guide comes before anything else: it is what explains the
+            // computer to a person holding a phone with no pairing code yet. An
+            // upgrade replays it once when the build is newer than the stored one.
+            val (guide, update) = onboardingShouldOpen()
+            if (guide) _state.update { it.copy(onboardingOpen = true, onboardingUpdate = update) }
             val hosts = credentials.loadAll().sortedBy { it.pairedAtMillis }
             val host = hosts.lastOrNull()
             if (host == null) {
@@ -473,14 +531,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         deviceModel = Build.MODEL,
         appVersion = appVersion,
         openBrowser = ::openBrowser,
-        onIdentityChanged = ::reconnectForIdentity,
+        onIdentityChanged = {
+            reconnectForIdentity()
+            // The announcement socket is per account session: a sign-in or sign-out
+            // has to move it to the token that is current now.
+            announcements.update(_state.value.account.session?.token, foregroundForAnnouncements)
+        },
         // The plan decides which relay the host's tunnel uses; a change asks the
         // host to move. Nothing else in the account domain touches the socket.
         onPlanChanged = { ownership.current?.let { socket -> viewModelScope.launch { syncRelayTier(socket) } } },
     )
 
     /** Read the stored session and quietly refresh it. Never blocks a launch. */
-    private suspend fun loadAccount() = account.load()
+    private suspend fun loadAccount() {
+        account.load()
+        // The stored session is what a cold start finds already signed in, and it
+        // arrives after the activity's first onStart. The identity callback covers a
+        // sign-in but not this, so the announcement socket would stay shut for a
+        // signed-in phone until the next foreground cycle without this line.
+        announcements.update(_state.value.account.session?.token, foregroundForAnnouncements)
+    }
+
 
     /** Pull the profile again; the account screen's retry and the foreground hook. */
     fun refreshAccount() = account.refresh()
@@ -869,7 +940,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             accountBaseUrl = BuildConfig.ACCOUNT_BASE_URL,
         )
         val candidate = MizarConnection(
-            host.configurationFor(endpoint, appVersion, deviceModel, identityHeaders),
+            host.configurationFor(
+                endpoint,
+                appVersion,
+                deviceModel,
+                identityHeaders,
+                // The agent scope travels in the hello frame: a socket cannot change
+                // which agent it is bound to after the handshake.
+                engine = activity.agentEngine(),
+            ),
             traffic,
         )
         try {
@@ -911,8 +990,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // arrives with the first poll, a second from now.
         publishLinkNotice(linkConnectedText(host, _state.value.latencyMillis))
         startWatchers(candidate)
+        startStateChannel(candidate)
         watchConnection(candidate, host)
         note("connected to $endpoint")
+        // What this computer serves, and the usage history the home page charts. Both
+        // are best effort: an older host answers NOT_IMPLEMENTED and the screens hide
+        // the sections rather than drawing zeroes.
+        viewModelScope.launch { loadAgentCatalog(candidate) }
+        viewModelScope.launch { loadUsageOverview(force = true) }
         // The host can be reconfigured while the phone is away, and a fresh socket is the
         // one moment it is worth asking again: a cached catalog would offer a model the
         // computer no longer has.
@@ -1354,11 +1439,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             socket.call<WorkspaceListResult>("workspace.list").items
         }.getOrNull()
 
+        // A connection is scoped to one agent on a computer that fronts several:
+        // the host's list may describe all of them, but this screen may only draw
+        // the ones the open scope owns. A row naming no engine is kept -- an older
+        // host, or a single-agent one, has no markers to filter on.
+        val engine = _state.value.agentCatalog.current?.engine
+        val scoped = AgentScoping.sessions(list.items, engine)
+        val scopedWorkspaces = workspaces?.let { rows -> AgentScoping.workspaces(rows, engine) }
+
         _state.update { current ->
             current.copy(
-                sessions = list.items,
-                workspaces = if (workspaces == null) current.workspaces else workspaces,
-                workspacePaths = if (workspaces.isNullOrEmpty()) current.workspacePaths else workspaces.map { it.path }.toSet(),
+                sessions = scoped,
+                workspaces = if (scopedWorkspaces == null) current.workspaces else scopedWorkspaces,
+                workspacePaths = if (scopedWorkspaces.isNullOrEmpty()) current.workspacePaths else scopedWorkspaces.map { it.path }.toSet(),
                 problem = null,
             )
         }
@@ -1379,6 +1472,362 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // The screen opens on what was last read, once: after that the operator is in
         // control of where they are.
         index.restoreLastSession()
+    }
+
+    // ── catalog change bursts ───────────────────────────────────────────────
+    //
+    // A computer that is working creates, renames and settles sessions in bursts.
+    // One `session.list` per event would be one round trip per event over a metered
+    // relay, so many events become one read: 250 ms of quiet, and never more often
+    // than once every two seconds.
+
+    private var catalogRefreshJob: Job? = null
+    private var catalogRefreshedAt = 0L
+
+    private fun scheduleCatalogRefresh() {
+        catalogRefreshJob?.cancel()
+        catalogRefreshJob = viewModelScope.launch {
+            delay(CATALOG_MERGE_MILLIS)
+            val since = System.currentTimeMillis() - catalogRefreshedAt
+            if (since in 0 until CATALOG_SILENCE_MILLIS) {
+                delay(CATALOG_SILENCE_MILLIS - since)
+            }
+            runCatching { refreshSessionsNow() }
+            // If the open conversation belongs to a session the host just changed, its
+            // last page is stale in the same way a settled turn leaves it stale.
+            if (_state.value.selectedSessionId != null) refreshConversationQuietly()
+            catalogRefreshedAt = System.currentTimeMillis()
+        }
+    }
+
+    /**
+     * Throw the local copy of the session data away and read it again.
+     *
+     * The settings screen's 「完全刷新本地会话数据」: it clears the transcript cache
+     * (not the index of what exists), drops the in-memory page, then re-reads the
+     * list and the open conversation. Useful when a phone has been away long enough
+     * that merging a delta would keep a half-page the host no longer agrees with.
+     *
+     * [onDone] reports how many sessions the host listed and whether it answered at
+     * all, so the guide's refresh step can say what happened instead of guessing.
+     */
+    fun clearSessionDataAndReload(onDone: (sessions: Int, reached: Boolean) -> Unit = { _, _ -> }) {
+        if (_state.value.refreshing) {
+            onDone(_state.value.sessions.size, false)
+            return
+        }
+        _state.update { it.copy(refreshing = true) }
+        viewModelScope.launch {
+            try {
+                conversationCache.clearAll()
+                _state.update {
+                    it.copy(
+                        conversation = emptyList(),
+                        turns = emptyList(),
+                        stats = null,
+                        oldestSeq = null,
+                        hasMore = false,
+                        exhausted = false,
+                        newestSeq = null,
+                        liveTurn = null,
+                    )
+                }
+                val reached = runCatching { refreshSessionsNow() }.isSuccess
+                _state.value.selectedSessionId?.let { sessionId ->
+                    reload(tail = FULL_PAGE)
+                    openLiveStream(sessionId)
+                }
+                lastRefreshAt = System.currentTimeMillis()
+                onDone(_state.value.sessions.size, reached)
+            } finally {
+                _state.update { it.copy(refreshing = false) }
+            }
+        }
+    }
+
+    /**
+     * Re-read the session list, as the guide's refresh step does.
+     *
+     * Unlike [clearSessionDataAndReload] this keeps the cached transcripts: it is the
+     * "refresh what the computer has" step, not "throw my copy away".
+     */
+    fun refreshSessionMetadata(onDone: (sessions: Int, reached: Boolean) -> Unit = { _, _ -> }) {
+        viewModelScope.launch {
+            val reached = runCatching { refreshSessionsNow() }.isSuccess
+            onDone(_state.value.sessions.size, reached)
+        }
+    }
+
+    // ── the state channel: the running turn, live ───────────────────────────
+    //
+    // The host pushes one small binary frame per state change and one heartbeat
+    // every five seconds; `protocol/state-channel-v1.md` is the contract. The
+    // reducer lives in mizarkit (`TurnStream`, ported from iOS); the app maps its
+    // snapshot onto the screen and, when a turn ends, refreshes the transcript.
+
+    private val stream = TurnStream()
+    private var streamSession: String? = null
+    private var streamJob: Job? = null
+    private var lastStreamFrameAtMillis: Long? = null
+
+    private fun startStateChannel(socket: MizarConnection) {
+        streamJob?.cancel()
+        streamJob = viewModelScope.launch {
+            socket.stateFrames.collect { delivered ->
+                if (!ownership.owns(socket)) return@collect
+                onStateFrame(delivered)
+            }
+        }
+    }
+
+    private fun onStateFrame(delivered: DeliveredStateFrame) {
+        val selected = _state.value.selectedSessionId ?: return
+        if (delivered.sessionId != selected) return
+        if (streamSession != selected) {
+            streamSession = selected
+            stream.beginTurn(null)
+        }
+        lastStreamFrameAtMillis = System.currentTimeMillis()
+        val changed = stream.apply(delivered.frame)
+        // A heartbeat renews an interval without changing anything the screen draws;
+        // republishing it would rebuild the conversation once every five seconds.
+        if (changed) publishLiveTurn()
+    }
+
+    /**
+     * Start the live turn for [sessionId], replaying what the host kept for it.
+     *
+     * The journal replay is the only way to see a turn that started while the phone
+     * was away: state frames are forward-only and heartbeats carry no text. A host
+     * that answers `NOT_IMPLEMENTED` simply has no replay — the live frames still
+     * work, and an empty snapshot draws nothing until they arrive.
+     */
+    private fun openLiveStream(sessionId: String?) {
+        if (sessionId == null) {
+            streamSession = null
+            lastStreamFrameAtMillis = null
+            _state.update { it.copy(liveTurn = null) }
+            return
+        }
+        streamSession = sessionId
+        stream.beginTurn(null)
+        lastStreamFrameAtMillis = null
+        publishLiveTurn()
+        viewModelScope.launch {
+            val replay = runCatching { ownership.current?.streamSession(sessionId) }.getOrNull()
+                ?: return@launch
+            if (_state.value.selectedSessionId != sessionId) return@launch
+            stream.replace(replay)
+            publishLiveTurn()
+        }
+    }
+
+    private fun publishLiveTurn() {
+        val selected = _state.value.selectedSessionId
+        if (selected == null || streamSession != selected) {
+            _state.update { it.copy(liveTurn = null) }
+            return
+        }
+        val last = _state.value.turns.lastOrNull()
+        val view = stream.snapshot().toUi(
+            sessionId = selected,
+            running = last?.isRunning == true,
+            startedAtMillis = last?.startedAtMillis,
+            endedAtMillis = last?.endedAtMillis,
+            lastFrameAtMillis = lastStreamFrameAtMillis,
+        )
+        _state.update { it.copy(liveTurn = view) }
+    }
+
+    // ── usage, agents, the guide ────────────────────────────────────────────
+
+    /**
+     * Read the home page's usage history.
+     *
+     * A host without the method (an older AGI Mizar) answers `NOT_IMPLEMENTED`; the
+     * null result keeps the section hidden rather than drawing zeroes.
+     */
+    fun loadUsageOverview(force: Boolean = false) {
+        if (_state.value.usageLoading) return
+        if (!force && _state.value.usageOverview != null) return
+        val socket = ownership.current ?: return
+        _state.update { it.copy(usageLoading = true) }
+        viewModelScope.launch {
+            val answered = runCatching { socket.usageOverview() }.getOrNull()
+            _state.update {
+                it.copy(
+                    usageLoading = false,
+                    usageOverview = answered?.toAppHistory() ?: it.usageOverview,
+                    usageUpdatedAtMillis = if (answered != null) System.currentTimeMillis() else it.usageUpdatedAtMillis,
+                )
+            }
+        }
+    }
+
+    // ── inline pictures ─────────────────────────────────────────────────────
+    //
+    // The store lives once per process so scrolling back does not re-read the
+    // computer; the bridge is the only place that knows the socket, and the gate is
+    // read from the same `advancedFeaturesUnlocked` the file preview uses. A locked
+    // link never asks: the presenter returns `Locked` before any call is made.
+
+    private val images = ConversationImagePresenter(
+        object : ConversationImageBridge {
+            override val isUnlocked: Boolean
+                get() = _state.value.advancedFeaturesUnlocked
+            override val isLocalAgent: Boolean
+                get() = false
+
+            override suspend fun stat(sessionId: String, path: String): PictureFacts? {
+                val socket = ownership.current ?: return null
+                val stat = socket.fileStat(sessionId, path) ?: return null
+                return PictureFacts(
+                    path = stat.path.ifEmpty { path },
+                    name = stat.name,
+                    byteSize = stat.byteSize,
+                    mediaType = stat.mediaType,
+                    modifiedAt = stat.modifiedAt,
+                )
+            }
+
+            override suspend fun read(
+                sessionId: String,
+                path: String,
+                expectedBytes: Long,
+            ): ByteArray? {
+                val socket = ownership.current ?: return null
+                val out = java.io.ByteArrayOutputStream()
+                var offset = 0L
+                // A file that claims more than the picture budget is refused by the
+                // policy before this runs; the bound here is a loop guard, not a rule.
+                while (offset < expectedBytes) {
+                    val slice = socket.readFileSlice(
+                        sessionId,
+                        path,
+                        offset = offset,
+                        length = minOf(expectedBytes - offset, FileSlice.MAX_SLICE_BYTES.toLong()).toInt(),
+                    )
+                    val bytes = slice.bytes()
+                    out.write(bytes)
+                    offset += bytes.size
+                    if (slice.eof || bytes.isEmpty()) break
+                }
+                return out.toByteArray().takeIf { it.isNotEmpty() }
+            }
+        },
+    )
+
+    /** The one inline-picture store the conversation and its history share. */
+    val conversationImages: ConversationImagePresenter get() = images
+
+    /**
+     * What the app's local caches hold, for the settings file page.
+     *
+     * Counted on the caller's thread because the page opens rarely and the trees are
+     * small; walking them on every recomposition would not be. The counts are facts
+     * about this phone, never about the computer.
+     */
+    fun fileCacheFacts(): SettingsFileCache {
+        val app = getApplication<Application>()
+        val roots = listOf(
+            java.io.File(app.filesDir, "conversation-cache"),
+            java.io.File(app.cacheDir, "attachments"),
+            java.io.File(app.cacheDir, "exports"),
+            java.io.File(app.cacheDir, "preview.pdf"),
+        )
+        var files = 0
+        var bytes = 0L
+        for (root in roots) {
+            if (!root.exists()) continue
+            if (root.isFile) {
+                files += 1
+                bytes += root.length()
+                continue
+            }
+            runCatching {
+                root.walkTopDown().forEach { entry ->
+                    if (entry.isFile) {
+                        files += 1
+                        bytes += entry.length()
+                    }
+                }
+            }
+        }
+        return SettingsFileCache(files = files, bytes = bytes)
+    }
+
+    /** Drop the local caches the file page owns; conversations re-read from the host. */
+    fun clearFileCache() {
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            conversationCache.clearAll()
+            withContext(Dispatchers.IO) {
+                runCatching { java.io.File(app.cacheDir, "attachments").deleteRecursively() }
+                runCatching { java.io.File(app.cacheDir, "exports").deleteRecursively() }
+                runCatching { java.io.File(app.cacheDir, "preview.pdf").delete() }
+            }
+            _state.update { it.copy(filePreview = FilePreviewUiState()) }
+        }
+    }
+
+    /**
+     * Read what this computer serves and which agent this phone is scoped to.
+     *
+     * `host.info` is the authority: it names every engine the computer hosts, which
+     * are connected, and which one this connection belongs to. A host that predates
+     * the field simply has no picker.
+     */
+    private suspend fun loadAgentCatalog(socket: MizarConnection) {
+        val info = runCatching { socket.call<HostInfo>("host.info") }.getOrNull() ?: return
+        val served = info.engines.orEmpty().mapNotNull { engine ->
+            val parsed = AgentEngine.fromWire(engine.id) ?: return@mapNotNull null
+            HostAgent(
+                engine = parsed,
+                label = engine.label.ifEmpty { null },
+                connected = engine.connected,
+                detail = engine.detail,
+            )
+        }
+        val catalog = AgentCatalog.from(served, info.engine, activity.agentSurface())
+        _state.update { it.copy(agentCatalog = catalog) }
+    }
+
+    /** Switch the conversation scope to another agent on the same computer. */
+    fun chooseAgent(target: AgentTarget) {
+        activity.setAgentSurface(target.surface)
+        activity.setAgentEngine(target.engine)
+        _state.update { it.copy(agentCatalog = it.agentCatalog.copy(current = target)) }
+        // The scope travels in the hello frame, so a live socket cannot adopt it:
+        // the same rule as signing in or out.
+        reconnectForIdentity()
+    }
+
+    // ── the first-run guide ─────────────────────────────────────────────────
+
+    /** Open the guide; [replay] starts it from the top even when it was finished. */
+    fun startOnboarding(replay: Boolean = false) {
+        if (replay) {
+            activity.setOnboardingStarted(true)
+            activity.setOnboardingDone(false)
+        }
+        _state.update { it.copy(onboardingOpen = true, onboardingUpdate = false) }
+    }
+
+    /** The guide finished: remember it for this build and close it. */
+    fun finishOnboarding() {
+        activity.setOnboardingDone(true)
+        activity.setOnboardingVersion(OnboardingVersion.REQUIRED)
+        _state.update { it.copy(onboardingOpen = false, onboardingUpdate = false) }
+    }
+
+    private fun onboardingShouldOpen(): Pair<Boolean, Boolean> {
+        val done = activity.onboardingDone()
+        val stored = activity.onboardingVersion()
+        return when {
+            !done -> true to false
+            OnboardingVersion.isUpdate(done, stored) -> true to true
+            else -> false to false
+        }
     }
 
     // ── the lock screen's card ──────────────────────────────────────────────
@@ -1453,6 +1902,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         activityPanel.cancel()
         clearAttachments()
+        // The state channel belongs to the open session: switching away drops the
+        // live turn, switching to one replays whatever the host kept for it.
+        openLiveStream(sessionId)
         if (sessionId == null) return
         viewModelScope.launch {
             // What was on screen last time, before the first round trip: opening a
@@ -1556,7 +2008,54 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun loadTurnDetail(turn: Int) = conversation.loadTurnDetail(turn)
 
 
-    fun sendPrompt(text: String) = prompts.send(text)
+    fun sendPrompt(text: String) = prompts.send(text, steer = shouldSteer())
+
+    /** Whether this submission should guide the running turn instead of queueing. */
+    private fun shouldSteer(): Boolean =
+        _state.value.steerByDefault && _state.value.turns.lastOrNull()?.isRunning == true
+
+    /**
+     * Run the computer's own context compaction on the open session.
+     *
+     * The answer is only an acknowledgement: the effect on screen arrives through
+     * the state channel (`compacting`, then a terminal state), not from this result.
+     */
+    fun compactSession() {
+        val sessionId = _state.value.selectedSessionId ?: return
+        val socket = ownership.current ?: return
+        viewModelScope.launch {
+            runCatching { socket.compactSession(sessionId) }
+                .onSuccess { result ->
+                    if (result == null) {
+                        _state.update { it.copy(problem = getApplication<Application>().getString(R.string.host_too_old)) }
+                    }
+                }
+                .onFailure { error -> _state.update { it.copy(problem = messageOf(error, addressOf())) } }
+        }
+    }
+
+    /**
+     * Branch the open conversation at one finished turn's boundary.
+     *
+     * @param atSeq the turn's true inclusive `turn/end.seq`, never a turn number:
+     *   the host validates that the boundary exists and is complete.
+     */
+    fun forkSession(atSeq: Int) {
+        val sessionId = _state.value.selectedSessionId ?: return
+        val socket = ownership.current ?: return
+        viewModelScope.launch {
+            runCatching { socket.forkSession(sessionId, atSeq) }
+                .onSuccess { fork ->
+                    if (fork == null) {
+                        _state.update { it.copy(problem = getApplication<Application>().getString(R.string.host_too_old)) }
+                        return@onSuccess
+                    }
+                    refreshSessionsNow()
+                    selectSession(fork.sessionId)
+                }
+                .onFailure { error -> _state.update { it.copy(problem = messageOf(error, addressOf())) } }
+        }
+    }
 
     // ── attachments ─────────────────────────────────────────────────────────
     //
@@ -1678,6 +2177,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun refreshAfterReconnect() {
         val current = _state.value
+        // The state channel restarts from an empty interval after a reconnect; the
+        // journal replay is what puts the running turn back on screen.
+        openLiveStream(current.selectedSessionId)
         if (current.selectedSessionId == null) {
             refreshConversation()
             return
@@ -1871,6 +2373,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setHapticsEnabled(on: Boolean) = preferences.setHapticsEnabled(on)
 
     fun setSlowTypewriter(on: Boolean) = preferences.setSlowTypewriter(on)
+
+    /** Whether a message typed mid-turn should steer instead of waiting for the end. */
+    fun setSteerByDefault(on: Boolean) = preferences.setSteerByDefault(on)
 
     /**
      * Prefer the local network over the relay, like iOS 0.9.4's transfer setting.
@@ -2108,12 +2613,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // The host knows when a turn ends; a connected client should be told, not
             // left to infer it from a list refresh.
             if (frame.name == "turn.settled") onTurnSettled(frame.data)
+            // The catalog changed on the computer (a session was created, renamed,
+            // archived or settled elsewhere). iOS merges bursts with a 200 ms debounce
+            // and a 2 s silence window; doing the same here keeps a busy computer from
+            // turning into one `session.list` per event.
+            if (frame.name == "session.changed") scheduleCatalogRefresh()
             // Another device asked the host to move its tunnel; the base URL this phone
             // stores has to follow, or the next reconnect dials a relay the host left.
             if (frame.name == "relay.changed") applyRelayChanged(frame.data)
         },
         onSilent = { reason ->
             val host = _state.value.host
+            // The host is no longer renewing the interval: keep the state on screen
+            // (a failure already happened) but stop pretending it is current.
+            stream.markDisconnected()
+            publishLiveTurn()
             if (host != null) beginReconnect(host, reason) else ownership.current?.disconnect()
         },
         anythingRunning = {
@@ -2305,6 +2819,85 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(problem = null) }
     }
 
+    // ── announcements and surveys ───────────────────────────────────────────
+    //
+    // Both are account features served by the relay, not by the computer: the
+    // announcement socket is its own WebSocket and the survey list is HTTP. They are
+    // built last in the class so every field they read already exists.
+
+    private val announcementClient = AnnouncementClient(
+        accountBaseUrl = BuildConfig.ACCOUNT_BASE_URL,
+        pollFallback = accountClient::announcements,
+    )
+
+    private val announcements = AnnouncementCoordinator(
+        seen = AnnouncementPreferenceStore(getApplication<Application>()),
+        scope = viewModelScope,
+        feed = AnnouncementFeed { token -> announcementClient.events(token) },
+        poll = { token -> announcementClient.poll(token) },
+    )
+
+    /** The banner on screen and what waits behind it. */
+    val announcementBanner: StateFlow<AnnouncementBannerState> = announcements.state
+
+    private var foregroundForAnnouncements = false
+
+    /**
+     * MainActivity tells the announcements whether a person is looking.
+     *
+     * A socket held while the app is in the background is a socket the system will
+     * kill anyway; stopping it here is what makes the reconnect-on-resume path the
+     * one that catches a banner created while the phone was away.
+     */
+    fun announcementsForeground(active: Boolean) {
+        foregroundForAnnouncements = active
+        announcements.update(_state.value.account.session?.token, active)
+    }
+
+    fun dismissAnnouncement() = announcements.dismiss()
+
+    /** A banner's button, routed to the screen it names. */
+    fun handleAnnouncementAction(action: AnnouncementAction) {
+        when (action) {
+            is AnnouncementAction.Settings ->
+                openSettingsTopic(runCatching { SettingsTopic.valueOf(action.shelf.name) }.getOrNull())
+            AnnouncementAction.Account -> openAccountScreen()
+            is AnnouncementAction.External -> openBrowser(action.url)
+        }
+    }
+
+    // The settings window lives in the sidebar's own state; a banner needs a way to
+    // ask it to open on one page. A one-shot flow keeps the side effect out of the
+    // banner and leaves the sidebar the owner of what is on screen.
+    private val _settingsTopic = MutableStateFlow<SettingsTopic?>(null)
+    val settingsTopic: StateFlow<SettingsTopic?> = _settingsTopic.asStateFlow()
+
+    fun openSettingsTopic(topic: SettingsTopic?) {
+        _settingsTopic.value = topic
+    }
+
+    fun consumeSettingsTopic() {
+        _settingsTopic.value = null
+    }
+
+    private val surveys = SurveyCoordinator(
+        api = accountClient,
+        scope = viewModelScope,
+        text = strings,
+        token = { _state.value.account.session?.token },
+        // Paid days change the plan: the profile on screen is re-read, never patched.
+        onPlanChanged = { refreshAccount() },
+    )
+
+    /** The surveys sheet's own state. */
+    val surveyState: StateFlow<SurveysUiState> = surveys.state
+
+    fun openSurveys() = surveys.open()
+    fun closeSurveys() = surveys.close()
+
+    /** The sheet body needs the coordinator itself (list, detail, submit). */
+    internal val surveysCoordinator: SurveyCoordinator get() = surveys
+
     private companion object {
         /** The five names that all mean "the pending set changed": refresh it. */
         val INTERACTION_EVENTS = setOf(
@@ -2317,6 +2910,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         /** How long one LAN probe gets before the next address is tried. */
         const val LAN_PROBE_TIMEOUT_MILLIS = 4_000L
+
+        /** Events in a burst become one catalog read after this much quiet. */
+        const val CATALOG_MERGE_MILLIS = 250L
+
+        /** ...and no more than one catalog read per this window, however long the burst. */
+        const val CATALOG_SILENCE_MILLIS = 2_000L
 
         /**
          * How long the host gets to move its tunnel before this phone redials.

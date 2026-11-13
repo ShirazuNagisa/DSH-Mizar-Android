@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 会话页实时通道 / 过程折叠 / 对话内图片。状态名不在此文件：来自生成的协议状态表。 -->
+<resources>
+    <string name="conv_stream_clock_start">深度求索中~</string>
+    <string name="conv_stream_clock">深度求索中 %1$s</string>
+    <string name="conv_seconds">%1$d 秒</string>
+    <string name="conv_minutes">%1$d 分 %2$d 秒</string>
+
+    <string name="conv_stream_completed">已完成</string>
+    <string name="conv_stream_completed_in">已完成，用时 %1$s</string>
+    <string name="conv_stream_interrupted">已中断</string>
+    <string name="conv_stream_interrupted_after">已中断，用时 %1$s</string>
+    <string name="conv_stream_note_paused">你中断了这一轮。</string>
+    <string name="conv_stream_note_failed">本轮因错误停止。</string>
+    <string name="conv_stream_lost">与电脑的连接已断开。</string>
+    <string name="conv_stream_stale">电脑的状态更新已中断。</string>
+    <string name="conv_stream_earlier_omitted">更早的过程已省略。</string>
+    <string name="conv_stream_earlier_steps">更早的 %1$d 步</string>
+
+    <string name="conv_stream_access_status">本轮状态</string>
+    <string name="conv_stream_access_clock">本轮已运行时间</string>
+    <string name="conv_stream_access_header">本轮结果</string>
+    <string name="conv_stream_show_process">展开过程</string>
+    <string name="conv_stream_hide_process">收起过程</string>
+
+    <string name="conv_compact_context">压缩上下文</string>
+    <string name="conv_fork_turn">在新对话中分支</string>
+
+    <string name="conv_image_loading">正在读取图片…</string>
+    <string name="conv_image_locked_title">订阅付费账户以跨网查看图片</string>
+    <string name="conv_image_locked_body">图片在电脑上。免费账户在局域网内可以查看；付费账户在任何网络都能查看。</string>
+    <string name="conv_image_open">打开图片</string>
+    <string name="conv_image_close">关闭图片</string>
+    <string name="conv_image_retry">重试</string>
+    <string name="conv_image_caption">图片：%1$s</string>
+    <string name="conv_image_missing">电脑上已经没有这张图片了。</string>
+    <string name="conv_image_forbidden">电脑拒绝读取这张图片。</string>
+    <string name="conv_image_too_large">这张图片太大，无法在这里显示。</string>
+    <string name="conv_image_old_plugin">这台电脑的插件版本太老，不能共享图片。</string>
+    <string name="conv_image_offline">现在联系不上这台电脑。</string>
+    <string name="conv_image_not_image">这个文件不是这台手机能显示的图片。</string>
+    <string name="conv_image_unreadable">这张图片读取失败。</string>
+</resources>

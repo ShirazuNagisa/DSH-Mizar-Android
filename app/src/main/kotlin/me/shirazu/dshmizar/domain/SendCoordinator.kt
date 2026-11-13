@@ -67,8 +67,14 @@ internal class SendCoordinator(
      */
     private var submitting = false
 
-    /** Send what the composer holds, or explain why it cannot go. */
-    fun send(message: String) {
+    /**
+     * Send what the composer holds, or explain why it cannot go.
+     *
+     * @param steer whether the host should treat this as guidance for the running
+     *   turn instead of a queued message. Only written when true: an older host
+     *   that does not know the key must keep queueing, which is its default.
+     */
+    fun send(message: String, steer: Boolean = false) {
         val current = store.state.value
         val ready = current.attachments.filter { it.readyId != null }
         if (message.isBlank() && ready.isEmpty()) return
@@ -102,6 +108,7 @@ internal class SendCoordinator(
                             // when the file is the whole message: an omitted key is a
                             // malformed frame, not "no text".
                             put("text", message)
+                            if (steer) put("mode", "steer")
                             if (ready.isNotEmpty()) {
                                 putJsonArray("attachmentIds") {
                                     ready.forEach { add(JsonPrimitive(requireNotNull(it.readyId))) }

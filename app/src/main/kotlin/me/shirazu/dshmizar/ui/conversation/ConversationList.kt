@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import me.shirazu.dshmizar.ui.design.mizarPerform
 import me.shirazu.dshmizar.R
 import me.shirazu.dshmizar.UiState
+import me.shirazu.dshmizar.domain.LiveTurnView
 import me.shirazu.dshmizar.ui.Format
 import me.shirazu.dshmizar.ui.MizarColors
 import me.shirazu.dshmizar.ui.design.Corner
@@ -88,6 +89,13 @@ internal fun ConversationList(
     onLoadDetail: (Int) -> Unit = {},
     canPreviewFiles: Boolean = false,
     onOpenFile: (String, String) -> Unit = { _, _ -> },
+    /**
+     * The live state channel's view of the newest turn, when one is subscribed.
+     * Null (or the turn is not the stream's) keeps the existing history rendering.
+     */
+    liveTurn: LiveTurnView? = null,
+    /** Branch a finished turn into a new conversation, at the turn's end log position. */
+    onForkTurn: ((Int) -> Unit)? = null,
 ) {
     // What the host says about the session, and how fresh the newest record is: the
     // pair decides whether a copy of a turn can still be "in flight". A stale copy is
@@ -156,6 +164,14 @@ internal fun ConversationList(
                     onLoadDetail = onLoadDetail,
                     canPreviewFiles = canPreviewFiles,
                     onOpenFile = onOpenFile,
+                    live = if (liveTurn != null &&
+                        liveApplies(turn, liveTurn, isLast = index == state.turns.lastIndex)
+                    ) {
+                        liveTurn
+                    } else {
+                        null
+                    },
+                    onForkTurn = onForkTurn,
                 )
             }
         }
@@ -215,6 +231,10 @@ private fun TurnSection(
     /** Whether this account may read a delivered file (paid, or on the LAN). */
     canPreviewFiles: Boolean = false,
     onOpenFile: (String, String) -> Unit = { _, _ -> },
+    /** The state channel's view of this turn, when this is the one it describes. */
+    live: LiveTurnView? = null,
+    /** Branch this turn into a new conversation, when it has ended and a boundary is known. */
+    onForkTurn: ((Int) -> Unit)? = null,
 ) {
     // The glow the turn index leaves behind: a wash that fades on its own, because the
     // point is to find the turn once, not to mark it. It comes up on the smooth spring
@@ -242,25 +262,39 @@ private fun TurnSection(
         }
 
         // Prompt, row, answer -- and the row does not move.
-        TurnSummary(
-            turn = turn,
-            now = now,
-            onRetry = onRetry,
-            waiting = waiting,
-            canLoadDetail = canLoadDetail,
-            onLoadDetail = onLoadDetail,
-        )
+        if (live != null) {
+            // The state channel owns the running turn's whole shape: status runs,
+            // streamed bodies, the live clock, and the settled header + fold. The
+            // summary row and the history steps would be a second copy of it.
+            // A settled stream still offers the fork: the history row's end position
+            // is what `session.fork` needs, and the stream view replaced that row.
+            ConversationStream(
+                view = live,
+                onCopy = onCopy,
+                onFork = forkAction(turn, onForkTurn, live),
+            )
+        } else {
+            TurnSummary(
+                turn = turn,
+                now = now,
+                onRetry = onRetry,
+                waiting = waiting,
+                canLoadDetail = canLoadDetail,
+                onLoadDetail = onLoadDetail,
+                onForkTurn = onForkTurn,
+            )
 
-        turn.steps.forEach { step ->
-            RiseOnce {
-                ConversationItemView(
-                    step,
-                    isLastPrompt = false,
-                    onCopy = onCopy,
-                    typing = typing && step.id == turn.steps.lastOrNull {
-                        it is ConversationItem.Message && it.role == ConversationItem.Role.ASSISTANT
-                    }?.id,
-                )
+            turn.steps.forEach { step ->
+                RiseOnce {
+                    ConversationItemView(
+                        step,
+                        isLastPrompt = false,
+                        onCopy = onCopy,
+                        typing = typing && step.id == turn.steps.lastOrNull {
+                            it is ConversationItem.Message && it.role == ConversationItem.Role.ASSISTANT
+                        }?.id,
+                    )
+                }
             }
         }
 
@@ -344,6 +378,7 @@ private fun TurnSummary(
     waiting: Boolean = false,
     canLoadDetail: Boolean = false,
     onLoadDetail: (Int) -> Unit = {},
+    onForkTurn: ((Int) -> Unit)? = null,
 ) {
     // One small tap when a turn the operator is watching finishes. Only on the
     // change, never on the first draw of a finished turn.
@@ -431,6 +466,21 @@ private fun TurnSummary(
                 }
             }
         }
+        // Branch after a finished turn, at the log position of its `turn/end`. A turn
+        // with no known boundary shows nothing: the host would have to guess where to
+        // cut, and a fork in the wrong place is worse than no fork.
+        val forkAt = turn.endSeq
+        if (!active && turn.turn != null && forkAt != null && onForkTurn != null) {
+            TextButton(
+                onClick = { onForkTurn(forkAt) },
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+            ) {
+                Text(
+                    stringResource(R.string.conv_fork_turn),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+        }
         if (turn.steps.isNotEmpty()) {
             Text(
                 stringResource(R.string.step_count, turn.steps.size),
@@ -480,3 +530,38 @@ private val RiseDistance = 14.dp
 
 /** How long the typewriter's grace lasts after a turn lands. */
 private const val TYPEWRITER_GRACE_MILLIS = 2_500L
+
+/**
+ * Whether the live stream describes this turn.
+ *
+ * The stream is per session and only ever covers the running (or just-settled)
+ * turn; a numbered stream applies to the turn with that number, and a stream the
+ * host has not numbered yet belongs to whatever is the newest row.
+ */
+private fun liveApplies(turn: ConversationTurn, live: LiveTurnView, isLast: Boolean): Boolean {
+    val streamTurn = live.turn ?: live.stream.turn
+    val applies = if (streamTurn != null) turn.turn == streamTurn else isLast
+    if (!applies) return false
+    // A settled stream that carries no block can draw nothing: an old host (no
+    // journal), or a frame that never arrived. Falling back to the history is the
+    // only honest answer -- the alternative is a finished turn rendered as a bare
+    // header with its answer missing.
+    if (live.settled && live.stream.blocks.isEmpty()) return false
+    return true
+}
+
+/**
+ * The fork affordance a settled stream should show, if any.
+ *
+ * The stream view took the history row's place, so it inherits that row's gate: a
+ * finished turn, a host that offers `session.fork`, and a known end boundary.
+ */
+private fun forkAction(
+    turn: ConversationTurn,
+    onForkTurn: ((Int) -> Unit)?,
+    live: LiveTurnView,
+): (() -> Unit)? {
+    if (!live.settled || turn.turn == null || onForkTurn == null) return null
+    val atSeq = turn.endSeq ?: return null
+    return { onForkTurn(atSeq) }
+}

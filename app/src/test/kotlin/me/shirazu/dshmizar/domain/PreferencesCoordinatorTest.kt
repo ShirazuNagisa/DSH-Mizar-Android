@@ -30,6 +30,7 @@ class PreferencesCoordinatorTest {
         var approvals: Boolean = true,
         var haptics: Boolean = true,
         var slow: Boolean = false,
+        var steer: Boolean = false,
     ) : Preferences {
         override fun themeMode(): String = theme
         override fun quietHours(): Boolean = quiet
@@ -40,6 +41,7 @@ class PreferencesCoordinatorTest {
         override fun notifyApprovals(): Boolean = approvals
         override fun hapticsEnabled(): Boolean = haptics
         override fun slowTypewriter(): Boolean = slow
+        override fun steerByDefault(): Boolean = steer
 
         override fun setThemeMode(mode: String) { theme = mode }
         override fun setQuietHours(on: Boolean) { quiet = on }
@@ -49,6 +51,7 @@ class PreferencesCoordinatorTest {
         override fun setNotifyApprovals(on: Boolean) { approvals = on }
         override fun setHapticsEnabled(on: Boolean) { haptics = on }
         override fun setSlowTypewriter(on: Boolean) { slow = on }
+        override fun setSteerByDefault(on: Boolean) { steer = on }
     }
 
     @Test
@@ -66,6 +69,7 @@ class PreferencesCoordinatorTest {
                 approvals = false,
                 haptics = false,
                 slow = true,
+                steer = true,
             ),
         )
 
@@ -78,6 +82,7 @@ class PreferencesCoordinatorTest {
         assertFalse("notifyApprovals", state.notifyApprovals)
         assertFalse("hapticsEnabled", state.hapticsEnabled)
         assertTrue("slowTypewriter", state.slowTypewriter)
+        assertTrue("steerByDefault", state.steerByDefault)
     }
 
     @Test
@@ -103,6 +108,7 @@ class PreferencesCoordinatorTest {
             Switch("notifyApprovals", { coordinator.setNotifyApprovals(false) }, { prefs.approvals.toString() }, { state.value.notifyApprovals.toString() }, "false"),
             Switch("haptics", { coordinator.setHapticsEnabled(false) }, { prefs.haptics.toString() }, { state.value.hapticsEnabled.toString() }, "false"),
             Switch("slowTypewriter", { coordinator.setSlowTypewriter(true) }, { prefs.slow.toString() }, { state.value.slowTypewriter.toString() }, "true"),
+            Switch("steerByDefault", { coordinator.setSteerByDefault(true) }, { prefs.steer.toString() }, { state.value.steerByDefault.toString() }, "true"),
         )
 
         for (switch in switches) {

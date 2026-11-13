@@ -437,6 +437,10 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.Conversat
                         listState = conversationList,
                         highlightTurn = glowingTurn,
                         drawerOpen = shell.isOpen,
+                        // The state channel's view of the running turn, and the one
+                        // picture store the live and historical bodies share.
+                        liveTurn = state.liveTurn,
+                        conversationImages = model.conversationImages,
                     )
                 }
             }

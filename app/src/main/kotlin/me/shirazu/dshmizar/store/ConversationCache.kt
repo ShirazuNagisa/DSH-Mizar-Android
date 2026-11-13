@@ -67,6 +67,18 @@ class ConversationCache(context: Context) {
         }
     }
 
+    /**
+     * Forget every cached transcript.
+     *
+     * The settings screen's 「完全刷新本地会话数据」. The index of which sessions exist
+     * is kept: this is about conversation content, not about the list.
+     */
+    suspend fun clearAll() = withContext(Dispatchers.IO) {
+        runCatching { directory.deleteRecursively() }
+            .onFailure { Log.i(TAG, "cache clear failed: $it") }
+        Unit
+    }
+
     /** Merge two record lists by `seq`, newest kept, oldest dropped at the bound. */
     private fun merge(old: List<JsonElement>, fresh: List<JsonElement>): List<JsonElement> {
         val bySeq = LinkedHashMap<String, JsonElement>()

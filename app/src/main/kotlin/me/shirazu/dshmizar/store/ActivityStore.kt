@@ -1,6 +1,8 @@
 package me.shirazu.dshmizar.store
 
 import android.content.Context
+import me.shirazu.dshmizar.domain.AgentEngine
+import me.shirazu.dshmizar.domain.AgentSurface
 import me.shirazu.dshmizar.domain.Preferences
 import me.shirazu.dshmizar.domain.RunningBaseline
 
@@ -98,6 +100,48 @@ class ActivityStore(context: Context) : Preferences, RunningBaseline {
     override fun slowTypewriter(): Boolean = prefs.getBoolean(SLOW_TYPEWRITER, false)
     override fun setSlowTypewriter(on: Boolean) { prefs.edit().putBoolean(SLOW_TYPEWRITER, on).apply() }
 
+    // ── the first-run guide ─────────────────────────────────────────────────
+    //
+    // Three facts, not one: whether it was finished, whether it was started (a
+    // guide interrupted halfway should not count as seen), and for which build.
+    // A new build replays it once, keeping the account and the settings.
+
+    fun onboardingDone(): Boolean = prefs.getBoolean(ONBOARDING_DONE, false)
+    fun setOnboardingDone(on: Boolean) { prefs.edit().putBoolean(ONBOARDING_DONE, on).apply() }
+
+    fun onboardingStarted(): Boolean = prefs.getBoolean(ONBOARDING_STARTED, false)
+    fun setOnboardingStarted(on: Boolean) { prefs.edit().putBoolean(ONBOARDING_STARTED, on).apply() }
+
+    fun onboardingVersion(): String? = prefs.getString(ONBOARDING_VERSION, null)
+    fun setOnboardingVersion(version: String) { prefs.edit().putString(ONBOARDING_VERSION, version).apply() }
+
+    // ── which agent this phone is scoped to ─────────────────────────────────
+    //
+    // The engine travels in the hello frame and the surface is the phone's own
+    // preference; both are remembered so a restart comes back to the same agent.
+
+    fun agentEngine(): String? = prefs.getString(AGENT_ENGINE, null)
+    fun setAgentEngine(engine: AgentEngine?) {
+        prefs.edit().apply {
+            if (engine == null) remove(AGENT_ENGINE) else putString(AGENT_ENGINE, engine.wireName)
+        }.apply()
+    }
+
+    fun agentSurface(): String? = prefs.getString(AGENT_SURFACE, null)
+    fun setAgentSurface(surface: AgentSurface?) {
+        prefs.edit().apply {
+            if (surface == null) remove(AGENT_SURFACE) else putString(AGENT_SURFACE, surface.wireName)
+        }.apply()
+    }
+
+    /**
+     * Whether a message typed while a turn is running is sent straight to the host as
+     * a steer. Off by default: holding it until the turn settles is what the iOS app
+     * does, and it is the less destructive of the two.
+     */
+    override fun steerByDefault(): Boolean = prefs.getBoolean(STEER_BY_DEFAULT, false)
+    override fun setSteerByDefault(on: Boolean) { prefs.edit().putBoolean(STEER_BY_DEFAULT, on).apply() }
+
     /**
      * Whether the operator wants the LAN tried before the relay.
      *
@@ -122,6 +166,12 @@ class ActivityStore(context: Context) : Preferences, RunningBaseline {
         const val NOTIFY_APPROVALS = "notify-approvals"
         const val HAPTICS = "haptics"
         const val SLOW_TYPEWRITER = "slow-typewriter"
+        const val STEER_BY_DEFAULT = "steer-by-default"
         const val LAN_FIRST = "lan-first"
+        const val ONBOARDING_DONE = "onboarding-done"
+        const val ONBOARDING_STARTED = "onboarding-started"
+        const val ONBOARDING_VERSION = "onboarding-version"
+        const val AGENT_ENGINE = "agent-engine"
+        const val AGENT_SURFACE = "agent-surface"
     }
 }

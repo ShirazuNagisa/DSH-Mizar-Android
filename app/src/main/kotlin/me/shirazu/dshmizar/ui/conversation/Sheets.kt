@@ -259,7 +259,11 @@ internal fun PermissionContent(
 
 /** The context breakdown, with an em dash for everything the host did not send. */
 @Composable
-internal fun ContextContent(context: ContextPressure?) {
+internal fun ContextContent(
+    context: ContextPressure?,
+    /** "Compact the context", when the host can do it and the turn is not running. */
+    onCompact: (() -> Unit)? = null,
+) {
     if (context == null) {
         Text(
             stringResource(R.string.no_context_figure),
@@ -277,6 +281,15 @@ internal fun ContextContent(context: ContextPressure?) {
         Labelled(stringResource(R.string.system), Format.count(breakdown.systemTokens))
         Labelled(stringResource(R.string.tools), Format.count(breakdown.toolsTokens))
         Labelled(stringResource(R.string.messages), Format.count(breakdown.messageTokens))
+    }
+    if (onCompact != null) {
+        Spacer(Modifier.height(4.dp))
+        // A command about the session, not a figure: it sits under the numbers it
+        // acts on, in the same row voice as the popover's other actionable rows.
+        PopoverRow(
+            title = stringResource(R.string.conv_compact_context),
+            onClick = onCompact,
+        )
     }
 }
 

@@ -71,12 +71,16 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         model.setPresence(true); me.shirazu.dshmizar.push.ConnectionService.start(this, getString(R.string.link_connecting))
         model.refreshAccountOnForeground()
+        // Banners are served by the relay over their own socket; it is only worth
+        // holding while a person can see the screen.
+        model.announcementsForeground(true)
     }
 
     override fun onStop() {
         // The service deliberately survives this: going to the background is the
         // case it exists for. It stops in onDestroy, when the task really ends.
         model.setPresence(false)
+        model.announcementsForeground(false)
         super.onStop()
     }
 

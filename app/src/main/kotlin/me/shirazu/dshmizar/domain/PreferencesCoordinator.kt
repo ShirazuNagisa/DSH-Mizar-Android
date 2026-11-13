@@ -33,6 +33,9 @@ interface Preferences {
 
     fun slowTypewriter(): Boolean
 
+    /** Whether a message typed mid-turn steers instead of waiting for the turn to end. */
+    fun steerByDefault(): Boolean
+
     fun setThemeMode(mode: String)
 
     fun setQuietHours(on: Boolean)
@@ -48,6 +51,8 @@ interface Preferences {
     fun setHapticsEnabled(on: Boolean)
 
     fun setSlowTypewriter(on: Boolean)
+
+    fun setSteerByDefault(on: Boolean)
 }
 
 /**
@@ -67,6 +72,7 @@ internal fun storedPreferences(preferences: Preferences): UiState = UiState(
     notifyApprovals = preferences.notifyApprovals(),
     hapticsEnabled = preferences.hapticsEnabled(),
     slowTypewriter = preferences.slowTypewriter(),
+    steerByDefault = preferences.steerByDefault(),
 )
 
 /**
@@ -126,6 +132,11 @@ internal class PreferencesCoordinator(
     fun setSlowTypewriter(on: Boolean) {
         stored.setSlowTypewriter(on)
         store.update { it.copy(slowTypewriter = on) }
+    }
+
+    fun setSteerByDefault(on: Boolean) {
+        stored.setSteerByDefault(on)
+        store.update { it.copy(steerByDefault = on) }
     }
 }
 

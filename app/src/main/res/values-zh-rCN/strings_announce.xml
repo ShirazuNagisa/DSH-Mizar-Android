@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Simplified Chinese for the announcements and questionnaires, taken from the iOS
+  catalogue (`iOS/DSH-Mizar/zh-Hans.lproj/Localizable.strings`) wherever the string
+  exists there, so the two platforms say the same thing.
+-->
+<resources>
+    <!-- 中继推送的应用内横幅；正文由服务器给出。 -->
+    <string name="announcement_dismiss">关闭</string>
+
+    <!-- 问卷目录。 -->
+    <string name="survey_title">问卷</string>
+    <string name="survey_questionnaire">问卷</string>
+    <string name="survey_loading">正在读取问卷…</string>
+    <string name="survey_empty">现在没有问卷。</string>
+    <string name="survey_footer">填写后会把上面显示的奖励加到你的账户上。每份问卷每个账户只能填写一次。</string>
+    <string name="survey_section_open">未完成</string>
+    <string name="survey_section_completed">已完成</string>
+    <string name="survey_about_note">填写后会把显示的奖励加到你的账户上。</string>
+    <string name="survey_days">%1$d 天</string>
+    <string name="survey_done">完成</string>
+    <string name="survey_close">关闭</string>
+    <string name="survey_back">返回</string>
+
+    <!-- 填写页。 -->
+    <string name="survey_reward">奖励：%1$d 天付费权益</string>
+    <string name="survey_questions">问题</string>
+    <string name="survey_answers_note">答案会发送到 Mizar 问卷服务器，不会用于在这款应用里训练任何东西。</string>
+    <string name="survey_thanks">谢谢，已增加 %1$d 天。</string>
+    <string name="survey_already_answered">你已经填写过这份问卷。</string>
+    <string name="survey_sending">正在提交…</string>
+    <string name="survey_submit">提交</string>
+    <string name="survey_required">必填</string>
+    <string name="survey_answer_hint">你的回答</string>
+
+    <!-- 失败提示：中继的错误码，以及表单自己拦下的两种情况。 -->
+    <string name="survey_failed">问卷没能提交。</string>
+    <string name="survey_required_missing">还有必填问题没有回答。</string>
+    <string name="survey_sign_in_first">请先登录再填写问卷。</string>
+    <string name="survey_unavailable">问卷暂时不可用，请稍后再试。</string>
+    <string name="survey_gone">这份问卷已经不可用了。</string>
+    <string name="survey_already_done">你已经填写过这份问卷。</string>
+    <string name="survey_invalid_answers">有些答案没有被接受，请检查后重试。</string>
+</resources>

@@ -128,6 +128,9 @@ internal fun Composer(
     attachmentsEnabled: Boolean = false,
     onPickPhoto: () -> Unit = {},
     onPickFile: () -> Unit = {},
+    /** "Compact the context" in the context window; disabled while a turn is running. */
+    onCompactContext: () -> Unit = {},
+    compactContextEnabled: Boolean = false,
     /** Reported upward so the interactions dock can tuck itself away while typing. */
     onFocusChanged: (Boolean) -> Unit = {},
 ) {
@@ -238,6 +241,11 @@ internal fun Composer(
                     onChooseModel(selection)
                 },
                 onCommand = onCommand,
+                onCompactContext = {
+                    showingContext = false
+                    onCompactContext()
+                },
+                compactContextEnabled = compactContextEnabled,
             )
         }
     }
@@ -265,6 +273,8 @@ private fun ComposerBarRow(
     onDismissCommands: () -> Unit,
     onChooseModel: (me.shirazu.mizar.kit.ModelSelection) -> Unit,
     onCommand: (String) -> Unit,
+    onCompactContext: () -> Unit = {},
+    compactContextEnabled: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement6) {
@@ -309,7 +319,10 @@ private fun ComposerBarRow(
                 width = PopoverSize.COMPACT_WIDTH,
                 maxHeight = PopoverSize.COMPACT_HEIGHT,
             ) {
-                ContextContent(context = state.stats?.context)
+                ContextContent(
+                    context = state.stats?.context,
+                    onCompact = if (compactContextEnabled) onCompactContext else null,
+                )
             }
         }
     }

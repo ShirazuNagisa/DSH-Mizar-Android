@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The operator's in-app announcements and questionnaires (0.9.9 channel).
+
+  Kept out of strings.xml so this feature is one file to add or remove, and so the
+  Lead can merge it without touching the shared catalogue. The survey copy is the
+  iOS catalogue's English, verbatim where it exists, because the two platforms say
+  the same thing on screen; the section labels and the local form refusals are the
+  Android-only ones (the iOS form disables Submit instead of explaining it).
+-->
+<resources>
+    <!-- The banner the relay pushes. The sentence itself comes from the server. -->
+    <string name="announcement_dismiss">Dismiss</string>
+
+    <!-- The questionnaire directory. -->
+    <string name="survey_title">Questionnaires</string>
+    <string name="survey_questionnaire">Questionnaire</string>
+    <string name="survey_loading">Loading questionnaires…</string>
+    <string name="survey_empty">There are no questionnaires right now.</string>
+    <string name="survey_footer">Answering one adds the reward it shows to your account. Each account can answer each questionnaire once.</string>
+    <string name="survey_section_open">To answer</string>
+    <string name="survey_section_completed">Answered</string>
+    <string name="survey_about_note">Answer one and the reward it shows is added to your account.</string>
+    <string name="survey_days">%1$d days</string>
+    <string name="survey_done">Done</string>
+    <string name="survey_close">Close</string>
+    <string name="survey_back">Back</string>
+
+    <!-- The form. -->
+    <string name="survey_reward">Reward: %1$d days of paid access</string>
+    <string name="survey_questions">Questions</string>
+    <string name="survey_answers_note">Answers are sent to the Mizar survey server and are not used to train anything in this app.</string>
+    <string name="survey_thanks">Thank you — %1$d days have been added.</string>
+    <string name="survey_already_answered">You have already answered this questionnaire.</string>
+    <string name="survey_sending">Sending…</string>
+    <string name="survey_submit">Submit</string>
+    <string name="survey_required">Required</string>
+    <string name="survey_answer_hint">Your answer</string>
+
+    <!-- The refusals: the relay's codes, plus the two the form itself catches. -->
+    <string name="survey_failed">The questionnaire could not be submitted.</string>
+    <string name="survey_required_missing">Some required questions are still unanswered.</string>
+    <string name="survey_sign_in_first">Sign in first to fill in a questionnaire.</string>
+    <string name="survey_unavailable">Questionnaires are unavailable right now. Try again later.</string>
+    <string name="survey_gone">That questionnaire is no longer available.</string>
+    <string name="survey_already_done">You have already filled in this questionnaire.</string>
+    <string name="survey_invalid_answers">Some answers were not accepted. Check the form and try again.</string>
+</resources>

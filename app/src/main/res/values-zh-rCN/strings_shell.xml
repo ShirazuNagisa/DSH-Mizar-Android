@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  本轮壳层功能（新手教程、设置目录与二级页、首页用量、Agent 切换）的中文文案。
+  与公共 strings.xml 分开：同一轮有多个 Agent 并行改代码，一个功能一份文案，
+  前缀统一 shell_。
+-->
+<resources>
+
+    <!-- 设置目录 -->
+    <string name="shell_settings_done">完成</string>
+    <string name="shell_settings_back">返回</string>
+    <string name="shell_settings_copied">已复制</string>
+    <string name="shell_topic_account">账户</string>
+    <string name="shell_topic_account_summary">谁已登录，以及这个账户买的计划。</string>
+    <string name="shell_topic_notifications">通知与实时活动</string>
+    <string name="shell_topic_notifications_summary">通知种类、运行轮次卡片与震动反馈。</string>
+    <string name="shell_topic_sending">消息发送偏好</string>
+    <string name="shell_topic_sending_summary">轮次运行中发出的消息该怎么处理。</string>
+    <string name="shell_topic_transfer">传输</string>
+    <string name="shell_topic_transfer_summary">局域网优先，以及重连走哪条线路。</string>
+    <string name="shell_topic_local_agent">本地 Agent（实验）</string>
+    <string name="shell_topic_local_agent_summary">模型配置，以及它在这台手机上保留的会话。</string>
+    <string name="shell_topic_files">文件与缓存</string>
+    <string name="shell_topic_files_summary">已预览的文件、文件缓存与本地会话数据。</string>
+    <string name="shell_topic_community">社区</string>
+    <string name="shell_topic_community_summary">项目网站与反馈群。</string>
+    <string name="shell_topic_logs">日志</string>
+    <string name="shell_topic_logs_summary">针对一个问题导出一份诊断日志。</string>
+    <string name="shell_topic_about">关于与更多</string>
+    <string name="shell_topic_about_summary">版本、主题、源代码，以及重播教程的入口。</string>
+
+    <!-- 设置二级页 -->
+    <string name="shell_settings_account_note">Android 上 Mizar 账户是可选的：局域网连接和开发用配对都不需要账户。登录后中继会话可归属到你，付费时长用兑换码充入。</string>
+    <string name="shell_settings_live_updates_section">实时活动</string>
+    <string name="shell_settings_live_updates">运行轮次卡片</string>
+    <string name="shell_settings_live_updates_auto">Android 16 及以上自动显示</string>
+    <string name="shell_settings_live_updates_unsupported">当前 Android 版本不支持</string>
+    <string name="shell_settings_notifications_note">某一类通知关掉后，它到达时会被直接丢弃，与 Android 的系统设置无关。上面一行是系统权限：系统说通知关闭时，这里的开关都救不回来。</string>
+    <string name="shell_settings_steer_by_default">默认引导发送</string>
+    <string name="shell_settings_sending_note">打开时，轮次运行中发出的消息会立即作为引导交给模型，不打断这一轮。关闭时它停在上方长条里，等这一轮结束再发送；长条也可以现在作为引导发出、放回输入框，或直接丢掉。</string>
+    <string name="shell_settings_transfer_note">关闭是一条规则而不是偏好：这款手机会完全不使用电脑的局域网地址，已建立的局域网连接立即断开，重连改走中继。</string>
+    <string name="shell_settings_local_agent_unavailable">此构建尚未包含本地 Agent。它正在独立模块里移植；这个位置将来放它的配置和保存在本机的会话。</string>
+    <string name="shell_settings_local_agent_models">模型配置</string>
+    <string name="shell_settings_local_agent_configured">已配置模型服务商。</string>
+    <string name="shell_settings_local_agent_not_configured">还没有模型服务商。</string>
+    <string name="shell_settings_local_agent_clear">清除本地会话</string>
+    <string name="shell_settings_local_agent_clear_body">本地 Agent 写下的会话保存在这台手机上。清除会删掉它们；工作区文件夹与模型配置保留。</string>
+    <string name="shell_settings_local_agent_note">本地 Agent 只在应用处于前台时工作。离开应用或锁屏会停掉正在跑的轮次。它不使用中继，也不消耗账户额度。</string>
+    <string name="shell_settings_delete">删除</string>
+    <string name="shell_settings_files_section">文件</string>
+    <string name="shell_settings_files_previewed">已预览文件</string>
+    <string name="shell_settings_files_cache_empty">空</string>
+    <string name="shell_settings_files_cache_unknown">尚未读取</string>
+    <string name="shell_settings_files_cache_files">%1$d 个文件 · %2$s</string>
+    <string name="shell_settings_files_note">模型交付的文件会留在这台手机上，第二次打开就不必再传一遍。清除可释放空间；下次预览会从电脑重新读取。</string>
+    <string name="shell_settings_clear_file_cache">清除文件缓存</string>
+    <string name="shell_settings_session_data">会话数据</string>
+    <string name="shell_settings_reload_sessions">完全刷新本地会话数据</string>
+    <string name="shell_settings_reload_sessions_note">删除这台手机保存的对话、会话列表与工作区，再从电脑重新读取一遍。电脑上的内容不会有任何变化。</string>
+    <string name="shell_settings_reload_sessions_body">先删掉这台手机保存的所有会话相关信息，再从电脑重新读取。账户与设置会保留。</string>
+    <string name="shell_settings_reload">重新加载</string>
+    <string name="shell_settings_community_website">项目网站</string>
+    <string name="shell_settings_community_qq">反馈群</string>
+    <string name="shell_settings_community_qq_copied">没有应用响应群卡片。群号已复制到剪贴板。</string>
+    <string name="shell_settings_community_note">两行都会离开应用，而不是打开应用内页面：浏览器是你自己的、带你自己的历史；群在它自己的应用里。</string>
+    <string name="shell_settings_logs_export_note">压缩包里有这个构建与这台手机、当前设置、发给电脑的每个请求及其结果，以及最近的宿主事件。</string>
+    <string name="shell_settings_logs_note">写文件前会移除设备令牌与配对码，对话内容不在其中。慢速打字机是诊断项：把逐字显现拉长到八秒，方便观察。</string>
+    <string name="shell_settings_version">版本</string>
+    <string name="shell_settings_replay_onboarding">重播教程</string>
+    <string name="shell_settings_replay_onboarding_note">重新走一遍首次启动教程。账户与全部设置都会保留。</string>
+    <string name="shell_settings_about_note">GPLv3。iOS 与 Android 共用 MizarKit 与同一套宿主插件。</string>
+
+    <!-- 首页用量概览 -->
+    <string name="shell_usage_loading">正在读取用量…</string>
+    <string name="shell_usage_sessions">会话</string>
+    <string name="shell_usage_messages">消息</string>
+    <string name="shell_usage_tokens">总 token</string>
+    <string name="shell_usage_active_days">活跃天数</string>
+    <string name="shell_usage_busiest_hour">最忙时段</string>
+    <string name="shell_usage_top_model">最常用模型</string>
+    <string name="shell_usage_last_year">过去一年</string>
+    <string name="shell_usage_messages_unit">条消息</string>
+    <string name="shell_usage_tokens_unit">token</string>
+
+    <!-- Agent 切换 -->
+    <string name="shell_agent_which">这条连接使用的 Agent</string>
+    <string name="shell_agent_offline">离线</string>
+    <string name="shell_agent_experimental">（实验）</string>
+    <string name="shell_agent_detail_dsh">DeepSeek Harness 的工作区与会话</string>
+    <string name="shell_agent_detail_claude_gui">Claude 桌面端记录，只读</string>
+    <string name="shell_agent_detail_claude_cli">这台电脑上的 Claude Code 会话</string>
+    <string name="shell_agent_detail_claude">这台电脑上的 Claude Code 记录</string>
+    <string name="shell_agent_detail_codex_gui">Codex 桌面端线程</string>
+    <string name="shell_agent_detail_codex_cli">这台电脑上的 Codex CLI 线程</string>
+    <string name="shell_agent_detail_codex">这台电脑上的 Codex 线程</string>
+
+    <!-- 首次启动教程 -->
+    <string name="shell_onboarding_back">返回</string>
+    <string name="shell_onboarding_continue">继续</string>
+    <string name="shell_onboarding_start">开始使用 DSH-Mizar</string>
+    <string name="shell_onboarding_account_optional">账户是可选的。可以先继续，以后再登录。</string>
+    <string name="shell_onboarding_account_keep_note">可以直接继续，不必重新登录。账户与设置都会保留。</string>
+
+    <string name="shell_onboarding_welcome_title">欢迎使用 DSH-Mizar</string>
+    <string name="shell_onboarding_welcome_subtitle">具体工作由电脑完成，这台手机负责掌控。</string>
+    <string name="shell_onboarding_feature_computer_title">Agent 跑在你的电脑上</string>
+    <string name="shell_onboarding_feature_computer_detail">会话、文件与模型都留在你的 Mac 或 PC 上。</string>
+    <string name="shell_onboarding_feature_phone_title">这台手机是遥控器</string>
+    <string name="shell_onboarding_feature_phone_detail">任何网络下都能发提示词、批准操作、查看进度。</string>
+    <string name="shell_onboarding_feature_account_title">账户让中继可追溯</string>
+    <string name="shell_onboarding_feature_account_detail">流量始终可归属到人；对话从不经过账户服务器。</string>
+
+    <string name="shell_onboarding_desktop_title">先在电脑上安装 AGI Mizar</string>
+    <string name="shell_onboarding_desktop_subtitle">这台手机是遥控器。它要驱动的电脑需要先装好并运行 AGI Mizar，两者才能配对。</string>
+    <string name="shell_onboarding_desktop_step_download_title">下载</string>
+    <string name="shell_onboarding_desktop_step_download_detail">打开 GitHub Releases，取对应平台的安装包。</string>
+    <string name="shell_onboarding_desktop_step_install_title">安装并打开</string>
+    <string name="shell_onboarding_desktop_step_install_detail">在你想让手机驱动的那台电脑上运行它，并保持运行。</string>
+    <string name="shell_onboarding_desktop_step_return_title">回到这里</string>
+    <string name="shell_onboarding_desktop_step_return_detail">下一步会把这台手机和那台电脑配对。</string>
+    <string name="shell_onboarding_desktop_url_label">AGI Mizar · GitHub Releases</string>
+    <string name="shell_onboarding_desktop_open">打开下载页</string>
+    <string name="shell_onboarding_desktop_copy">复制链接</string>
+    <string name="shell_onboarding_desktop_copied">链接已复制</string>
+    <string name="shell_onboarding_desktop_note">Releases 提供 macOS DMG；Windows 安装包由仓库的打包脚本生成。</string>
+
+    <string name="shell_onboarding_account_title">账户</string>
+    <string name="shell_onboarding_account_subtitle">Mizar 账户承载中继会话。Android 上它是可选的：局域网连接不需要账户。</string>
+    <string name="shell_onboarding_account_signed_in">已登录</string>
+    <string name="shell_onboarding_account_manage">管理账户</string>
+    <string name="shell_onboarding_account_sign_in">登录</string>
+    <string name="shell_onboarding_account_create">创建账户</string>
+    <string name="shell_onboarding_account_body">登录后每个中继会话都能归属到一个人。账户服务器不保存对话与文件，晚一点再登录也不会损失什么。</string>
+
+    <string name="shell_onboarding_network_title">网络</string>
+    <string name="shell_onboarding_network_subtitle">这台手机应该怎么连到你的电脑？</string>
+    <string name="shell_onboarding_network_lan_title">局域网优先</string>
+    <string name="shell_onboarding_network_lan_detail">在同一个 Wi-Fi 下直接连接。更快，也不走中继流量。</string>
+    <string name="shell_onboarding_network_note">这就是设置里的同一个开关。关闭后所有连接都走中继。</string>
+
+    <string name="shell_onboarding_agent_title">Agent 在哪运行</string>
+    <string name="shell_onboarding_agent_subtitle">你的会话应该在哪里运行？</string>
+    <string name="shell_onboarding_agent_computer_title">在我的电脑上</string>
+    <string name="shell_onboarding_agent_computer_detail">在你的 Mac 或 PC 上运行 AGI Mizar，这台手机来控制它。</string>
+    <string name="shell_onboarding_agent_local_title">在这台手机上（实验）</string>
+    <string name="shell_onboarding_agent_local_detail">需要模型 API Key，且只在应用打开时运行。</string>
+    <string name="shell_onboarding_agent_configured">模型已配置</string>
+    <string name="shell_onboarding_agent_not_configured">添加模型服务商</string>
+    <string name="shell_onboarding_agent_configure_detail">现在填 API Key，或稍后在设置里填。</string>
+    <string name="shell_onboarding_agent_configure">配置</string>
+    <string name="shell_onboarding_agent_unavailable">本地 Agent 仍在移植到 Android；在它落地之前，会话跑在你的电脑上。</string>
+    <string name="shell_onboarding_agent_note">以后随时可以在这台手机和你的电脑之间切换。</string>
+
+    <string name="shell_onboarding_alerts_title">通知与实时活动</string>
+    <string name="shell_onboarding_alerts_subtitle">应用不在前台时，希望什么找到你。</string>
+    <string name="shell_onboarding_alerts_notifications_title">通知</string>
+    <string name="shell_onboarding_alerts_notifications_detail">任务完成、需要授权，或模型向你提问。</string>
+    <string name="shell_onboarding_alerts_live_title">运行轮次卡片</string>
+    <string name="shell_onboarding_alerts_live_detail">在锁屏上看到正在运行的任务（Android 16 及以上）。</string>
+    <string name="shell_onboarding_alerts_system">Android 通知设置</string>
+    <string name="shell_onboarding_alerts_note">Android 会询问通知权限。两处开关以后都能在设置里改。</string>
+
+    <string name="shell_onboarding_plan_title">计划</string>
+    <string name="shell_onboarding_plan_subtitle">保留免费账户，或增加付费时长。</string>
+    <string name="shell_onboarding_plan_free">免费账户</string>
+    <string name="shell_onboarding_plan_free_detail">大多数跨网络功能，以及全部局域网功能。</string>
+    <string name="shell_onboarding_plan_paid">付费账户</string>
+    <string name="shell_onboarding_plan_paid_detail">增加已定义的跨网络权益。</string>
+    <string name="shell_onboarding_plan_paid_until">付费有效期至</string>
+    <string name="shell_onboarding_plan_balance">电脑余额</string>
+    <string name="shell_onboarding_plan_redeem">兑换码</string>
+    <string name="shell_onboarding_plan_open_balance">查看余额</string>
+    <string name="shell_onboarding_plan_note">Android 不在应用商店里卖订阅：付费时长用兑换码充入账户，余额属于电脑。</string>
+
+    <string name="shell_onboarding_refresh_title">刷新你的会话</string>
+    <string name="shell_onboarding_refresh_subtitle">这台手机关于会话显示的一切，都会按电脑当前的规则重新读取一遍。</string>
+    <string name="shell_onboarding_refresh_running">正在读取你的会话…</string>
+    <string name="shell_onboarding_refresh_running_detail">账户与设置会保留，只重新加载会话信息。</string>
+    <string name="shell_onboarding_refresh_done">已加载 %1$d 个会话</string>
+    <string name="shell_onboarding_refresh_failed">你的电脑没有回应。</string>
+    <string name="shell_onboarding_refresh_kept">账户与设置都会保留。</string>
+    <string name="shell_onboarding_refresh_retry">重试</string>
+    <string name="shell_onboarding_refresh_note">每次打开教程都会重新读取会话，所以之后看到的就是电脑现在的状态。</string>
+
+    <string name="shell_onboarding_summary_title">准备好了</string>
+    <string name="shell_onboarding_summary_subtitle">这里的每一项以后都能改。</string>
+    <string name="shell_onboarding_summary_account">账户</string>
+    <string name="shell_onboarding_summary_network">网络</string>
+    <string name="shell_onboarding_summary_agent">Agent</string>
+    <string name="shell_onboarding_summary_alerts">通知</string>
+    <string name="shell_onboarding_summary_plan">计划</string>
+    <string name="shell_onboarding_summary_no_account">未登录</string>
+    <string name="shell_onboarding_summary_lan_on">局域网优先</string>
+    <string name="shell_onboarding_summary_lan_off">中继</string>
+    <string name="shell_onboarding_summary_agent_computer">在我的电脑上</string>
+    <string name="shell_onboarding_summary_agent_local">在这台手机上 · 模型稍后配置</string>
+    <string name="shell_onboarding_summary_agent_local_ready">在这台手机上 · 模型已就绪</string>
+    <string name="shell_onboarding_summary_on">开</string>
+    <string name="shell_onboarding_summary_off">关</string>
+</resources>

@@ -16,7 +16,7 @@
     <string name="alert_channel">Agent alerts</string>
     <string name="alert_channel_description">Approvals, questions and finished turns</string>
     <string name="pending_title">The agent is waiting</string>
-    <string name="pending_body">— open DSH-Mizar to answer.</string>
+    <string name="pending_body">— open AGI Mizar to answer.</string>
     <string name="pending_approvals">%1$d approvals</string>
     <string name="pending_questions">%1$d questions</string>
 
@@ -26,8 +26,9 @@
     <string name="diagnosis_relay_room_empty">The relay answered, but this computer is not connected to it. Make sure DSH is running and its Mizar panel shows it online.</string>
     <string name="diagnosis_silent">Nothing answered at %1$s. Make sure DSH is running on the computer and that this phone can reach it.</string>
     <string name="diagnosis_offline">This device has no network connection.</string>
-    <string name="diagnosis_repair_no_address">This computer no longer recognises this phone. Pair it again from the DSH-Mizar panel.</string>
-    <string name="diagnosis_repair">%1$s answered, but it no longer recognises this phone. Pair it again: scan the code or enter the code the DSH-Mizar panel shows.</string>
+    <string name="diagnosis_repair_no_address">This computer no longer recognises this phone. Pair it again from AGI Mizar\'s pairing panel.</string>
+    <string name="diagnosis_repair">%1$s answered, but it no longer recognises this phone. Pair it again: scan the code or enter the code AGI Mizar shows.</string>
+    <string name="host_too_old">This computer is running an older AGI Mizar. Update it on the computer to use this.</string>
     <string name="diagnosis_unknown_host">The name %1$s did not resolve. Check the address from the pairing code.</string>
 
     <!-- Launching, pairing, connecting -->
@@ -35,7 +36,7 @@
     <!-- Shown above the screen while a dropped socket is being dialled again. -->
     <string name="reconnecting">Reconnecting…</string>
     <string name="unpaired_title">No computer paired yet</string>
-    <string name="unpaired_body">Open DSH on your computer, find the DSH-Mizar panel in the sidebar, and scan the code it shows.</string>
+    <string name="unpaired_body">Open AGI Mizar on your computer, open its pairing panel, and scan the code it shows.</string>
     <string name="scan_code">Scan the code</string>
     <string name="enter_manually">Or enter it by hand</string>
     <string name="host_label">Host, for example 192.168.1.20:19390</string>

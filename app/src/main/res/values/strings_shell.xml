@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Strings for the shell features this round added: the first-run guide, the settings
+  directory and its pages, the home page's usage overview, and the agent picker.
+
+  Kept out of the shared `strings.xml` on purpose: five agents are writing this app
+  at once, and one catalogue per feature is what keeps two of them from editing the
+  same line. The prefix is `shell_` so a key can be found from a screen name.
+-->
+<resources>
+
+    <!-- The settings directory -->
+    <string name="shell_settings_done">Done</string>
+    <string name="shell_settings_back">Back</string>
+    <string name="shell_settings_copied">Copied</string>
+    <string name="shell_topic_account">Account</string>
+    <string name="shell_topic_account_summary">Who is signed in, and the plan it pays for.</string>
+    <string name="shell_topic_notifications">Notifications &amp; Live Activity</string>
+    <string name="shell_topic_notifications_summary">Notification kinds, the running-turn card and haptics.</string>
+    <string name="shell_topic_sending">Sending Preferences</string>
+    <string name="shell_topic_sending_summary">What happens to a message sent while a turn is running.</string>
+    <string name="shell_topic_transfer">Transfer</string>
+    <string name="shell_topic_transfer_summary">Local network first, and which route a reconnect uses.</string>
+    <string name="shell_topic_local_agent">On-Device Agent (Experimental)</string>
+    <string name="shell_topic_local_agent_summary">Model configuration, and the sessions it keeps on this phone.</string>
+    <string name="shell_topic_files">Files &amp; Cache</string>
+    <string name="shell_topic_files_summary">Previewed files, the file cache, and the local session data.</string>
+    <string name="shell_topic_community">Community</string>
+    <string name="shell_topic_community_summary">The project\'s website and the feedback group.</string>
+    <string name="shell_topic_logs">Logs</string>
+    <string name="shell_topic_logs_summary">Export a diagnostic log for one problem.</string>
+    <string name="shell_topic_about">About &amp; More</string>
+    <string name="shell_topic_about_summary">Version, theme, source code and the way back into the guide.</string>
+
+    <!-- Settings pages -->
+    <string name="shell_settings_account_note">A Mizar account is optional on Android: the local network and the dev-host pairing work without one. Signed in, the relay session is attributable to you, and paid time arrives as a redemption code.</string>
+    <string name="shell_settings_live_updates_section">Live Activity</string>
+    <string name="shell_settings_live_updates">Running-turn card</string>
+    <string name="shell_settings_live_updates_auto">Automatic on Android 16 and later</string>
+    <string name="shell_settings_live_updates_unsupported">Not available on this version of Android</string>
+    <string name="shell_settings_notifications_note">A notification whose kind is switched off is dropped when it arrives, whatever Android is set to. The line above is the system permission: if it says notifications are off, no switch here can bring them back.</string>
+    <string name="shell_settings_steer_by_default">Default to guided send</string>
+    <string name="shell_settings_sending_note">On, a message sent while a turn is running is handed to the model immediately as guidance, without interrupting it. Off, it waits above the field and is sent when the turn ends; the bar can also send it as guidance now, put it back in the field, or throw it away.</string>
+    <string name="shell_settings_transfer_note">Off is a rule, not a preference: this phone does not use the computer\'s local address at all, an open local link is closed at once, and reconnects use the relay.</string>
+    <string name="shell_settings_local_agent_unavailable">The on-device agent is not included in this build yet. It is being ported behind its own module; this shelf is where its configuration and its stored sessions will live.</string>
+    <string name="shell_settings_local_agent_models">Model configuration</string>
+    <string name="shell_settings_local_agent_configured">A model provider is configured.</string>
+    <string name="shell_settings_local_agent_not_configured">No model provider yet.</string>
+    <string name="shell_settings_local_agent_clear">Clear local sessions</string>
+    <string name="shell_settings_local_agent_clear_body">Sessions written by the on-device agent are kept on this phone. Clearing removes them; the workspace folders and the model configuration are kept.</string>
+    <string name="shell_settings_local_agent_note">The on-device agent works only while this app is in the foreground. Leaving the app or locking the screen stops a running turn. It does not use the relay and does not consume account credits.</string>
+    <string name="shell_settings_delete">Delete</string>
+    <string name="shell_settings_files_section">Files</string>
+    <string name="shell_settings_files_previewed">Previewed files</string>
+    <string name="shell_settings_files_cache_empty">Empty</string>
+    <string name="shell_settings_files_cache_unknown">Not read yet</string>
+    <string name="shell_settings_files_cache_files">%1$d files · %2$s</string>
+    <string name="shell_settings_files_note">Files the model delivered are kept on this phone so a second look does not send them again. Clearing them frees the space; the next preview reads the file from the computer.</string>
+    <string name="shell_settings_clear_file_cache">Clear file cache</string>
+    <string name="shell_settings_session_data">Session data</string>
+    <string name="shell_settings_reload_sessions">Reload all local session data</string>
+    <string name="shell_settings_reload_sessions_note">Deletes the conversations, the session list and the workspaces this phone kept, then reads them from your computer again. Nothing on the computer changes.</string>
+    <string name="shell_settings_reload_sessions_body">Everything this phone kept about your sessions is deleted first, then read again from your computer. Your account and your settings are kept.</string>
+    <string name="shell_settings_reload">Reload</string>
+    <string name="shell_settings_community_website">Website</string>
+    <string name="shell_settings_community_qq">Feedback group</string>
+    <string name="shell_settings_community_qq_copied">No app answered the group card. The group number is on the clipboard.</string>
+    <string name="shell_settings_community_note">Both rows leave the app rather than opening a page of their own: the browser is the operator\'s, with the operator\'s history, and the group lives in its own app.</string>
+    <string name="shell_settings_logs_export_note">A zip with this build and phone, the settings, every request to the computer and how it ended, and the recent host events.</string>
+    <string name="shell_settings_logs_note">Device tokens and pairing codes are removed before the file is written, and conversations are not in it. The slow typewriter is a diagnostic that stretches the reveal to eight seconds so it can be watched.</string>
+    <string name="shell_settings_version">Version</string>
+    <string name="shell_settings_replay_onboarding">Replay welcome</string>
+    <string name="shell_settings_replay_onboarding_note">Walks the first-run guide again. The account and every setting are kept.</string>
+    <string name="shell_settings_about_note">GPLv3. iOS and Android share MizarKit and the same host plugin.</string>
+
+    <!-- The home page's usage overview -->
+    <string name="shell_usage_loading">Reading usage…</string>
+    <string name="shell_usage_sessions">Sessions</string>
+    <string name="shell_usage_messages">Messages</string>
+    <string name="shell_usage_tokens">Total tokens</string>
+    <string name="shell_usage_active_days">Active days</string>
+    <string name="shell_usage_busiest_hour">Busiest hour</string>
+    <string name="shell_usage_top_model">Top model</string>
+    <string name="shell_usage_last_year">Last year</string>
+    <string name="shell_usage_messages_unit">messages</string>
+    <string name="shell_usage_tokens_unit">tokens</string>
+
+    <!-- The agent picker -->
+    <string name="shell_agent_which">Which agent this connection is for</string>
+    <string name="shell_agent_offline">Offline</string>
+    <string name="shell_agent_experimental">(Experimental)</string>
+    <string name="shell_agent_detail_dsh">DeepSeek Harness workspaces and sessions</string>
+    <string name="shell_agent_detail_claude_gui">Claude Desktop transcripts, read-only</string>
+    <string name="shell_agent_detail_claude_cli">Claude Code conversations on this computer</string>
+    <string name="shell_agent_detail_claude">Claude Code transcripts on this computer</string>
+    <string name="shell_agent_detail_codex_gui">Codex Desktop threads</string>
+    <string name="shell_agent_detail_codex_cli">Codex CLI threads on this computer</string>
+    <string name="shell_agent_detail_codex">Codex threads on this computer</string>
+
+    <!-- The first-run guide -->
+    <string name="shell_onboarding_back">Back</string>
+    <string name="shell_onboarding_continue">Continue</string>
+    <string name="shell_onboarding_start">Start using DSH-Mizar</string>
+    <string name="shell_onboarding_account_optional">The account is optional. You can continue now and sign in later.</string>
+    <string name="shell_onboarding_account_keep_note">You can continue without signing in again. Your account and your settings are kept.</string>
+
+    <string name="shell_onboarding_welcome_title">Welcome to DSH-Mizar</string>
+    <string name="shell_onboarding_welcome_subtitle">Your computer does the work. This phone stays in control.</string>
+    <string name="shell_onboarding_feature_computer_title">Your computer runs the agent</string>
+    <string name="shell_onboarding_feature_computer_detail">Sessions, files and models stay on your Mac or PC.</string>
+    <string name="shell_onboarding_feature_phone_title">This phone is the remote</string>
+    <string name="shell_onboarding_feature_phone_detail">Send prompts, approve actions and watch progress from anywhere.</string>
+    <string name="shell_onboarding_feature_account_title">An account keeps the relay safe</string>
+    <string name="shell_onboarding_feature_account_detail">Traffic stays attributable; conversations never pass through the account server.</string>
+
+    <string name="shell_onboarding_desktop_title">Install AGI Mizar on your computer</string>
+    <string name="shell_onboarding_desktop_subtitle">This phone is the remote. The computer it drives needs AGI Mizar installed and running before the two can be paired.</string>
+    <string name="shell_onboarding_desktop_step_download_title">Download</string>
+    <string name="shell_onboarding_desktop_step_download_detail">Open GitHub Releases and take the installer for your platform.</string>
+    <string name="shell_onboarding_desktop_step_install_title">Install and open it</string>
+    <string name="shell_onboarding_desktop_step_install_detail">Run it on the computer you want this phone to drive, and leave it running.</string>
+    <string name="shell_onboarding_desktop_step_return_title">Come back</string>
+    <string name="shell_onboarding_desktop_step_return_detail">The next step pairs this phone with that computer.</string>
+    <string name="shell_onboarding_desktop_url_label">AGI Mizar · GitHub Releases</string>
+    <string name="shell_onboarding_desktop_open">Open download page</string>
+    <string name="shell_onboarding_desktop_copy">Copy link</string>
+    <string name="shell_onboarding_desktop_copied">Link copied</string>
+    <string name="shell_onboarding_desktop_note">macOS DMG on Releases; Windows installers are built by the repository\'s packaging script.</string>
+
+    <string name="shell_onboarding_account_title">Account</string>
+    <string name="shell_onboarding_account_subtitle">A Mizar account carries the relay session. On Android it is optional: the local network works without one.</string>
+    <string name="shell_onboarding_account_signed_in">Signed in</string>
+    <string name="shell_onboarding_account_manage">Manage account</string>
+    <string name="shell_onboarding_account_sign_in">Sign in</string>
+    <string name="shell_onboarding_account_create">Create account</string>
+    <string name="shell_onboarding_account_body">Signing in makes every relay session attributable to one person. No conversations or files are stored on the account server, and nothing is lost by waiting.</string>
+
+    <string name="shell_onboarding_network_title">Network</string>
+    <string name="shell_onboarding_network_subtitle">How should this phone reach your computer?</string>
+    <string name="shell_onboarding_network_lan_title">Local network first</string>
+    <string name="shell_onboarding_network_lan_detail">On the same Wi-Fi, connect directly. Faster, and no relay traffic.</string>
+    <string name="shell_onboarding_network_note">This is the same switch Settings owns. Off, every connection goes through the relay.</string>
+
+    <string name="shell_onboarding_agent_title">Agent location</string>
+    <string name="shell_onboarding_agent_subtitle">Where should your sessions run?</string>
+    <string name="shell_onboarding_agent_computer_title">On my computer</string>
+    <string name="shell_onboarding_agent_computer_detail">Run AGI Mizar on your Mac or PC; this phone controls it.</string>
+    <string name="shell_onboarding_agent_local_title">On this phone (Experimental)</string>
+    <string name="shell_onboarding_agent_local_detail">Needs a model API key. Runs only while the app is open.</string>
+    <string name="shell_onboarding_agent_configured">Model configured</string>
+    <string name="shell_onboarding_agent_not_configured">Add a model provider</string>
+    <string name="shell_onboarding_agent_configure_detail">Add an API key now, or later in Settings.</string>
+    <string name="shell_onboarding_agent_configure">Configure</string>
+    <string name="shell_onboarding_agent_unavailable">The on-device agent is still being ported to Android; until it lands, sessions run on your computer.</string>
+    <string name="shell_onboarding_agent_note">You can switch between this phone and your computers later.</string>
+
+    <string name="shell_onboarding_alerts_title">Notifications &amp; Live Activity</string>
+    <string name="shell_onboarding_alerts_subtitle">Choose what reaches you when the app is away.</string>
+    <string name="shell_onboarding_alerts_notifications_title">Notifications</string>
+    <string name="shell_onboarding_alerts_notifications_detail">Task finished, permission needed, or the model asks a question.</string>
+    <string name="shell_onboarding_alerts_live_title">Running-turn card</string>
+    <string name="shell_onboarding_alerts_live_detail">See a running task on the lock screen (Android 16 and later).</string>
+    <string name="shell_onboarding_alerts_system">Android notification settings</string>
+    <string name="shell_onboarding_alerts_note">Android will ask for notification permission. Both can be changed later in Settings.</string>
+
+    <string name="shell_onboarding_plan_title">Plan</string>
+    <string name="shell_onboarding_plan_subtitle">Keep the free account, or add paid time.</string>
+    <string name="shell_onboarding_plan_free">Free account</string>
+    <string name="shell_onboarding_plan_free_detail">Most cross-network features, and every local-network feature.</string>
+    <string name="shell_onboarding_plan_paid">Paid account</string>
+    <string name="shell_onboarding_plan_paid_detail">Adds the defined cross-network entitlements.</string>
+    <string name="shell_onboarding_plan_paid_until">Paid until</string>
+    <string name="shell_onboarding_plan_balance">Computer balance</string>
+    <string name="shell_onboarding_plan_redeem">Redeem a code</string>
+    <string name="shell_onboarding_plan_open_balance">View balance</string>
+    <string name="shell_onboarding_plan_note">Android does not sell subscriptions in an app store: paid time arrives as a redemption code against your account, and the balance belongs to the computer.</string>
+
+    <string name="shell_onboarding_refresh_title">Refresh your conversations</string>
+    <string name="shell_onboarding_refresh_subtitle">Everything this phone shows about your sessions is read again from your computer, with the rules it uses today.</string>
+    <string name="shell_onboarding_refresh_running">Loading your sessions…</string>
+    <string name="shell_onboarding_refresh_running_detail">Your account and your settings are kept. Only the session information is loaded again.</string>
+    <string name="shell_onboarding_refresh_done">%1$d sessions loaded</string>
+    <string name="shell_onboarding_refresh_failed">Your computer did not answer.</string>
+    <string name="shell_onboarding_refresh_kept">Your account and your settings are kept.</string>
+    <string name="shell_onboarding_refresh_retry">Try again</string>
+    <string name="shell_onboarding_refresh_note">The sessions are loaded again every time you open the guide, so what you see afterwards is what your computer says now.</string>
+
+    <string name="shell_onboarding_summary_title">You are ready</string>
+    <string name="shell_onboarding_summary_subtitle">Everything here can be changed later.</string>
+    <string name="shell_onboarding_summary_account">Account</string>
+    <string name="shell_onboarding_summary_network">Network</string>
+    <string name="shell_onboarding_summary_agent">Agent</string>
+    <string name="shell_onboarding_summary_alerts">Alerts</string>
+    <string name="shell_onboarding_summary_plan">Plan</string>
+    <string name="shell_onboarding_summary_no_account">Not signed in</string>
+    <string name="shell_onboarding_summary_lan_on">Local network first</string>
+    <string name="shell_onboarding_summary_lan_off">Relay</string>
+    <string name="shell_onboarding_summary_agent_computer">On my computer</string>
+    <string name="shell_onboarding_summary_agent_local">On this phone · model later</string>
+    <string name="shell_onboarding_summary_agent_local_ready">On this phone · model ready</string>
+    <string name="shell_onboarding_summary_on">On</string>
+    <string name="shell_onboarding_summary_off">Off</string>
+</resources>

@@ -75,6 +75,8 @@ internal sealed interface MarkdownBlock {
     data class Quote(val text: String) : MarkdownBlock
     data class Code(val language: String?, val text: String) : MarkdownBlock
     data class Table(val header: List<String>, val align: List<CellAlign>, val rows: List<List<String>>) : MarkdownBlock
+    /** `![alt](path)` on its own line: a picture the message points at. */
+    data class Image(val alt: String?, val path: String) : MarkdownBlock
     data object Divider : MarkdownBlock
 }
 
@@ -86,7 +88,8 @@ internal object MarkdownBlocks {
      * protocol parser's gate: it also looks for the table pipe, which the
      * inline parser has no use for.
      */
-    fun looksBlocky(text: String): Boolean = Markdown.looksLikeMarkdown(text) || text.contains('|')
+    fun looksBlocky(text: String): Boolean =
+        Markdown.looksLikeMarkdown(text) || text.contains('|') || text.contains("![")
 
     fun parse(source: String): List<MarkdownBlock> {
         val lines = source.split('\n')
@@ -122,6 +125,20 @@ internal object MarkdownBlocks {
 
             if (trimmed.isEmpty()) {
                 flushParagraph()
+                i++
+                continue
+            }
+
+            // A picture on its own line: `![alt](path)`. A body that is mostly
+            // prose around a picture keeps the image as its own block; the inline
+            // form inside a sentence stays prose (the phone cannot draw half a line).
+            val image = IMAGE.matchEntire(trimmed)
+            if (image != null) {
+                flushParagraph()
+                blocks += MarkdownBlock.Image(
+                    alt = image.groupValues[1].trim().ifEmpty { null },
+                    path = image.groupValues[2].trim(),
+                )
                 i++
                 continue
             }
@@ -222,6 +239,7 @@ internal object MarkdownBlocks {
     private val LIST_ITEM = Regex("^(\\s*)([-*+]|\\d+[.)])\\s+(.*)$")
     private val NUMBER_MARKER = Regex("\\d+[.)]")
     private val DIVIDER = Regex("^(-{3,}|_{3,}|\\*{3,})$")
+    private val IMAGE = Regex("^!\\[([^\\]]*)]\\(([^)]+)\\)$")
     private val DELIMITER_CHARSET = Regex("^[\\s|:\\-]+$")
 }
 
@@ -379,6 +397,12 @@ internal object MarkdownReveal {
                     // reveal has reached it.
                     if (remaining > 0) revealed += MarkdownBlock.Divider
                 }
+
+                is MarkdownBlock.Image -> {
+                    // A picture carries no revealed characters: it appears whole as
+                    // soon as the reveal reaches it.
+                    if (remaining > 0) revealed += block
+                }
             }
         }
         return revealed
@@ -393,6 +417,7 @@ internal object MarkdownReveal {
             is MarkdownBlock.Code -> listOf(block.text)
             is MarkdownBlock.ListBlock -> block.items.map { it.text }
             is MarkdownBlock.Table -> block.header + block.rows.flatten()
+            is MarkdownBlock.Image -> emptyList()
             MarkdownBlock.Divider -> emptyList()
         }
     }
@@ -515,6 +540,10 @@ private fun MarkdownBlockView(
         is MarkdownBlock.Code -> CodeBlockView(block, onCopy)
 
         is MarkdownBlock.Table -> TableView(block, color, codeColor, linkColor)
+
+        is MarkdownBlock.Image -> ConversationImageBlock(
+            target = ConversationImageTarget(path = block.path, alt = block.alt),
+        )
 
         MarkdownBlock.Divider -> Box(
             Modifier

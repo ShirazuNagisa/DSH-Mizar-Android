@@ -26,20 +26,42 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
+import android.content.Context
+import android.content.Intent
+import android.provider.Settings
+import me.shirazu.dshmizar.AccountMode
 import me.shirazu.dshmizar.AppViewModel
 import me.shirazu.dshmizar.PairingStage
 import me.shirazu.dshmizar.Phase
 import me.shirazu.dshmizar.R
+import me.shirazu.dshmizar.domain.OnboardingVersion
+import me.shirazu.dshmizar.ui.onboarding.OnboardingAccount
+import me.shirazu.dshmizar.ui.onboarding.OnboardingActions
+import me.shirazu.dshmizar.ui.onboarding.OnboardingRefresh
+import me.shirazu.dshmizar.ui.onboarding.OnboardingRefreshState
+import me.shirazu.dshmizar.ui.onboarding.OnboardingScreen
+import me.shirazu.dshmizar.ui.onboarding.OnboardingState
+import me.shirazu.dshmizar.ui.onboarding.OnboardingStep
 import me.shirazu.dshmizar.ui.pairing.FailedScreen
 import me.shirazu.dshmizar.ui.pairing.UnpairedScreen
+import me.shirazu.dshmizar.ui.shell.AnnouncementBannerHost
 import me.shirazu.dshmizar.ui.design.RefreshSpinner
 import me.shirazu.dshmizar.ui.design.LocalHapticsEnabled
 import me.shirazu.dshmizar.ui.design.MizarHapticsState
@@ -168,6 +190,88 @@ fun RootScreen(model: AppViewModel, incomingUri: String?, onUriHandled: () -> Un
             }
         }
     }
+        // The first-run guide covers everything, including the unpaired screen: a
+        // phone holding no pairing code is exactly who it is written for. It is a
+        // cover rather than a phase, like the account screen, because it must be
+        // able to explain the computer before any connection exists.
+        if (state.onboardingOpen) {
+            val context = LocalContext.current
+            val clipboard = LocalClipboardManager.current
+            var page by rememberSaveable { mutableIntStateOf(0) }
+            var refresh by remember { mutableStateOf(OnboardingRefresh()) }
+            val runRefresh: () -> Unit = {
+                refresh = OnboardingRefresh(OnboardingRefreshState.RUNNING)
+                model.refreshSessionMetadata { sessions, reached ->
+                    refresh = OnboardingRefresh(
+                        state = if (reached) OnboardingRefreshState.DONE else OnboardingRefreshState.FAILED,
+                        sessions = sessions,
+                    )
+                }
+            }
+            val pages = OnboardingStep.entries
+            val guide = OnboardingState(
+                step = pages[page.coerceIn(0, pages.lastIndex)],
+                isUpdate = state.onboardingUpdate,
+                account = OnboardingAccount(
+                    signedIn = state.account.session != null,
+                    displayName = state.account.profile?.username,
+                    isPaid = state.account.isPaid,
+                ),
+                localNetworkFirst = state.localNetworkFirst,
+                notificationsEnabled = state.notifyCompleted && state.notifyInterrupted &&
+                    state.notifyQuestions && state.notifyApprovals,
+                liveUpdatesSupported = android.os.Build.VERSION.SDK_INT >= 36,
+                refresh = refresh,
+            )
+            OnboardingScreen(
+                state = guide,
+                actions = OnboardingActions(
+                    onNext = {
+                        if (page >= pages.lastIndex) model.finishOnboarding() else page += 1
+                    },
+                    onBack = { if (page > 0) page -= 1 },
+                    onFinish = { model.finishOnboarding() },
+                    onOpenDesktopDownload = { openUrl(context, OnboardingVersion.DESKTOP_RELEASE_URL) },
+                    onCopyDesktopLink = {
+                        clipboard.setText(AnnotatedString(OnboardingVersion.DESKTOP_RELEASE_URL))
+                    },
+                    onOpenAccount = { model.openAccountScreen() },
+                    onCreateAccount = {
+                        model.setAccountMode(AccountMode.REGISTER)
+                        model.openAccountScreen()
+                    },
+                    onLocalNetworkFirst = { model.setLocalNetworkFirst(it) },
+                    onNotificationsEnabled = { on ->
+                        model.setNotifyCompleted(on)
+                        model.setNotifyInterrupted(on)
+                        model.setNotifyQuestions(on)
+                        model.setNotifyApprovals(on)
+                    },
+                    onOpenSystemNotificationSettings = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        }
+                    },
+                    onRedeemCode = { model.openRedeem() },
+                    onOpenBalance = { model.refreshBalance() },
+                    onRetryRefresh = runRefresh,
+                    onRefreshShown = runRefresh,
+                ),
+            )
+        }
+        // Banners sit above the shell and below modal sheets: an account screen or a
+        // survey covers them rather than letting them float over a modal.
+        val banners by model.announcementBanner.collectAsState()
+        AnnouncementBannerHost(
+            state = banners,
+            onAction = { action -> model.handleAnnouncementAction(action) },
+            onDismiss = { model.dismissAnnouncement() },
+            modifier = Modifier.align(Alignment.TopCenter).zIndex(1f),
+        )
         // A sheet over everything, not a phase: the account works while the host
         // is unreachable, and the sign-in callback can arrive in any phase.
         if (state.account.screenOpen) {
@@ -181,6 +285,19 @@ fun RootScreen(model: AppViewModel, incomingUri: String?, onUriHandled: () -> Un
         // computer's, so it opens whether or not this phone is signed in.
         if (state.account.redeemOpen) {
             me.shirazu.dshmizar.ui.account.RedeemDialog(model = model, account = state.account)
+        }
+        // The surveys sit above everything else: they are opened from settings or
+        // from a banner, and they are a modal flow of their own.
+        val surveyUi by model.surveyState.collectAsState()
+        if (surveyUi.open) {
+            me.shirazu.dshmizar.ui.account.surveys.SurveysRoute(
+                coordinator = model.surveysCoordinator,
+                onClose = { model.closeSurveys() },
+                onSignIn = {
+                    model.closeSurveys()
+                    model.openAccountScreen()
+                },
+            )
         }
     }
     }
@@ -258,6 +375,21 @@ private fun ReconnectingBanner(reason: String?) {
 @Composable
 private fun Centered(content: @Composable () -> Unit) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
+}
+
+/**
+ * Open a link in whatever the system uses for it.
+ *
+ * Wrapped because this is a side effect on someone else's app: a device with no
+ * browser must not crash the guide, so a failure is swallowed.
+ */
+private fun openUrl(context: Context, url: String) {
+    runCatching {
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
 }
 
 /**

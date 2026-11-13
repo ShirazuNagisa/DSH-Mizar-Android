@@ -44,6 +44,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -96,6 +97,9 @@ import me.shirazu.dshmizar.ui.design.shapedClickable
 import me.shirazu.dshmizar.ui.settings.HostPickerDialog
 import me.shirazu.dshmizar.ui.settings.NewSessionDialog
 import me.shirazu.dshmizar.ui.settings.SettingsDialog
+import me.shirazu.dshmizar.ui.settings.SettingsTopic
+import me.shirazu.dshmizar.ui.shell.AgentCapsule
+import me.shirazu.dshmizar.ui.shell.AgentSwitcher
 
 /**
  * The session list under the conversation card, ported from iOS
@@ -347,6 +351,36 @@ fun Sidebar(
             }
         }
 
+        // Which agent this connection drives. Only on a computer that serves more
+        // than one, which is also the only case where the answer can change.
+        if (state.agentCatalog.showsPicker) {
+            var showingAgents by remember { mutableStateOf(false) }
+            Box(modifier = Modifier.fillMaxWidth()) {
+                AgentCapsule(
+                    catalog = state.agentCatalog,
+                    onClick = { showingAgents = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Space.md, vertical = 6.dp),
+                )
+                AnchoredPopover(
+                    expanded = showingAgents,
+                    onDismiss = { showingAgents = false },
+                    width = 280.dp,
+                    maxHeight = 340.dp,
+                ) {
+                    AgentSwitcher(
+                        catalog = state.agentCatalog,
+                        onPick = { target ->
+                            showingAgents = false
+                            model.chooseAgent(target)
+                        },
+                        onDismiss = { showingAgents = false },
+                    )
+                }
+            }
+        }
+
         // The gap a pull opens between the new-session key and the workspaces:
         // empty but for the three-dash spinner turning inside it. The workspaces move
         // down by their layer, not by a spacer growing above them, so a pull
@@ -410,6 +444,17 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
     var showingConnection by remember { mutableStateOf(false) }
     var showingSettings by remember { mutableStateOf(false) }
     var showingBalance by remember { mutableStateOf(false) }
+    // A banner's button can name a settings page. The request arrives as a flow and
+    // is consumed here, so the window is opened by the sidebar that owns it rather
+    // than by the banner that asked.
+    val requestedTopic by model.settingsTopic.collectAsState()
+    var initialTopic by remember { mutableStateOf<SettingsTopic?>(null) }
+    LaunchedEffect(requestedTopic) {
+        val topic = requestedTopic ?: return@LaunchedEffect
+        initialTopic = topic
+        showingSettings = true
+        model.consumeSettingsTopic()
+    }
     // Both windows are anchored to the footer as a whole, not to their own button:
     // a window anchored to the gear at the right end gets pushed against the screen
     // edge by the popup's own right margin, and the window reads as detached from
@@ -514,10 +559,16 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
     AnchoredPopover(
         expanded = showingSettings,
         onDismiss = { showingSettings = false },
-        width = 272.dp,
-        maxHeight = 400.dp,
+        width = 320.dp,
+        maxHeight = 560.dp,
         offset = androidx.compose.ui.unit.DpOffset(x = 21.dp, y = 44.dp),
     ) {
+        // Counted once per opening, not per recomposition: the page reports what the
+        // phone's own caches hold, and walking them on every frame would be a stall
+        // nobody asked for.
+        val fileCache = remember(showingSettings) {
+            if (showingSettings) model.fileCacheFacts() else null
+        }
         SettingsDialog(
             state = state,
             onDismiss = { showingSettings = false },
@@ -555,6 +606,19 @@ private fun ConnectionFooter(model: AppViewModel, state: UiState) {
             onLocalNetworkFirst = { on -> model.setLocalNetworkFirst(on) },
             onExportLogs = { onReady -> model.exportLogs(onReady) },
             onRename = { hostId, label -> model.renameHost(hostId, label) },
+            onReplayOnboarding = {
+                showingSettings = false
+                model.startOnboarding(replay = true)
+            },
+            onReloadSessionData = { model.clearSessionDataAndReload() },
+            onSteerByDefault = { on -> model.setSteerByDefault(on) },
+            fileCache = fileCache,
+            onClearFileCache = { model.clearFileCache() },
+            onOpenSurveys = {
+                showingSettings = false
+                model.openSurveys()
+            },
+            initialTopic = initialTopic,
         )
     }
     }

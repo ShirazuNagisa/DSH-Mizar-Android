@@ -112,6 +112,13 @@ fun SessionScreen(
     // A drawer is out in front of the conversation: back belongs to the drawer, not
     // to leaving the session.
     drawerOpen: Boolean = false,
+    /**
+     * The state channel's view of the running turn, or null when the host has no
+     * channel / nothing is subscribed. Null keeps the history rendering untouched.
+     */
+    liveTurn: me.shirazu.dshmizar.domain.LiveTurnView? = null,
+    /** Inline pictures in messages; null draws them as a caption (no request). */
+    conversationImages: ConversationImagePresenter? = null,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -540,6 +547,10 @@ fun SessionScreen(
                     onPickPhoto = { photoPicker.launch("image/*") },
                     onPickFile = { filePicker.launch("*/*") },
                     onChooseModel = { selection -> model.setModel(selection) },
+                    // Compacting is a session command, not a paid feature; a running
+                    // turn is the only thing that makes it meaningless.
+                    onCompactContext = { model.compactSession() },
+                    compactContextEnabled = !state.busy && state.selectedSessionId != null,
                     onCommand = { slash ->
                         // Into the draft: the operator finishes the sentence.
                         draft = if (draft.isBlank()) "$slash " else "$draft $slash "
@@ -579,22 +590,29 @@ fun SessionScreen(
                     onRefresh = { model.refreshConversation() },
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    ConversationList(
-                        state = state,
-                        listState = list,
-                        now = now,
-                        onLoadOlder = { scope.launch { model.loadOlder() } },
-                        onCopy = onCopy,
-                        onRetry = { model.sendPrompt(it) },
-                        highlightTurn = highlightTurn,
-                        canLoadDetail = state.advancedFeaturesUnlocked,
-                        onLoadDetail = { model.loadTurnDetail(it) },
-                        canPreviewFiles = state.advancedFeaturesUnlocked,
-                        onOpenFile = { path, name ->
-                            model.openFilePreview(path, name)
-                            onOpenSide(me.shirazu.dshmizar.ui.shell.SidePage.PREVIEW)
-                        },
-                    )
+                    ProvideConversationImages(
+                        presenter = conversationImages,
+                        sessionId = state.selectedSessionId,
+                    ) {
+                        ConversationList(
+                            state = state,
+                            listState = list,
+                            now = now,
+                            onLoadOlder = { scope.launch { model.loadOlder() } },
+                            onCopy = onCopy,
+                            onRetry = { model.sendPrompt(it) },
+                            highlightTurn = highlightTurn,
+                            canLoadDetail = state.advancedFeaturesUnlocked,
+                            onLoadDetail = { model.loadTurnDetail(it) },
+                            canPreviewFiles = state.advancedFeaturesUnlocked,
+                            liveTurn = liveTurn,
+                            onForkTurn = { atSeq -> model.forkSession(atSeq) },
+                            onOpenFile = { path, name ->
+                                model.openFilePreview(path, name)
+                                onOpenSide(me.shirazu.dshmizar.ui.shell.SidePage.PREVIEW)
+                            },
+                        )
+                    }
                 }
             }
         }

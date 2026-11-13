@@ -102,6 +102,11 @@ fun HomeView(
         workspace = choices.firstOrNull()?.first
     }
     LaunchedEffect(Unit) { model.loadCatalogs() }
+    // The usage history belongs to the computer, so it is read once per connection
+    // rather than on every visit to the home screen.
+    LaunchedEffect(state.host?.hostId) {
+        if (state.host != null) model.loadUsageOverview()
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Spacer(Modifier.weight(1f))
@@ -147,6 +152,18 @@ fun HomeView(
             androidx.compose.material3.TextButton(onClick = onOpenSidebar) {
                 Text(stringResource(R.string.show_sidebar))
             }
+        }
+        // The computer's work, as figures: only when the host answered, so a build
+        // talking to an older computer draws nothing rather than a row of zeroes.
+        if (state.usageOverview != null || state.usageLoading) {
+            HomeUsage(
+                overview = state.usageOverview,
+                loading = state.usageLoading,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(top = 14.dp),
+            )
         }
         Spacer(Modifier.weight(1f))
 
