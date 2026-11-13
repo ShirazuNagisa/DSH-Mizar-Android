@@ -37,6 +37,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -91,9 +92,9 @@ import me.shirazu.mizar.kit.PairingUri
  * operator learns to refuse with their eyes closed.
  */
 
-/** Nothing paired yet: the one thing to do is scan the code on the computer. */
+/** Nothing paired yet: sign in to find your computers, or scan a code from an older host. */
 @Composable
-fun UnpairedScreen(model: AppViewModel) {
+fun UnpairedScreen(model: AppViewModel, account: me.shirazu.dshmizar.AccountUiState) {
     var authority by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
     var deviceName by remember { mutableStateOf("Android") }
@@ -134,6 +135,111 @@ fun UnpairedScreen(model: AppViewModel) {
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 8.dp),
         )
+
+        // The current AGI Mizar pairs by account: a phone signed into the same
+        // account finds its computers here, without a code. The code path stays
+        // below for older hosts.
+        LaunchedEffect(account.session?.token) {
+            if (account.session != null) model.loadAccountDesktops()
+        }
+        if (account.session == null) {
+            Button(
+                onClick = { model.openAccountScreen() },
+                modifier = Modifier.fillMaxWidth().padding(top = 24.dp).height(50.dp),
+                shape = ButtonShape.Primary,
+            ) {
+                Text(
+                    stringResource(R.string.unpaired_account_sign_in),
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 22.dp)
+                    .glassCapsule(),
+                horizontalAlignment = Alignment.Start,
+            ) {
+                Text(
+                    stringResource(R.string.account_computers),
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 14.dp, top = 12.dp),
+                )
+                when {
+                    account.desktopsLoading && account.desktops.isEmpty() -> Text(
+                        stringResource(R.string.account_computers_loading),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    )
+
+                    account.desktops.isEmpty() -> Text(
+                        account.desktopsError ?: stringResource(R.string.account_no_computers),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (account.desktopsError != null) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.padding(start = 14.dp, end = 8.dp, bottom = 8.dp),
+                    )
+
+                    else -> for (desktop in account.desktops) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    desktop.name.ifBlank { desktop.model.ifBlank { desktop.deviceId } },
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    maxLines = 1,
+                                )
+                                Text(
+                                    if (desktop.online) {
+                                        listOf(desktop.platform, desktop.model)
+                                            .filter { it.isNotBlank() }
+                                            .joinToString(" · ")
+                                    } else {
+                                        stringResource(R.string.account_computer_offline)
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                )
+                            }
+                            Button(
+                                onClick = { model.openAccountDesktop(desktop) },
+                                enabled = desktop.online && !account.desktopsLoading,
+                                shape = ButtonShape.Primary,
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                    horizontal = 16.dp,
+                                    vertical = 6.dp,
+                                ),
+                            ) {
+                                Text(stringResource(R.string.account_computer_open))
+                            }
+                        }
+                    }
+                }
+                if (account.desktopsError != null && account.desktops.isNotEmpty()) {
+                    Text(
+                        account.desktopsError!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(start = 14.dp, end = 8.dp, bottom = 8.dp),
+                    )
+                }
+            }
+            Text(
+                stringResource(R.string.unpaired_other_ways),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 18.dp),
+            )
+        }
 
         // The scan is the one big button.
         Button(

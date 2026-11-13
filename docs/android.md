@@ -114,6 +114,12 @@ iOS 与 Android 在同一间房里各走各的通道：`push.register` 的 `plat
 - 配对码仍保留给旧客户端/旧桌面端（`/mizar/v1/pair`），但不再是主要入口。
 - 连接令牌是 bearer 凭证：只走账户 TLS，落盘方式与配对令牌相同。
 - 电脑离线/不属于该账户时 `connect` 返回 `DESKTOP_OFFLINE` / `DESKTOP_NOT_FOUND`，屏幕显示可重试的提示。
+- 未配对页的第一个入口就是「登录账户，找到你的电脑」：登录后这一页直接列出账户的电脑并可点开，
+  配对码（扫码/手输）退到下面，给旧桌面端用。账户页的「我的电脑」一节是同一份列表。
+- 2026-11-14 用 mock 账号服务实测：未配对页登录 `shirazu` → 账户页出现两台电脑（Mock Studio 在线、Mac mini 离线）
+  → 点 Open 发出 `POST /account/v1/connect` 并拿到 token；mock 没有实现中继房间的 WebSocket，所以界面停在
+  「Cannot reach the computer / the relay answered, but this computer is not connected to it」——这是预期的最后一跳，
+  真机上需要已部署的中继。
 - 直连（局域网）无需账户；账户发现解决的是「不在同一网络、又不想扫码」。
 
 ## 连接：并行拨号与失败归因（0.10.5 起）

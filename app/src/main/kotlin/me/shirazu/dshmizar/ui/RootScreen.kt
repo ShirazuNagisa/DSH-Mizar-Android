@@ -128,7 +128,7 @@ fun RootScreen(model: AppViewModel, incomingUri: String?, onUriHandled: () -> Un
             Box(Modifier.weight(1f)) {
                 when (state.phase) {
                     Phase.LAUNCHING -> Centered { CircularProgressIndicator() }
-                    Phase.UNPAIRED -> UnpairedScreen(model)
+                    Phase.UNPAIRED -> UnpairedScreen(model, state.account)
                     Phase.CONNECTING -> Centered {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator()

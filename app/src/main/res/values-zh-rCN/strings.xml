@@ -328,6 +328,8 @@
     <string name="account_computers_retry">重试</string>
     <string name="account_computer_open">打开</string>
     <string name="account_computer_offline">离线</string>
+    <string name="unpaired_account_sign_in">登录账户，找到你的电脑</string>
+    <string name="unpaired_other_ways">或用旧版电脑上的配对码</string>
     <string name="account_paid_until">付费至 %1$s</string>
     <string name="account_invite">兑换邀请码</string>
     <string name="account_invite_hint">邀请码</string>

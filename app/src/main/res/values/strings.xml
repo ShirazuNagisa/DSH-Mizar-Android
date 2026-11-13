@@ -342,6 +342,8 @@
     <string name="account_computers_retry">Try again</string>
     <string name="account_computer_open">Open</string>
     <string name="account_computer_offline">Offline</string>
+    <string name="unpaired_account_sign_in">Sign in to find your computers</string>
+    <string name="unpaired_other_ways">Or pair with a code from an older computer</string>
     <string name="account_paid_until">Paid until %1$s</string>
     <string name="account_invite">Redeem an invite code</string>
     <string name="account_invite_hint">Invite code</string>

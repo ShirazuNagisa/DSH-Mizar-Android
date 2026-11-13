@@ -19,6 +19,7 @@ import me.shirazu.dshmizar.ui.conversation.ConversationItemView
 import me.shirazu.dshmizar.ui.conversation.InteractionsDock
 import me.shirazu.dshmizar.ui.conversation.SessionScreen
 import me.shirazu.dshmizar.ui.design.PopoverSize
+import me.shirazu.dshmizar.ui.pairing.UnpairedScreen
 import me.shirazu.dshmizar.ui.settings.SettingsDialog
 import me.shirazu.dshmizar.ui.shell.HomeView
 import me.shirazu.dshmizar.ui.shell.ShellState
@@ -303,6 +304,23 @@ class VisualSnapshotTest {
             }
         }
         rule.captureSnapshot("account-signed-out")
+    }
+
+    /**
+     * Nothing paired yet: the account path first, because the current desktop pairs by
+     * account; the code path stays below it for older computers.
+     */
+    @Test
+    fun theUnpairedPageMatchesItsGolden() {
+        rule.setContent {
+            SnapshotPage {
+                UnpairedScreen(
+                    model = SnapshotFixtures.model,
+                    account = SnapshotFixtures.accountSignedOut(),
+                )
+            }
+        }
+        rule.captureSnapshot("unpaired")
     }
 
     /**
