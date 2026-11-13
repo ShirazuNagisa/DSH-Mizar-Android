@@ -35,7 +35,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -270,10 +272,38 @@ internal fun inlineMarkdown(source: String, codeColor: Color, linkColor: Color):
                         SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)
                 }
                 addStyle(style, span.start, span.end)
+                // A link the protocol parser found gets a tap target too. Only real
+                // destinations become links: a relative or empty target would open
+                // nothing, and a styled run that swallows taps is worse than plain text.
+                val url = span.url
+                if (span.style == MarkdownStyle.LINK && url != null && isOpenableLink(url)) {
+                    addLink(
+                        LinkAnnotation.Url(
+                            url = url,
+                            styles = TextLinkStyles(
+                                style = SpanStyle(
+                                    color = linkColor,
+                                    textDecoration = TextDecoration.Underline,
+                                ),
+                            ),
+                        ),
+                        span.start,
+                        span.end,
+                    )
+                }
             }
         }
     }
 }
+
+/**
+ * Whether a markdown link target is something a tap can open.
+ *
+ * The app leaves relative paths alone: they would open nothing (or an intent nobody
+ * handles), and the text stays readable because the underline is already there.
+ */
+private fun isOpenableLink(url: String): Boolean =
+    url.startsWith("http://") || url.startsWith("https://") || url.startsWith("mailto:")
 
 /** The blocks of a message, as a column. Selection is the caller's to wrap. */
 @Composable

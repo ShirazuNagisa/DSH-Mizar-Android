@@ -210,10 +210,21 @@ class MarkdownTest {
     @Test
     fun `a link is styled by its label, and the target is not drawn`() {
         // The target is a URL, and drawing it turns one sentence into two lines of
-        // machinery. Only the label is styled; the destination is dropped.
+        // machinery. Only the label is styled; the destination is carried on the span
+        // so a tap can open it, never appended to the text.
         val document = Markdown.parse("see [docs](https://example.com/x) now")
         assertEquals("see docs now", document.text)
-        assertEquals(listOf(MarkdownSpan(4, 8, MarkdownStyle.LINK)), document.spans)
+        assertEquals(
+            listOf(MarkdownSpan(4, 8, MarkdownStyle.LINK, url = "https://example.com/x")),
+            document.spans,
+        )
+    }
+
+    @Test
+    fun `a link without a target keeps its label and no url`() {
+        val document = Markdown.parse("[label]()")
+        assertEquals("label", document.text)
+        assertEquals(listOf(MarkdownSpan(0, 5, MarkdownStyle.LINK)), document.spans)
     }
 
     @Test

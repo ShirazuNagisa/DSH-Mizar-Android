@@ -23,9 +23,13 @@
   9 步新手教程（升级用户按版本重走一次、保留设置/账户）、设置目录化（8 主题 + 二级页）、
   首页用量概览、平台内 Agent 切换（DSH / Claude Code / Codex，`hello.engine` 作用域）。
 - **本地 Agent（实验）**：`localagent/` 用 QuickJS-NG 跑 iOS `LocalKernel` 的同一份 TS 内核；
-  仅前台，UI 接线仍在进行（PoC 报告见工作区 `docs/android/local-agent-poc-2026-11-13.md`）。
-- **测试**：JVM 453（mizarkit）+ 285（app）；androidTest 含 8 张视觉基线、mock 宿主
-  （`test/mock-host/`）与关键流程；`androidApiCheck` 用 android-26 守门。
+  仅前台、轮询代替状态通道；设置页可切换（切换后会话列表头显示 Local Agent，切回电脑恢复原连接）。
+- **Markdown**：块级结构（标题/列表/引用/围栏代码/**表格**/分隔线/独立图片行）在 App 侧切块渲染，
+  表格按 `|---|` 分隔行的对齐方式布局；`[label](https://…)` 现在**可点**——`mizarkit.Markdown` 的
+  `MarkdownSpan` 携带 `url`，UI 用 Compose `LinkAnnotation.Url` 打开浏览器（相对路径只保留样式、不做假点击）。
+- **测试**：JVM 463（mizarkit）+ 285（app）+ 10（localagent）；androidTest 60 个用例，含
+  **11 张视觉基线**（API 36 / API 35 各 11/11）、mock 宿主（`test/mock-host/`）与关键流程；
+  `androidApiCheck` 用 android-26 守门；CI 另有 16KB 页大小校验。
 
 ## 目录
 

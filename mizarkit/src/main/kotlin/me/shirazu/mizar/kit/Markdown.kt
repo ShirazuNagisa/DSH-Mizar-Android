@@ -4,7 +4,19 @@ package me.shirazu.mizar.kit
 enum class MarkdownStyle { BOLD, ITALIC, CODE, CODE_BLOCK, HEADING, LIST_ITEM, QUOTE, LINK }
 
 /** One styled run, as offsets into [MarkdownDocument.text]. */
-data class MarkdownSpan(val start: Int, val end: Int, val style: MarkdownStyle)
+data class MarkdownSpan(
+    val start: Int,
+    val end: Int,
+    val style: MarkdownStyle,
+    /**
+     * Where a [MarkdownStyle.LINK] run points, when the source said.
+     *
+     * The label is what gets drawn; this is what a tap has to open. Kept here rather
+     * than re-parsed by the UI so there is one place that understands `[label](url)`
+     * (the destination is still never drawn -- see the parser's note).
+     */
+    val url: String? = null,
+)
 
 /**
  * A parsed message.
@@ -178,7 +190,12 @@ object Markdown {
             if (link != null && link.range.first == index) {
                 val start = out.length
                 out.append(link.groupValues[1])
-                spans += MarkdownSpan(start, out.length, MarkdownStyle.LINK)
+                spans += MarkdownSpan(
+                    start,
+                    out.length,
+                    MarkdownStyle.LINK,
+                    url = link.groupValues[2].trim().takeIf { it.isNotEmpty() },
+                )
                 index = link.range.last + 1
                 continue
             }
