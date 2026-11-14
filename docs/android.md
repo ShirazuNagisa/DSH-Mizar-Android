@@ -35,7 +35,7 @@
   表格按 `|---|` 分隔行的对齐方式布局；`[label](https://…)` 现在**可点**——`mizarkit.Markdown` 的
   `MarkdownSpan` 携带 `url`，UI 用 Compose `LinkAnnotation.Url` 打开浏览器（相对路径只保留样式、不做假点击）。
 - **测试**：JVM 463（mizarkit）+ 293（app）+ 10（localagent）；androidTest **63 个用例**，含
-  **12 张视觉基线**（API 36 已验 12/12；API 35 待复跑）、mock 宿主（`test/mock-host/`）与关键流程；
+  **12 张视觉基线**（API 36 / API 35 各 12/12）、mock 宿主（`test/mock-host/`）与关键流程；
   `androidApiCheck` 用 android-26 守门；CI 另有 16KB 页大小校验。
 
 ## 目录
