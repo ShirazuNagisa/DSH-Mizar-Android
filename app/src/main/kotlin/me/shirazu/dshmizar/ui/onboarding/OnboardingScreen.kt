@@ -58,6 +58,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -241,7 +242,7 @@ private fun Footer(state: OnboardingState, actions: OnboardingActions) {
                     if (state.isUpdate) {
                         R.string.shell_onboarding_account_keep_note
                     } else {
-                        R.string.shell_onboarding_account_optional
+                        R.string.shell_onboarding_account_sign_in_note
                     },
                 ),
                 style = MaterialTheme.typography.labelSmall,
@@ -258,6 +259,7 @@ private fun Footer(state: OnboardingState, actions: OnboardingActions) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp)
+                .alpha(if (state.canAdvance) 1f else 0.45f)
                 .background(AccentDark, ContinuousCornerShape(16.dp))
                 .clickable(enabled = state.canAdvance) {
                     if (state.isLastStep) actions.onFinish() else actions.onNext()
@@ -440,6 +442,15 @@ private fun AccountPage(state: OnboardingState, actions: OnboardingActions) {
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    state.account.email?.takeIf { it.isNotBlank() }?.let { email ->
+                        Text(
+                            text = email,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.6f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     Text(
                         text = stringResource(
                             when (state.account.plan) {
@@ -475,9 +486,11 @@ private fun AccountPage(state: OnboardingState, actions: OnboardingActions) {
                 modifier = Modifier.fillMaxWidth().testTag("onboarding.account.register"),
             )
         }
-        Spacer(Modifier.height(Space.md))
-        Note(stringResource(R.string.shell_onboarding_account_body))
+        Spacer(Modifier.height(Space.sm))
+        Note(stringResource(R.string.shell_onboarding_account_github_note))
     }
+    Spacer(Modifier.height(Space.md))
+    Note(stringResource(R.string.shell_onboarding_account_body))
 }
 
 // MARK: - Network

@@ -343,7 +343,13 @@
     <string name="account_handoff_entry">有登录代码？</string>
     <string name="account_handoff_hint">浏览器里显示的代码</string>
     <string name="account_handoff_action">完成登录</string>
-    <string name="account_optional_note">账户是可选的，不登录也能使用所有免费功能。</string>
+    <string name="account_optional_note">使用 DSH-Mizar 需要账户。对话内容不经过账户服务器。</string>
+    <string name="gate_title">登录后开始使用</string>
+    <string name="gate_body">DSH-Mizar 的对话要经过中继。登录后每个字节都能归属到账户，异常流量才能被识别和阻止——免费服务器因此才能持续运行。</string>
+    <string name="gate_sign_in">登录</string>
+    <string name="gate_create">注册账户</string>
+    <string name="gate_github">使用 GitHub 登录</string>
+    <string name="gate_footnote">登录只用于账户与流量安全；对话内容不经过账户服务器。</string>
     <string name="account_notice_device_limit">%1$s 已退出登录，为这台手机腾出位置。</string>
     <string name="account_error_missing">请输入用户名或邮箱以及密码。</string>
     <string name="account_error_username">用户名长度为 2-32 个字符，不能包含空格或 @。</string>

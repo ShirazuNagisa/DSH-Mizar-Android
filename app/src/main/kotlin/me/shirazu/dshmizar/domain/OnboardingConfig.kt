@@ -39,10 +39,11 @@ object OnboardingVersion {
      * The guide this build wants walked.
      *
      * Bumped whenever a page is added or its meaning changes -- the iOS app's
-     * 0.9.9 bump was the metadata reload. The Android guide arrives with the
-     * 0.10.7 build.
+     * 0.9.9 bump was the metadata reload. 0.11.0 is the guide that makes the
+     * account a hard gate: every phone from an older guide walks it again, keeps
+     * its account and settings, and is not asked to sign in again if it has one.
      */
-    const val REQUIRED = "0.10.7"
+    const val REQUIRED = "0.11.0"
 
     /** The desktop application's release page, where both platforms start. */
     const val DESKTOP_RELEASE_URL = "https://github.com/ShirazuNagisa/AGI-Mizar/releases"

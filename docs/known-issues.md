@@ -172,13 +172,13 @@ address this one.
 
 ## Deliberately not done (0.10.4)
 
-- **Hard sign-in gate.** iOS opens on a welcome screen and will not go further
-  without an account; Android keeps the account optional and every free feature
-  works without one. That is a product decision, not an unfinished port: turning
-  the gate on changes who can use the app, so it waits for a decision rather than
-  a sprint. If it is taken up, the work is one screen in front of `RootScreen`
-  plus the copy that says why, and the same `AccountPhase` the account screen
-  already has.
+- **Hard sign-in gate — done (0.12.0, 2026-11-14).** The gate iOS has is now on Android too:
+  a signed-out phone lands on `WelcomeGateScreen` before the shell, nothing dials the
+  relay until an account exists, and the guide`s account page refuses to advance
+  without one (`RootFlow` owns the order; the guide comes first). Signing out
+  tears the socket and the local kernel down instead of leaving them behind the
+  gate. The old note below is kept for history: the gate *was* left off until the
+  operator asked for parity with iOS.
 - **In-app purchase.** The paid plan is granted by the service (invite codes,
   admin) and by nothing else on Android, and that is the plan for now. Google Play
   billing is **not** the intended route: the audience this app serves barely has

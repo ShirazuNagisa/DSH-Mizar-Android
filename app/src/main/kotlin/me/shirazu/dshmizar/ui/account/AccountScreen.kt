@@ -74,10 +74,11 @@ import java.util.Date
 /**
  * The account, on one screen.
  *
- * Optional by design: closing this leaves every free feature working. The two
- * states are the whole surface — signed out is a form, signed in is a profile and
- * a device list — and the errors stay inline rather than in a dialog, because a
- * wrong password is not an event that deserves to block the screen.
+ * Required by the app rather than optional: the shell is behind the sign-in gate, and
+ * closing this screen only returns to that gate while signed out. The two states are
+ * the whole surface — signed out is a form, signed in is a profile and a device list —
+ * and the errors stay inline rather than in a dialog, because a wrong password is not
+ * an event that deserves to block the screen.
  */
 @Composable
 fun AccountScreen(model: AppViewModel, account: AccountUiState, onClose: () -> Unit) {

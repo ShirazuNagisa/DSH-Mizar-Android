@@ -56,11 +56,13 @@ enum class OnboardingStep {
     }
 }
 
-/** The account, as the guide draws it. Optional throughout. */
+/** The account, as the guide draws it. Required by the time the guide is walked. */
 data class OnboardingAccount(
     val signedIn: Boolean = false,
-    /** The name or address under the avatar; the guide only prints it. */
+    /** The name under the avatar; the guide only prints it. */
     val displayName: String? = null,
+    /** The address under the name, when the profile carries one. */
+    val email: String? = null,
     val isPaid: Boolean = false,
 ) {
     /** The plan shown on the account page and in the summary. */
@@ -127,11 +129,16 @@ data class OnboardingState(
     /**
      * Whether the footer's button works.
      *
-     * Always true: the account is optional on Android, so no page can refuse to be
-     * left. Kept as a property rather than a constant so the screen has one line to
-     * read and a future gate has one place to go.
+     * Every page can be left except the account one: iOS makes the account a hard gate
+     * (relay traffic has to be attributable), so a first run cannot walk past "Sign in
+     * to continue". A phone replaying the guide after an upgrade already has its
+     * account and is never asked again.
      */
-    val canAdvance: Boolean get() = true
+    val canAdvance: Boolean
+        get() = when (step) {
+            OnboardingStep.ACCOUNT -> account.signedIn || isUpdate
+            else -> true
+        }
 
     /** The footer's label: the last page starts the app, every other page continues. */
     val isLastStep: Boolean get() = step == OnboardingStep.SUMMARY

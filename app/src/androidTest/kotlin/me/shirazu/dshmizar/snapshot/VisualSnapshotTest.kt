@@ -19,6 +19,7 @@ import me.shirazu.dshmizar.ui.conversation.ConversationItemView
 import me.shirazu.dshmizar.ui.conversation.InteractionsDock
 import me.shirazu.dshmizar.ui.conversation.SessionScreen
 import me.shirazu.dshmizar.ui.design.PopoverSize
+import me.shirazu.dshmizar.ui.gate.WelcomeGateScreen
 import me.shirazu.dshmizar.ui.pairing.UnpairedScreen
 import me.shirazu.dshmizar.ui.settings.SettingsDialog
 import me.shirazu.dshmizar.ui.shell.HomeView
@@ -358,5 +359,20 @@ class VisualSnapshotTest {
             }
         }
         rule.captureSnapshot("account-computers")
+    }
+
+    /**
+     * The hard sign-in gate: the whole window before the app, with no close and no
+     * skip. Every byte the app moves crosses the project's relay, and an account is
+     * what makes it attributable.
+     */
+    @Test
+    fun theSignInGateMatchesItsGolden() {
+        rule.setContent {
+            SnapshotPage {
+                WelcomeGateScreen(model = SnapshotFixtures.model)
+            }
+        }
+        rule.captureSnapshot("gate")
     }
 }

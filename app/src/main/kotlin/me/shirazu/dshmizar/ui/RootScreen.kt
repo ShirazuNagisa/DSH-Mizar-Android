@@ -107,6 +107,14 @@ fun RootScreen(model: AppViewModel, incomingUri: String?, onUriHandled: () -> Un
         LocalHapticsEnabled provides state.hapticsEnabled,
         me.shirazu.dshmizar.ui.design.LocalSlowTypewriter provides state.slowTypewriter,
     ) {
+    // The order of the first screens is the gate's whole design: read the stored
+    // session, walk the guide, sign in, then let the phases have the window. The
+    // rule lives in `RootFlow` so the order has tests.
+    val stage = me.shirazu.dshmizar.domain.RootFlow.stage(
+        onboardingOpen = state.onboardingOpen,
+        accountPhase = state.account.phase,
+        signedIn = state.account.session != null,
+    )
     Box(Modifier.fillMaxSize()) {
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -119,14 +127,28 @@ fun RootScreen(model: AppViewModel, incomingUri: String?, onUriHandled: () -> Un
             // last few points; leaving, it fades, then gives its height back. The
             // conversation below moves once each way and never animates.
             AnimatedVisibility(
-                visible = state.reconnecting,
+                visible = state.reconnecting && stage == me.shirazu.dshmizar.domain.RootFlow.Stage.CONTENT,
                 enter = Transitions.riseIn(distance = 6.dp),
                 exit = fadeOut(tween(160)),
             ) {
                 ReconnectingBanner(state.disconnectReason)
             }
             Box(Modifier.weight(1f)) {
-                when (state.phase) {
+                when (stage) {
+                    me.shirazu.dshmizar.domain.RootFlow.Stage.LAUNCHING -> Centered {
+                        CircularProgressIndicator()
+                    }
+
+                    // The guide owns the whole window; it is drawn as an overlay below
+                    // so its own page state survives the recompositions here.
+                    me.shirazu.dshmizar.domain.RootFlow.Stage.GUIDE -> Box(Modifier.fillMaxSize())
+
+                    me.shirazu.dshmizar.domain.RootFlow.Stage.GATE -> me.shirazu.dshmizar.ui.gate.WelcomeGateScreen(
+                        model = model,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+
+                    me.shirazu.dshmizar.domain.RootFlow.Stage.CONTENT -> when (state.phase) {
                     Phase.LAUNCHING -> Centered { CircularProgressIndicator() }
                     Phase.UNPAIRED -> UnpairedScreen(model, state.account)
                     Phase.CONNECTING -> Centered {
@@ -186,6 +208,7 @@ fun RootScreen(model: AppViewModel, incomingUri: String?, onUriHandled: () -> Un
                             onBrowseOffline = { model.browseOffline() },
                         )
                     }
+                    }
                 }
             }
         }
@@ -218,6 +241,7 @@ fun RootScreen(model: AppViewModel, incomingUri: String?, onUriHandled: () -> Un
                 account = OnboardingAccount(
                     signedIn = state.account.session != null,
                     displayName = state.account.profile?.username,
+                    email = state.account.profile?.email,
                     isPaid = state.account.isPaid,
                 ),
                 localNetworkFirst = state.localNetworkFirst,

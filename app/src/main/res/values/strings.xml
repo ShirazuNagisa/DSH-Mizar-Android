@@ -357,7 +357,13 @@
     <string name="account_handoff_entry">Have a sign-in code?</string>
     <string name="account_handoff_hint">Code from the browser</string>
     <string name="account_handoff_action">Finish signing in</string>
-    <string name="account_optional_note">Accounts are optional. Every free feature works without one.</string>
+    <string name="account_optional_note">An account is required to use DSH-Mizar. Conversations never pass through the account server.</string>
+    <string name="gate_title">Sign in to get started</string>
+    <string name="gate_body">DSH-Mizar\'s conversations travel through a relay. Once you sign in, every byte belongs to an account, so abnormal traffic can be recognised and stopped — that is what keeps the free server running.</string>
+    <string name="gate_sign_in">Sign in</string>
+    <string name="gate_create">Create account</string>
+    <string name="gate_github">Continue with GitHub</string>
+    <string name="gate_footnote">Signing in is only for the account and traffic safety; conversations never pass through the account server.</string>
     <string name="account_notice_device_limit">%1$s was signed out to make room for this phone.</string>
     <string name="account_error_missing">Enter your username or email and your password.</string>
     <string name="account_error_username">Usernames are 2-32 characters and cannot contain spaces or @.</string>

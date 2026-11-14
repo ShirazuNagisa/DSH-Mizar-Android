@@ -25,13 +25,17 @@
 - **运营与首启**：应用内公告（中继 WS `/app/v1/announcements`，轮询兜底）、问卷（`/account/v1/surveys`）、
   9 步新手教程（升级用户按版本重走一次、保留设置/账户）、设置目录化（8 主题 + 二级页）、
   首页用量概览、平台内 Agent 切换（DSH / Claude Code / Codex，`hello.engine` 作用域）。
+- **强制登录门（0.12.0 起，与 iOS 一致）**：未登录不进入应用。顺序是「读账户 → 9 步教程 → 登录门 →
+  配对/连接」，规则在 `domain/RootFlow.kt`（有单测），界面是 `ui/gate/WelcomeGateScreen.kt`
+  （iOS `WelcomeGateView` 的文案与按钮：登录、注册、GitHub 登录；无关闭无跳过）。未登录时
+  `start()`/`connect()` 都不拨号、配对码深链被忽略；登出立即断开 socket 与本地内核并回到登录门。
 - **本地 Agent（实验）**：`localagent/` 用 QuickJS-NG 跑 iOS `LocalKernel` 的同一份 TS 内核；
   仅前台、轮询代替状态通道；设置页可切换（切换后会话列表头显示 Local Agent，切回电脑恢复原连接）。
 - **Markdown**：块级结构（标题/列表/引用/围栏代码/**表格**/分隔线/独立图片行）在 App 侧切块渲染，
   表格按 `|---|` 分隔行的对齐方式布局；`[label](https://…)` 现在**可点**——`mizarkit.Markdown` 的
   `MarkdownSpan` 携带 `url`，UI 用 Compose `LinkAnnotation.Url` 打开浏览器（相对路径只保留样式、不做假点击）。
-- **测试**：JVM 463（mizarkit）+ 285（app）+ 10（localagent）；androidTest 60 个用例，含
-  **11 张视觉基线**（API 36 / API 35 各 11/11）、mock 宿主（`test/mock-host/`）与关键流程；
+- **测试**：JVM 463（mizarkit）+ 293（app）+ 10（localagent）；androidTest **63 个用例**，含
+  **12 张视觉基线**（API 36 已验 12/12；API 35 待复跑）、mock 宿主（`test/mock-host/`）与关键流程；
   `androidApiCheck` 用 android-26 守门；CI 另有 16KB 页大小校验。
 
 ## 目录
@@ -121,7 +125,7 @@ iOS 与 Android 在同一间房里各走各的通道：`push.register` 的 `plat
 - 配对码仍保留给旧客户端/旧桌面端（`/mizar/v1/pair`），但不再是主要入口。
 - 连接令牌是 bearer 凭证：只走账户 TLS，落盘方式与配对令牌相同。
 - 电脑离线/不属于该账户时 `connect` 返回 `DESKTOP_OFFLINE` / `DESKTOP_NOT_FOUND`，屏幕显示可重试的提示。
-- 未配对页的第一个入口就是「登录账户，找到你的电脑」：登录后这一页直接列出账户的电脑并可点开，
+- 登录门挡在最前面（0.12.0 起），所以未配对页只在**已登录**时出现：页面直接列出账户的电脑并可点开，
   配对码（扫码/手输）退到下面，给旧桌面端用。账户页的「我的电脑」一节是同一份列表。
 - 2026-11-14 用 mock 账号服务实测：未配对页登录 `shirazu` → 账户页出现两台电脑（Mock Studio 在线、Mac mini 离线）
   → 点 Open 发出 `POST /account/v1/connect` 并拿到 token；mock 没有实现中继房间的 WebSocket，所以界面停在
@@ -201,10 +205,14 @@ Android 16 的 Live Updates 是 iOS Live Activity 的对位：`push/LiveTurn.kt`
 - **收起**由 `turn.settled` 触发，会话列表里没有 running 行时也收；不依赖用户手动划掉。
 - **API 36 以下什么都不发**：没有这个界面，而连接服务自己的常驻通知已经在说「已连接」。
 
-## 账户（0.10.2）
+## 账户（0.12.0 起为强制登录）
 
-账户是可选的：邮箱/用户名 + 密码，或 GitHub。登录后中继连接带身份头，付费账户在中继下也能用附件与
-运行细节；不登录时这两项仍然由局域网解锁。令牌存 EncryptedSharedPreferences，登录/登出会重连一次。
+账户是使用应用的前提，和 iOS 一致：邮箱/用户名 + 密码，或 GitHub。登录门在 9 步教程之后、连接之前，
+未登录时不拨号、不配对、不进入壳层。登录后中继连接带身份头，付费账户在中继下也能用附件与运行细节；
+登出会断开 socket 与本地内核并回到登录门，配对记录保留，重新登录后重拨。令牌存
+EncryptedSharedPreferences，登录/登出会重连一次。
+
+教程的账户页同样变为必须登录（升级重走时若已有账户则不再要求登录，文案是「可以直接继续，不必重新登录」）。
 
 完整说明、服务端配置与 AVD 测法见 [account.md](account.md)。
 

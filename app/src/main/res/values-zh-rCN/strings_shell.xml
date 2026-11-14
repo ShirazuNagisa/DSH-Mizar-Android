@@ -30,7 +30,7 @@
     <string name="shell_topic_about_summary">版本、主题、源代码，以及重播教程的入口。</string>
 
     <!-- 设置二级页 -->
-    <string name="shell_settings_account_note">Android 上 Mizar 账户是可选的：局域网连接和开发用配对都不需要账户。登录后中继会话可归属到你，付费时长用兑换码充入。</string>
+    <string name="shell_settings_account_note">DSH-Mizar 需要 Mizar 账户：中继流量必须能归属到人，异常流量才能被识别和阻止。对话内容不经过账户服务器，付费时长用兑换码充入。</string>
     <string name="shell_settings_live_updates_section">实时活动</string>
     <string name="shell_settings_live_updates">运行轮次卡片</string>
     <string name="shell_settings_live_updates_auto">Android 16 及以上自动显示</string>
@@ -98,7 +98,7 @@
     <string name="shell_onboarding_back">返回</string>
     <string name="shell_onboarding_continue">继续</string>
     <string name="shell_onboarding_start">开始使用 DSH-Mizar</string>
-    <string name="shell_onboarding_account_optional">账户是可选的。可以先继续，以后再登录。</string>
+    <string name="shell_onboarding_account_sign_in_note">请先登录后继续。</string>
     <string name="shell_onboarding_account_keep_note">可以直接继续，不必重新登录。账户与设置都会保留。</string>
 
     <string name="shell_onboarding_welcome_title">欢迎使用 DSH-Mizar</string>
@@ -125,12 +125,13 @@
     <string name="shell_onboarding_desktop_note">Releases 提供 macOS DMG；Windows 安装包由仓库的打包脚本生成。</string>
 
     <string name="shell_onboarding_account_title">账户</string>
-    <string name="shell_onboarding_account_subtitle">Mizar 账户承载中继会话。Android 上它是可选的：局域网连接不需要账户。</string>
+    <string name="shell_onboarding_account_subtitle">Mizar 账户是中继访问与付费服务的前提。</string>
     <string name="shell_onboarding_account_signed_in">已登录</string>
     <string name="shell_onboarding_account_manage">管理账户</string>
     <string name="shell_onboarding_account_sign_in">登录</string>
     <string name="shell_onboarding_account_create">创建账户</string>
-    <string name="shell_onboarding_account_body">登录后每个中继会话都能归属到一个人。账户服务器不保存对话与文件，晚一点再登录也不会损失什么。</string>
+    <string name="shell_onboarding_account_github_note">也可以使用 GitHub 登录。</string>
+    <string name="shell_onboarding_account_body">账户服务器不保存任何对话与文件。</string>
 
     <string name="shell_onboarding_network_title">网络</string>
     <string name="shell_onboarding_network_subtitle">这台手机应该怎么连到你的电脑？</string>

@@ -33,7 +33,7 @@
     <string name="shell_topic_about_summary">Version, theme, source code and the way back into the guide.</string>
 
     <!-- Settings pages -->
-    <string name="shell_settings_account_note">A Mizar account is optional on Android: the local network and the dev-host pairing work without one. Signed in, the relay session is attributable to you, and paid time arrives as a redemption code.</string>
+    <string name="shell_settings_account_note">DSH-Mizar requires a Mizar account: relay traffic has to be attributable to somebody, which is what lets abnormal traffic be recognised and stopped. Conversations never pass through the account server, and paid time arrives as a redemption code.</string>
     <string name="shell_settings_live_updates_section">Live Activity</string>
     <string name="shell_settings_live_updates">Running-turn card</string>
     <string name="shell_settings_live_updates_auto">Automatic on Android 16 and later</string>
@@ -101,7 +101,7 @@
     <string name="shell_onboarding_back">Back</string>
     <string name="shell_onboarding_continue">Continue</string>
     <string name="shell_onboarding_start">Start using DSH-Mizar</string>
-    <string name="shell_onboarding_account_optional">The account is optional. You can continue now and sign in later.</string>
+    <string name="shell_onboarding_account_sign_in_note">Sign in to continue.</string>
     <string name="shell_onboarding_account_keep_note">You can continue without signing in again. Your account and your settings are kept.</string>
 
     <string name="shell_onboarding_welcome_title">Welcome to DSH-Mizar</string>
@@ -128,12 +128,13 @@
     <string name="shell_onboarding_desktop_note">macOS DMG on Releases; Windows installers are built by the repository\'s packaging script.</string>
 
     <string name="shell_onboarding_account_title">Account</string>
-    <string name="shell_onboarding_account_subtitle">A Mizar account carries the relay session. On Android it is optional: the local network works without one.</string>
+    <string name="shell_onboarding_account_subtitle">A Mizar account is required for relay access and the paid server.</string>
     <string name="shell_onboarding_account_signed_in">Signed in</string>
     <string name="shell_onboarding_account_manage">Manage account</string>
     <string name="shell_onboarding_account_sign_in">Sign in</string>
     <string name="shell_onboarding_account_create">Create account</string>
-    <string name="shell_onboarding_account_body">Signing in makes every relay session attributable to one person. No conversations or files are stored on the account server, and nothing is lost by waiting.</string>
+    <string name="shell_onboarding_account_github_note">You can also sign in with GitHub.</string>
+    <string name="shell_onboarding_account_body">No conversations or files are stored on the account server.</string>
 
     <string name="shell_onboarding_network_title">Network</string>
     <string name="shell_onboarding_network_subtitle">How should this phone reach your computer?</string>

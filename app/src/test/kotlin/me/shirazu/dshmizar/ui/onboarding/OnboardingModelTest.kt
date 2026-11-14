@@ -62,12 +62,25 @@ class OnboardingModelTest {
     }
 
     @Test
-    fun `no page gates the exit, because the account is optional on Android`() {
+    fun `only the account page gates the exit, and only for a phone without an account`() {
         var state = OnboardingState()
         for (step in OnboardingStep.entries) {
             state = state.at(step)
-            assertTrue("page $step refused to be left", state.canAdvance)
+            if (step == OnboardingStep.ACCOUNT) {
+                assertFalse("a signed-out phone must not walk past the account", state.canAdvance)
+            } else {
+                assertTrue("page $step refused to be left", state.canAdvance)
+            }
         }
+        // Signing in unlocks the account page...
+        state = state.at(OnboardingStep.ACCOUNT).copy(
+            account = OnboardingAccount(signedIn = true, displayName = "shirazu"),
+        )
+        assertTrue(state.canAdvance)
+        // ...and a replay after an upgrade is never asked to sign in again.
+        state = OnboardingState(step = OnboardingStep.ACCOUNT, isUpdate = true)
+        assertTrue(state.canAdvance)
+        assertEquals(false, state.account.signedIn)
     }
 
     @Test
@@ -76,9 +89,10 @@ class OnboardingModelTest {
         assertFalse(OnboardingVersion.isComplete(""))
         // An older guide: this phone walks the new one, keeping its settings.
         assertFalse(OnboardingVersion.isComplete("0.9.9"))
+        assertFalse(OnboardingVersion.isComplete("0.10.10"))
         assertTrue(OnboardingVersion.isComplete(OnboardingVersion.REQUIRED))
         // Numeric, not lexicographic: 0.10.10 is newer than 0.9.9 ...
-        assertTrue(OnboardingVersion.isComplete("0.10.10"))
+        assertTrue(OnboardingVersion.isComplete("0.11.1"))
         // ... and a string comparison would have said the opposite.
         assertTrue("0.10.10" < "0.9.9")
     }
@@ -96,10 +110,10 @@ class OnboardingModelTest {
 
     @Test
     fun `versions compare segment by segment, and a malformed segment cannot crash`() {
-        assertTrue(OnboardingVersion.compareVersions("0.10.7", "0.9.9") > 0)
-        assertTrue(OnboardingVersion.compareVersions("0.9.9", "0.10.7") < 0)
-        assertEquals(0, OnboardingVersion.compareVersions("0.10.7", "0.10.7"))
-        assertEquals(0, OnboardingVersion.compareVersions("0.10", "0.10.0"))
+        assertTrue(OnboardingVersion.compareVersions("0.11.0", "0.9.9") > 0)
+        assertTrue(OnboardingVersion.compareVersions("0.9.9", "0.11.0") < 0)
+        assertEquals(0, OnboardingVersion.compareVersions("0.11.0", "0.11.0"))
+        assertEquals(0, OnboardingVersion.compareVersions("0.11", "0.11.0"))
         assertTrue(OnboardingVersion.compareVersions("1", "0.99.99") > 0)
         // A half-written value on disk must not crash the first screen of the app.
         assertEquals(0, OnboardingVersion.compareVersions("dev", "dev"))

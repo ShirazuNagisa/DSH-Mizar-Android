@@ -37,11 +37,11 @@ android {
         minSdk = 26
         targetSdk = 36
         // The two clients carry independent version numbers; do not read one from
-        // the other. 0.11.0 is the parity release: state channel, inline pictures,
-        // announcements/surveys, guide, settings directory, usage, agent picker,
-        // compact/fork, and the local-agent module (not wired into UI yet).
-        versionCode = 49
-        versionName = "0.11.0"
+        // the other. 0.12.0 makes the account a hard gate, the way iOS has always
+        // had it: the guide comes first, and a signed-out phone stays on the sign-in
+        // screen instead of reaching the shell.
+        versionCode = 50
+        versionName = "0.12.0"
 
         // The account service is one host, like iOS: only the main relay serves
         // it. `-PmizarAccountBase=http://10.0.2.2:8787/account/v1` points a build

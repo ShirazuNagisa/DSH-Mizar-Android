@@ -523,6 +523,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (guide) _state.update { it.copy(onboardingOpen = true, onboardingUpdate = update) }
             val hosts = credentials.loadAll().sortedBy { it.pairedAtMillis }
             val host = hosts.lastOrNull()
+            // The account is a hard gate, so a signed-out phone does not dial: the
+            // session list is kept on screen for after sign-in, and the gate owns the
+            // window until then. Signing in redials through onAccountIdentityChanged().
+            if (_state.value.account.session == null) {
+                _state.update { it.copy(phase = Phase.UNPAIRED, hosts = hosts, host = host) }
+                return@launch
+            }
             if (host == null) {
                 _state.update { it.copy(phase = Phase.UNPAIRED, hosts = emptyList()) }
                 publishLinkNotice(getApplication<Application>().getString(R.string.link_no_host))
@@ -559,7 +566,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         appVersion = appVersion,
         openBrowser = ::openBrowser,
         onIdentityChanged = {
-            reconnectForIdentity()
+            // The account is a hard gate: signing out must stop the socket rather than
+            // leave it carrying anonymous relay traffic behind the gate screen, and
+            // signing in must redial with the new identity headers.
+            onAccountIdentityChanged()
             // The announcement socket is per account session: a sign-in or sign-out
             // has to move it to the token that is current now.
             announcements.update(_state.value.account.session?.token, foregroundForAnnouncements)
@@ -900,6 +910,45 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { connect(host) }
     }
 
+    /** Whether the account store has finished reading the stored session. */
+    private fun sessionDecided(): Boolean =
+        _state.value.account.phase != AccountPhase.IDLE &&
+            _state.value.account.phase != AccountPhase.LOADING
+
+    /**
+     * What a changed account session means for the connection.
+     *
+     * Signing in redials with the new identity. Signing out is the gate closing: the
+     * socket and the local kernel are stopped, because carrying either behind the
+     * sign-in screen would be anonymous relay traffic — the exact thing the gate
+     * exists to prevent. The host pairing is kept; signing back in redials it.
+     */
+    private fun onAccountIdentityChanged() {
+        val session = _state.value.account.session
+        if (session != null) {
+            reconnectForIdentity()
+            return
+        }
+        viewModelScope.launch {
+            if (_state.value.localAgentActive) leaveLocalAgent()
+            stopWatchers()
+            ownership.current?.disconnect()
+            ownership.release()
+            liveTurn.hide()
+            _state.update {
+                it.copy(
+                    phase = Phase.UNPAIRED,
+                    problem = null,
+                    selectedSessionId = null,
+                    sessions = emptyList(),
+                    conversation = emptyList(),
+                    turns = emptyList(),
+                    stats = null,
+                )
+            }
+        }
+    }
+
     /** Open a URL, and say so when there is nothing to open it with. */
     private fun openBrowser(url: String): Boolean {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -908,6 +957,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Redeem a scanned or typed pairing code. */
     fun pair(target: PairingTarget, deviceName: String) {
+        // A pairing code is a credential for the relay; redeeming it before signing in
+        // would make the first metered traffic anonymous, which is the one thing the
+        // account gate exists to prevent. A deep link that arrives on the gate is
+        // therefore ignored rather than queued -- the operator can scan again after
+        // signing in.
+        if (_state.value.account.session == null) {
+            note("pairing ignored: sign in first")
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(phase = Phase.CONNECTING, problem = null, pairingStage = PairingStage.PAIRING) }
             // Relay attempts carry the install's identity: pairing is the first
@@ -979,6 +1037,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // computer the operator left; leaving local mode goes through
         // leaveLocalAgent(), which clears the flag before calling this.
         if (_state.value.localAgentActive) return
+        // The account is a hard gate. Nothing may dial the relay as an anonymous
+        // client, so every dial path (launch, reconnect, LAN switch, identity change)
+        // asks this one question. The account store's own load decides; a phone whose
+        // session is still being read is not "signed out", it is "not decided yet".
+        if (!sessionDecided() || _state.value.account.session == null) return
         stopWatchers()
         ownership.current?.disconnect()
         ownership.release()
